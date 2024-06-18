@@ -63,3 +63,31 @@ resultado.colletc()
 #Trazendo quais as compras que não tiveram debitos
 semdebito = compras.subtractByKey(debitos)
 semdebito.collect()
+
+#Criando um dataframe sem definir um schema
+from pyspark.sql import SparkSession
+df1 = spark.createDataFrame([("Pedro",10),("Maria",20),("José",40)])
+df1.show()
+
+#Definindo um Schema
+schmema = "Id INT, Nome STRING"
+dados = [[1,"Pedro"],[2,"Maria"]]
+
+df2 = spark.createDataFrame(dados, schmema)
+
+#Agrupando os dados
+# Biblioteca Utilizada
+from pyspark.sql.functions import sum
+schema2 = "Produtos STRING, Vendas INT"
+vendas = [["Caneta",10],["Lápis",20],["Caneta",40]]
+df3 = spark.createDataFrame(vendas, schema2)
+agrupado = df3.groupBy("Produtos").agg(sum("Vendas"))
+
+#Visualizando colunas
+df3.select("Produtos").show()
+
+#Usando expressões junto com o Select no spark
+#Importando a biblioteca
+from pyspark.sql.functions import expr
+df3.select("Produtos", "Vendas", expr("Vendas * 0.2")).show()
+
