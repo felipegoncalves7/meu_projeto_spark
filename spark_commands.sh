@@ -91,3 +91,44 @@ df3.select("Produtos").show()
 from pyspark.sql.functions import expr
 df3.select("Produtos", "Vendas", expr("Vendas * 0.2")).show()
 
+#Visualizando propriedades do meu DataFrame
+#Tipos de dados - String, Int, float, etc
+df3.schema
+
+#Colunas
+df3.colums
+
+#PROCESSO DE INGESTÃO DE DADOS
+from pyspark.sql.types import *
+#Definindo o schema
+arqschema = "id INT, nome STRING, status STRING, cidade STRING, vendas INT, data STRING"
+
+#Importando um arquivo .CSV através de um schema pré-estabelecido
+despachantes = spark.read.csv("/home/felipe/download/despachantes.csv",header=False, schema = arqschema)
+
+#Importando com load e sem um schema pré-definido - Ou seja, o própio Spark faz a inferência dos tipos de dados
+desp_autoschema = spark.read.load("/home/felipe/download/despachantes.csv", header=False, format="csv", sep=",", inferSchema=True)
+
+#importando funções do spark
+from pyspark.sql import functions as Func
+
+despachantes.select("id", "nome", "vendas").where(Func.col("vendas") > 20).show()
+#OU
+despachantes.select("id", "nome","vendas").where(expr("vendas > 20")).show()
+
+#Utilizando operadores lógicos
+despachantes.select("id", "nome","vendas").where(expr("vendas > 20") & expr("vendas < 40")).show()
+despachantes.select("id", "nome", "vendas").where((Func.col("vendas") > 20) & (Func.col("vendas") < 40)).show()
+
+#É necessário a criação de um novo df para as devidas alterações
+#Alterando nome da coluna
+novodf = despachantes.withColumnRenamed("nome","nomes")
+
+#Alterando o tipo de dado
+from pyspark.sql.functions import *
+despachantes2 = despachantes.withColumn("data2", to_timestamp(Func.col("data"), "yyyy-MM-dd"))
+
+#Algumas funcionalidades de dados com valor de Data
+despachantes2.select(year("data")).show()
+despachantes2.select(year("data")).distinct().show()
+despachantes2.select("nome", year("data")).orderBy(year("data")).show()
