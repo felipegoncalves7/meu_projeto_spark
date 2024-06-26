@@ -132,3 +132,28 @@ despachantes2 = despachantes.withColumn("data2", to_timestamp(Func.col("data"), 
 despachantes2.select(year("data")).show()
 despachantes2.select(year("data")).distinct().show()
 despachantes2.select("nome", year("data")).orderBy(year("data")).show()
+
+#PRINCIPAIS AÇÕES E TRANSFORMAÇÕES
+#EXIBINDO OS DADOS COM O TAKE
+despachantes.take(2)
+#EXIBINDO OS DADOS COM O COLLECT
+despachantes.collect()
+#CONTANDO O NÚMERO DE LINHAS DO MEU DATAFRAME
+despachantes.count()
+
+#ORDENANDO EM ORDEM CRESCENTE AS VENDAS
+despachantes.orderBy("vendas").show()
+#ORDENANDO EM ORDEM DESCRECENTE AS VENDAS
+despachantes.orderBy(Func.col("vendas").desc()).show()
+#ORDENANDO EM ORDEM DESCRESCENTE AS VENDAS COM BASE NA ORDEM DECRECENTE DAS CIDADES
+despachantes.orderBy(Func.col("cidades").desc(), Func.col("vendas")).show()
+
+#AGRUPANDO CIDADES COM SEUS RESPECTIVOS NÚMEROS DE VENDAS
+despachantes.groupBy("cidade").agg(sum("vendas")).show()
+#AGRUPANDO CIDADES COM SEUS RESPECTIVOS NÚMEROS DE VENDAS - EM ORDEM DESCRECENTE
+despchantes.groupBy("cidade").agg(sum("vendas")).orderBy(Func.col("sum(vendas)").desc()).show()
+#AGRUPANDO CIDADES COM SEUS RESPECTIVOS NÚMEROS DE VENDAS - EM ORDEM DESCRECENTE E MAIOR QUE 40
+despachantes.groupBy("cidade").agg(sum("vendas")).orderBy(Func.col("sum(vendas)").desc()).where(Func.col("sum(vendas)") > 40).show()
+
+#FILTRANDO POR UM NOME EM ESPECÍFICO
+despachantes.filter(Func.col("nome") == "Deolinda Vilela").show()
