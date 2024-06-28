@@ -157,3 +157,27 @@ despachantes.groupBy("cidade").agg(sum("vendas")).orderBy(Func.col("sum(vendas)"
 
 #FILTRANDO POR UM NOME EM ESPECÍFICO
 despachantes.filter(Func.col("nome") == "Deolinda Vilela").show()
+
+#EXPORTANDO E IMPORTANDO DADOS
+
+#EXPORTANDO EM DIFERENTES FORMATOS
+#PARQUET
+despachantes.write.format("parquet").save("/home/felipe/dfimportparquet")
+#CSV
+despachantes.write.format("csv").save("/home/felipe/dfimportcsv")
+#JSON
+despachantes.write.format("json").save("/home/felipe/dfimportjson")
+#ORC
+despachantes.write.format("orc").save("/home/felipe/dfimportorc")
+
+
+#IMPORTANDO DADOS
+
+#PARQUET
+par = spark.read.format("parquet").load("/home/felipe/dfimportparquet/despachantes.parquet")
+
+#JSON
+js = spark.read.format("json").load("/home/felipe/dfimportjson/despachantes.json")
+
+#ORC
+orc = spark.read.format("orc").load("/home/felipe/dfimportorc/despachantes.orc")
