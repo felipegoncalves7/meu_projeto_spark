@@ -181,3 +181,20 @@ js = spark.read.format("json").load("/home/felipe/dfimportjson/despachantes.json
 
 #ORC
 orc = spark.read.format("orc").load("/home/felipe/dfimportorc/despachantes.orc")
+
+#ATIVIDADE - SEÇÃO 3
+
+#01 - CRIE UMA CONSULTA QUE MOSTRE NESTA ORDEM, NOME, ESTADOS E STATUS
+cli = spark.read.format("parquet").load("/home/felipe/download/Atividades/Clientes.parquet")
+
+cli.select("Cliente", "Estado", "Status").show()
+
+#02 - CRIE UMA CONSULTA QUE MOSTRE APENAS OS CLIENTES DO STATUS "PLATINUM" E "GOLD
+cli.filter(Func.col("Status") != "Silver").show()
+
+#03 - DEMONSTRE QUANTO CADA STATUS DE CLIENTES REPRESENTA EM VENDAS
+vend = spark.read.format("parquet").load("/home/felipe/download/Atividades/Vendas.parquet")
+
+df_inner = cli.join(vend, cli["ClienteID"] == vend["ClienteID"], "inner")
+
+df_inner.groupBy("Status").agg(sum("Total")).show()
