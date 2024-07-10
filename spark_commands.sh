@@ -201,3 +201,22 @@ df_inner = cli.join(vend, cli["ClienteID"] == vend["ClienteID"], "inner")
 
 atividade3 = df_inner.groupBy("Status").agg(sum("Total")).orderBy(Func.col("sum(Total)").desc())
 atividade3.show()
+
+
+#Banco de Dados e Tabelas
+
+#Criando o Banco de Dados
+spark.sql("create database desp")
+
+#Alterando para o banco de dados que vamos utilizar
+spark.sql("use desp").show()
+
+#Transformando o meu df em uma tabela
+despachantes.write.saveAsTable("Despachantes")
+
+#Visualizando as tabelas criadas no meu db
+spark.sql("show tables").show()
+
+#Sobrescrevendo a tabela - overwrtite | Incluindos regidtos novos - append
+despachantes.write.mode("overwrite").saveAsTable("Despachantes")
+despachantes.write.mode("append").saveAsTable("Despachantes")
