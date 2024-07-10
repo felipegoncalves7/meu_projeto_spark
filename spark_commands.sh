@@ -187,14 +187,17 @@ orc = spark.read.format("orc").load("/home/felipe/dfimportorc/despachantes.orc")
 #01 - CRIE UMA CONSULTA QUE MOSTRE NESTA ORDEM, NOME, ESTADOS E STATUS
 cli = spark.read.format("parquet").load("/home/felipe/download/Atividades/Clientes.parquet")
 
-cli.select("Cliente", "Estado", "Status").show()
+atividade1 = cli.select("Cliente", "Estado", "Status")
+atividade1.show()
 
 #02 - CRIE UMA CONSULTA QUE MOSTRE APENAS OS CLIENTES DO STATUS "PLATINUM" E "GOLD
-cli.filter(Func.col("Status") != "Silver").show()
+atividade2 = cli.filter(Func.col("Status") != "Silver")
+atividade2.show()
 
 #03 - DEMONSTRE QUANTO CADA STATUS DE CLIENTES REPRESENTA EM VENDAS
 vend = spark.read.format("parquet").load("/home/felipe/download/Atividades/Vendas.parquet")
 
 df_inner = cli.join(vend, cli["ClienteID"] == vend["ClienteID"], "inner")
 
-df_inner.groupBy("Status").agg(sum("Total")).show()
+atividade3 = df_inner.groupBy("Status").agg(sum("Total")).orderBy(Func.col("sum(Total)").desc())
+atividade3.show()
