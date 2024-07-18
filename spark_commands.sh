@@ -220,3 +220,14 @@ spark.sql("show tables").show()
 #Sobrescrevendo a tabela - overwrtite | Incluindos regidtos novos - append
 despachantes.write.mode("overwrite").saveAsTable("Despachantes")
 despachantes.write.mode("append").saveAsTable("Despachantes")
+
+#Tabelas Gerenciadas e Externas
+
+#Mostrando a interoperabilidade do df e db
+despachantes = spark.sql("select * from despachantes")
+despachantes.show()
+
+#Tabela externa - Salvando o local
+despachantes.write.format("parquet").save("/home/felipe/desparquet")
+
+
