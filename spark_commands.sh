@@ -1,3 +1,4 @@
+
 #Token Github
 ghp_dHmphG1s9fJ1vsiiXESXVu727EL8Kq32HBJ1
 
@@ -227,7 +228,35 @@ despachantes.write.mode("append").saveAsTable("Despachantes")
 despachantes = spark.sql("select * from despachantes")
 despachantes.show()
 
-#Tabela externa - Salvando o local
+#Tabela Externa - Salvando o local
 despachantes.write.format("parquet").save("/home/felipe/desparquet")
 
+#Criando a tabela Gerenciada, para criação da Tabela externa
+despachantes.write.mode("overwrite").option("path","/home/felipe/desparquet").saveAsTable("Despachantes2")
 
+#Como identificar se uma tabela é externa (possui um caminho para acessá-la) ou Gereneciada
+#Gerenciada
+spark.sql("show create table despachantes").show(truncate=False)
+
+#Externa
+spark.sql("show create table Despachantes2").show(truncate=False)
+
+#Ou através do seguinte código
+spark.catalog.listTables()
+
+#Views
+#Criando view temporária
+despachantes.createOrReplaceTempView("Despachantes_view1")
+spark.sql("select * from Despachantes_view1").show()
+
+#Criando a view global
+despachantes.createOrReplaceGlobalTempView("Despachantes_view2")
+spark.sql("select * from global_temp.Despachantes_view2").show()
+
+#Outra forma de criar a view temporária
+spark.sql("CREATE OR REPLACE TEMP VIEW DESP_VIEW AS select * from despachantes")
+spark.sql("select * from DESP_VIEW").show()
+
+#Outra forma de criar a view global
+spark.sql("CREATE OR REPLACE GLOBAL TEMP VIEW DESP_VIEW2 AS select * from despachantes")
+spark.sql("select * from global_temp.DESP_VIEW2").show()
