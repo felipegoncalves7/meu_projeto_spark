@@ -260,3 +260,15 @@ spark.sql("select * from DESP_VIEW").show()
 #Outra forma de criar a view global
 spark.sql("CREATE OR REPLACE GLOBAL TEMP VIEW DESP_VIEW2 AS select * from despachantes")
 spark.sql("select * from global_temp.DESP_VIEW2").show()
+
+
+#Diferença entre Dataframes com Tabelas SQL
+spark.sql("select nome, vendas from despachantes").show()
+despachantes.select("nome","vendas").show()
+
+spark.sql("select nome, vendas from despachantes where vendas > 20").show()
+despachantes.select("nome","vendas").where(Func.col("vendas") > 20).show()
+
+spark.sql("select cidade, sum(vendas) from despachantes group by cidade order by 2 desc").show()
+espachantes.groupby("cidade").agg(sum("vendas")).orderBy(Func.col("sum(vendas)").desc()).show()
+
