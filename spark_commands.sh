@@ -272,3 +272,33 @@ despachantes.select("nome","vendas").where(Func.col("vendas") > 20).show()
 spark.sql("select cidade, sum(vendas) from despachantes group by cidade order by 2 desc").show()
 espachantes.groupby("cidade").agg(sum("vendas")).orderBy(Func.col("sum(vendas)").desc()).show()
 
+#JOINS
+
+#Definindo um schema para o meu df
+recschema = "idrec INT, datarec STRING, iddesp INT"
+
+#Definindo o meu df
+reclamacoes = spark.read.csv("/home/felipe/download/reclamacoes.csv", header=False, schema = recschema)
+
+#Salvando no meu banco de Dados
+reclamacoes.write.saveAsTable("reclamacoes")
+
+#INNER JOIN - TRAZ TODOS OS DADOS EQUIVALENTES DAS DUAS TABELAS
+spark.sql("select reclamacoes.*, despachantes.nome from despachantes inner join reclamacoes on (despachantes.id = reclamacoes.iddesp)").show()
+
+#RIGHT JOIN - TRAZ OS DADOS EQUIVALENTES DA TABELA A DIREITA, ASSIM TAMBÉM TRAZ OS DADOS NULOS QUE NãO SãO EQUIVALENTES DA ESQUERDA 
+park.sql("select reclamacoes.*, despachantes.nome from despachantes right join reclamacoes on (despachantes.id = reclamacoes.iddesp)").show()
+
+#LEFT JOIN - TRAZ OS DADOS EQUIVALENTES DA TABELA A ESQUERDA, ASSIM TAMBéM TRAZ OS DADOS NULOS QUE NãO EQUIVALENTES DA TABELA A DIREITA
+spark.sql("select reclamacoes.*, despachantes.nome from despachantes left join reclamacoes on (despachantes.id = reclamacoes.iddesp)").show()
+
+# JOINS COM A API DE DF
+#INNER
+despachantes.join(reclamacoes, despachantes.id == reclamacoes.iddesp, "inner").select("idrec","datarec","iddesp","nome").show()
+
+#RIGHT
+despachantes.join(reclamacoes, despachantes.id == reclamacoes.iddesp, "right").select("idrec","datarec","iddesp","nome").show()
+
+#LEFT
+despachantes.join(reclamacoes, despachantes.id == reclamacoes.iddesp, "left").select("idrec","datarec","iddesp","nome").show()
+
