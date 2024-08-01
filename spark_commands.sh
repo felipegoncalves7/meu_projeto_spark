@@ -259,7 +259,7 @@ spark.sql("select * from DESP_VIEW").show()
 
 #Outra forma de criar a view global
 spark.sql("CREATE OR REPLACE GLOBAL TEMP VIEW DESP_VIEW2 AS select * from despachantes")
-spark.sql("select * from global_temp.DESP_VIEW2").show()
+spark.sql("select * from global_temp.DESP_VIEW2").show(	)
 
 
 #Diferença entre Dataframes com Tabelas SQL
@@ -302,3 +302,12 @@ despachantes.join(reclamacoes, despachantes.id == reclamacoes.iddesp, "right").s
 #LEFT
 despachantes.join(reclamacoes, despachantes.id == reclamacoes.iddesp, "left").select("idrec","datarec","iddesp","nome").show()
 
+spark.sql("select Clientes.Cliente, Vendas.Data from Vendas inner join Clientes on (Vendas.ClienteID = Clientes.ClienteID)").show()
+
+
+spark.sql("select Vendas.Data,IVP_VIEW.Produto,IVP_VIEW.ValorTotal from Vendas inner join global_temp.IVP_VIEW on (Vendas.VendasID = IVP_VIEW.VendasID)").show()
+
+
+#RESOLUÇÃO EXERCÍCIO
+
+spark.sql("select Clientes.Cliente, Vendas.Data, IVP_VIEW.Produto, Vendedores.Vendedor, IVP_VIEW.ValorTotal from Vendas inner join Clientes on (Vendas.ClienteID = Clientes.ClienteID) inner join global_temp.IVP_VIEW on (Vendas.VendasID = IVP_VIEW.VendasID) inner join Vendedores on (Vendas.VendedorID = Vendedores.VendedorID)").show()
