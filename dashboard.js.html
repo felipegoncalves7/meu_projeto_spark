@@ -45,6 +45,7 @@
         yearSelect.addEventListener('change', function (e) {
             logDebug("Year changed to: " + e.target.value);
             CURRENT_FILTERS.year = e.target.value;
+            recomputeSpecificFilterForNewYear();
 
             // Reload the currently active tab
             const activeTab = document.querySelector('.tab-btn.active-tab');
@@ -135,12 +136,6 @@
         }
         ALL_DATA = data;
 
-        // Update Last Updated timestamp
-        const lastUpdatedEl = document.getElementById('last-updated');
-        if (lastUpdatedEl && data.lastUpdated) {
-            lastUpdatedEl.textContent = data.lastUpdated;
-        }
-
         // Populate Year Selector
         const yearSelect = document.getElementById('year-select');
         if (yearSelect && data.availableYears && data.availableYears.length > 0) {
@@ -174,6 +169,7 @@
         setupCardFilter('card-sev0', 'sev0');
         setupCardFilter('card-sev1', 'sev1');
 
+        setupSpecificFilters();
         setupEvolutionToggle();
 
         logDebug("Initial setup complete. Loading Tab 1 data...");
@@ -584,6 +580,7 @@
                 CURRENT_FILTERS.periodKey = filter.key;
                 CURRENT_FILTERS.startDate = filter.start;
                 CURRENT_FILTERS.endDate = filter.end;
+                resetSpecificFilterSelects();
 
                 updateFilterButtonsUI(container, filter.key, LABEL_MAP);
                 refreshActiveFilterText(); // Use centralized logic
@@ -595,6 +592,95 @@
 
         // Init logic for active filters text
         refreshActiveFilterText();
+    }
+
+    // Recalcula o intervalo de datas do filtro de Mês/Trimestre ativo quando o Ano de Referência muda
+    function recomputeSpecificFilterForNewYear() {
+        const key = CURRENT_FILTERS.periodKey || '';
+        const year = parseInt(CURRENT_FILTERS.year, 10);
+        if (key.startsWith('Mes_')) {
+            const monthIndex = parseInt(key.split('_')[1], 10);
+            const start = new Date(year, monthIndex, 1, 0, 0, 0);
+            const end = new Date(year, monthIndex + 1, 0, 23, 59, 59);
+            LABEL_MAP[key] = `${MONTH_NAMES_PT[monthIndex]}/${year}`;
+            CURRENT_FILTERS.startDate = start.getTime();
+            CURRENT_FILTERS.endDate = end.getTime();
+        } else if (key.startsWith('Trimestre_')) {
+            const q = parseInt(key.split('_')[1], 10);
+            const startMonth = (q - 1) * 3;
+            const start = new Date(year, startMonth, 1, 0, 0, 0);
+            const end = new Date(year, startMonth + 3, 0, 23, 59, 59);
+            LABEL_MAP[key] = `Q${q}/${year}`;
+            CURRENT_FILTERS.startDate = start.getTime();
+            CURRENT_FILTERS.endDate = end.getTime();
+        }
+    }
+
+    // Limpa os seletores de Mês/Trimestre (usado quando outro filtro de período é escolhido)
+    function resetSpecificFilterSelects() {
+        const monthSelect = document.getElementById('month-filter-select');
+        const quarterSelect = document.getElementById('quarter-filter-select');
+        if (monthSelect) monthSelect.value = '';
+        if (quarterSelect) quarterSelect.value = '';
+    }
+
+    const MONTH_NAMES_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+    // Filtros específicos de Mês e Trimestre: calculam o intervalo de datas exato e reaproveitam
+    // o mesmo mecanismo de filtro por data já usado pelos botões de período (Freeze, T4 Indústria, etc.)
+    function setupSpecificFilters() {
+        const monthSelect = document.getElementById('month-filter-select');
+        const quarterSelect = document.getElementById('quarter-filter-select');
+        if (!monthSelect || !quarterSelect) return;
+
+        const periodContainer = document.getElementById('period-filter-container');
+        const clearPeriodButtons = () => {
+            if (periodContainer) periodContainer.querySelectorAll('button').forEach(b => b.className = getBtnClass(false));
+        };
+
+        monthSelect.addEventListener('change', () => {
+            const val = monthSelect.value;
+            if (val === '') return;
+            quarterSelect.value = '';
+
+            const year = parseInt(CURRENT_FILTERS.year, 10);
+            const monthIndex = parseInt(val, 10);
+            const start = new Date(year, monthIndex, 1, 0, 0, 0);
+            const end = new Date(year, monthIndex + 1, 0, 23, 59, 59);
+            const key = `Mes_${val}`;
+            LABEL_MAP[key] = `${MONTH_NAMES_PT[monthIndex]}/${year}`;
+
+            CURRENT_FILTERS.periodKey = key;
+            CURRENT_FILTERS.startDate = start.getTime();
+            CURRENT_FILTERS.endDate = end.getTime();
+
+            clearPeriodButtons();
+            refreshActiveFilterText();
+            loadFilteredData();
+        });
+
+        quarterSelect.addEventListener('change', () => {
+            const val = quarterSelect.value;
+            if (val === '') return;
+            monthSelect.value = '';
+
+            const year = parseInt(CURRENT_FILTERS.year, 10);
+            const q = parseInt(val, 10);
+            const startMonth = (q - 1) * 3;
+            const start = new Date(year, startMonth, 1, 0, 0, 0);
+            const end = new Date(year, startMonth + 3, 0, 23, 59, 59);
+            const key = `Trimestre_${val}`;
+            LABEL_MAP[key] = `Q${val}/${year}`;
+
+            CURRENT_FILTERS.periodKey = key;
+            CURRENT_FILTERS.startDate = start.getTime();
+            CURRENT_FILTERS.endDate = end.getTime();
+
+            clearPeriodButtons();
+            refreshActiveFilterText();
+            loadFilteredData();
+        });
     }
 
     // Helper to refresh Active Filters text based on ALL current filters
@@ -641,6 +727,7 @@
                     CURRENT_FILTERS.periodKey = 'All';
                     CURRENT_FILTERS.startDate = null;
                     CURRENT_FILTERS.endDate = null;
+                    resetSpecificFilterSelects();
                     updateFilterButtonsUI(document.getElementById('period-filter-container'), 'All', LABEL_MAP);
                     refreshActiveFilterText();
                     loadFilteredData();
@@ -728,6 +815,8 @@
         setText('val-aderencia-ola', (kpis.aderenciaOLA != null ? kpis.aderenciaOLA : 0) + '%');
         setText('val-incidentes-mudanca', kpis.incidentesMudanca || 0);
         setText('val-pct-mudanca', `(${kpis.pctMudanca != null ? kpis.pctMudanca : 0}%)`);
+        setText('val-mudanca-deploy', kpis.incidentesMudancaDeploy || 0);
+        setText('val-mudanca-tradicional', kpis.incidentesMudancaTradicional || 0);
 
         const formatHoras = (h) => {
             if (h === null || h === undefined) return 'N/A';
@@ -737,6 +826,8 @@
         };
         setText('val-mttd-inicio', formatHoras(kpis.mttdInicioMedioHoras));
         setText('val-mttd-termino', formatHoras(kpis.mttdTerminoMedioHoras));
+        setText('val-mttd-inicio-deploy', formatHoras(kpis.mttdInicioMedioHorasDeploy));
+        setText('val-mttd-inicio-tradicional', formatHoras(kpis.mttdInicioMedioHorasTradicional));
     }
 
     // Clique no card de Visão Executiva "Incidentes por Mudança" -> abre a seção/análise detalhada

@@ -148,4 +148,56 @@
         border-radius: 12px;
         padding: 1.5rem;
     }
+
+    /* Info Tooltip: ícone "i" com explicação da métrica ao passar o mouse/focar */
+    .info-tooltip {
+        position: relative;
+        display: inline-flex;
+        cursor: help;
+        color: var(--natura-gray-medium);
+        outline: none;
+    }
+
+    .info-tooltip:hover,
+    .info-tooltip:focus {
+        color: var(--natura-green-murumuru);
+    }
+
+    .info-tooltip .tooltip-bubble {
+        position: absolute;
+        bottom: calc(100% + 8px);
+        right: -8px;
+        width: 230px;
+        background: var(--natura-green-amazonia);
+        color: #fff;
+        font-size: 11px;
+        line-height: 1.5;
+        font-weight: 500;
+        padding: 10px 12px;
+        border-radius: 8px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(4px);
+        transition: all 0.15s ease-in-out;
+        z-index: 30;
+        pointer-events: none;
+        text-align: left;
+    }
+
+    .info-tooltip:hover .tooltip-bubble,
+    .info-tooltip:focus .tooltip-bubble {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+    }
+
+    .info-tooltip .tooltip-bubble::after {
+        content: '';
+        position: absolute;
+        top: 100%;
+        right: 12px;
+        border: 6px solid transparent;
+        border-top-color: var(--natura-green-amazonia);
+    }
 </style>

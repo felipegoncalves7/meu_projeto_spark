@@ -371,7 +371,9 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
              incidentesSev1: 0, mttrSev1: "00:00",
              aderenciaOLA: 0, aderenciaOLABase: 0,
              incidentesMudanca: 0, pctMudanca: 0,
-             mttdInicioMedioHoras: null, mttdTerminoMedioHoras: null
+             mttdInicioMedioHoras: null, mttdTerminoMedioHoras: null,
+             incidentesMudancaDeploy: 0, incidentesMudancaTradicional: 0,
+             mttdInicioMedioHorasDeploy: null, mttdInicioMedioHorasTradicional: null
            },
            monthlyMetrics: {},
            mttrPorMesEmHoras: {},
@@ -402,7 +404,11 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         sev0DentroOLA: 0, sev1DentroOLA: 0,
         incidentesMudanca: 0,
         mttdInicioSomaHoras: 0, mttdInicioCount: 0,
-        mttdTerminoSomaHoras: 0, mttdTerminoCount: 0
+        mttdTerminoSomaHoras: 0, mttdTerminoCount: 0,
+        mudancaPorTipo: {
+            deploy: { count: 0, mttdInicioSoma: 0, mttdInicioCount: 0 },
+            tradicional: { count: 0, mttdInicioSoma: 0, mttdInicioCount: 0 }
+        }
     };
 
     dataRows.forEach((row, i) => {
@@ -467,11 +473,15 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         if (durMin <= OLA_TARGET_SEV1_MIN) metrics.sev1DentroOLA++;
         }
 
-        // Visão Executiva: Incidentes causados por Mudança + MTTD (Início/Término)
+        // Visão Executiva: Incidentes causados por Mudança + MTTD (Início/Término), segmentado por tipo
         if (ofensor === 'Mudança') {
             metrics.incidentesMudanca++;
 
             const tipoSm = String(row[COL_TYPE_SM]).trim().toUpperCase();
+            const isDeploy = tipoSm === 'DEPLOY';
+            const tipoBucket = isDeploy ? 'deploy' : 'tradicional';
+            metrics.mudancaPorTipo[tipoBucket].count++;
+
             const numSm = String(row[COL_SM_NUMBER]).trim();
             const chg = numSm ? changeMap[numSm] : null;
 
@@ -481,9 +491,11 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
                     if (diffInicioH >= 0) {
                         metrics.mttdInicioSomaHoras += diffInicioH;
                         metrics.mttdInicioCount++;
+                        metrics.mudancaPorTipo[tipoBucket].mttdInicioSoma += diffInicioH;
+                        metrics.mudancaPorTipo[tipoBucket].mttdInicioCount++;
                     }
                 }
-                if (tipoSm === 'DEPLOY' && chg.plannedEnd) {
+                if (isDeploy && chg.plannedEnd) {
                     const diffTerminoH = (openDate.getTime() - chg.plannedEnd.getTime()) / (1000 * 60 * 60);
                     if (diffTerminoH >= 0) {
                         metrics.mttdTerminoSomaHoras += diffTerminoH;
@@ -586,6 +598,11 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
     const mttdInicioMedio = metrics.mttdInicioCount > 0 ? metrics.mttdInicioSomaHoras / metrics.mttdInicioCount : null;
     const mttdTerminoMedio = metrics.mttdTerminoCount > 0 ? metrics.mttdTerminoSomaHoras / metrics.mttdTerminoCount : null;
 
+    const deployBucket = metrics.mudancaPorTipo.deploy;
+    const tradicionalBucket = metrics.mudancaPorTipo.tradicional;
+    const mttdInicioDeploy = deployBucket.mttdInicioCount > 0 ? deployBucket.mttdInicioSoma / deployBucket.mttdInicioCount : null;
+    const mttdInicioTradicional = tradicionalBucket.mttdInicioCount > 0 ? tradicionalBucket.mttdInicioSoma / tradicionalBucket.mttdInicioCount : null;
+
     return {
         kpis: {
         incidentesTotal: metrics.incidentesTotal,
@@ -600,7 +617,11 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         incidentesMudanca: metrics.incidentesMudanca,
         pctMudanca: Math.round(pctMudanca * 10) / 10,
         mttdInicioMedioHoras: mttdInicioMedio !== null ? Math.round(mttdInicioMedio * 10) / 10 : null,
-        mttdTerminoMedioHoras: mttdTerminoMedio !== null ? Math.round(mttdTerminoMedio * 10) / 10 : null
+        mttdTerminoMedioHoras: mttdTerminoMedio !== null ? Math.round(mttdTerminoMedio * 10) / 10 : null,
+        incidentesMudancaDeploy: deployBucket.count,
+        incidentesMudancaTradicional: tradicionalBucket.count,
+        mttdInicioMedioHorasDeploy: mttdInicioDeploy !== null ? Math.round(mttdInicioDeploy * 10) / 10 : null,
+        mttdInicioMedioHorasTradicional: mttdInicioTradicional !== null ? Math.round(mttdInicioTradicional * 10) / 10 : null
         },
         monthlyMetrics: metrics.monthlyMetrics,
         mttrPorMesEmHoras: mttrPorMesEmHoras,
