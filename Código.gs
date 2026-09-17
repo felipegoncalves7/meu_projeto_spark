@@ -105,35 +105,41 @@ function getQualidadeMudancaData() {
       naoProdFilled: 0, naoProdSim: 0
     };
 
-    // Distribuição consolidada (Geral + Deploy + Tradicional) por Tipo de Causa Raiz e Processo de Origem
-    const causaRaizCounts = {};
-    const processoOrigemCounts = {};
-    const addCount = (map, rawValue) => {
+    // Distribuição por Tipo de Causa Raiz e Processo de Origem, segmentada por Universo (Geral/Deploy/Tradicional),
+    // guardando os IDs de cada incidente para permitir o drill-down (clique -> ver incidentes por trás do número).
+    const causaRaizByUniverso = { geral: {}, deploy: {}, tradicional: {} };
+    const processoOrigemByUniverso = { geral: {}, deploy: {}, tradicional: {} };
+    const addCount = (map, rawValue, id) => {
       if (!isFilled(rawValue)) return;
       const label = String(rawValue).trim();
-      map[label] = (map[label] || 0) + 1;
+      if (!map[label]) map[label] = { count: 0, ids: [] };
+      map[label].count++;
+      map[label].ids.push(id);
     };
 
     rows.forEach(row => {
       if (isFilled(row[MI_GERAL_ID])) {
+        const id = String(row[MI_GERAL_ID]).trim();
         geral.total++;
         if (isFilled(row[MI_GERAL_QUALIDADE_RCA])) { geral.rcaFilled++; if (isBoa(row[MI_GERAL_QUALIDADE_RCA])) geral.rcaBoa++; }
         if (isFilled(row[MI_GERAL_QUALIDADE_PLANO_ACAO])) { geral.planoFilled++; if (isBoa(row[MI_GERAL_QUALIDADE_PLANO_ACAO])) geral.planoBoa++; }
-        addCount(causaRaizCounts, row[MI_GERAL_TIPO_CAUSA_RAIZ]);
-        addCount(processoOrigemCounts, row[MI_GERAL_PROCESSO_ORIGEM]);
+        addCount(causaRaizByUniverso.geral, row[MI_GERAL_TIPO_CAUSA_RAIZ], id);
+        addCount(processoOrigemByUniverso.geral, row[MI_GERAL_PROCESSO_ORIGEM], id);
       }
 
       if (isFilled(row[MI_DEPLOY_ID])) {
+        const id = String(row[MI_DEPLOY_ID]).trim();
         deploy.total++;
         if (isFilled(row[MI_DEPLOY_QUALIDADE_RCA])) { deploy.rcaFilled++; if (isBoa(row[MI_DEPLOY_QUALIDADE_RCA])) deploy.rcaBoa++; }
         if (isFilled(row[MI_DEPLOY_QUALIDADE_PLANO_ACAO])) { deploy.planoFilled++; if (isBoa(row[MI_DEPLOY_QUALIDADE_PLANO_ACAO])) deploy.planoBoa++; }
         if (isFilled(row[MI_DEPLOY_AMBIENTE_ADEQUADO])) { deploy.ambienteFilled++; if (isSim(row[MI_DEPLOY_AMBIENTE_ADEQUADO])) deploy.ambienteAdequado++; }
         if (isFilled(row[MI_DEPLOY_ESTRATEGIA_TESTES])) { deploy.estrategiaFilled++; if (isSim(row[MI_DEPLOY_ESTRATEGIA_TESTES])) deploy.estrategiaAdequada++; }
-        addCount(causaRaizCounts, row[MI_DEPLOY_TIPO_CAUSA_RAIZ]);
-        addCount(processoOrigemCounts, row[MI_DEPLOY_PROCESSO_ORIGEM]);
+        addCount(causaRaizByUniverso.deploy, row[MI_DEPLOY_TIPO_CAUSA_RAIZ], id);
+        addCount(processoOrigemByUniverso.deploy, row[MI_DEPLOY_PROCESSO_ORIGEM], id);
       }
 
       if (isFilled(row[MI_TRAD_ID])) {
+        const id = String(row[MI_TRAD_ID]).trim();
         tradicional.total++;
         if (isFilled(row[MI_TRAD_QUALIDADE_ROLLBACK])) { tradicional.rollbackFilled++; if (isBoa(row[MI_TRAD_QUALIDADE_ROLLBACK])) tradicional.rollbackBoa++; }
         if (isFilled(row[MI_TRAD_QUALIDADE_PLANO_TESTES])) { tradicional.planoTestesFilled++; if (isBoa(row[MI_TRAD_QUALIDADE_PLANO_TESTES])) tradicional.planoTestesBoa++; }
@@ -142,18 +148,18 @@ function getQualidadeMudancaData() {
         if (isFilled(row[MI_TRAD_QUALIDADE_PLANO_ACAO])) { tradicional.planoFilled++; if (isBoa(row[MI_TRAD_QUALIDADE_PLANO_ACAO])) tradicional.planoBoa++; }
         if (isFilled(row[MI_TRAD_AMBIENTE_ADEQUADO])) { tradicional.ambienteFilled++; if (isSim(row[MI_TRAD_AMBIENTE_ADEQUADO])) tradicional.ambienteAdequado++; }
         if (isFilled(row[MI_TRAD_ESTRATEGIA_TESTES])) { tradicional.estrategiaFilled++; if (isSim(row[MI_TRAD_ESTRATEGIA_TESTES])) tradicional.estrategiaAdequada++; }
-        addCount(causaRaizCounts, row[MI_TRAD_TIPO_CAUSA_RAIZ]);
-        addCount(processoOrigemCounts, row[MI_TRAD_PROCESSO_ORIGEM]);
+        addCount(causaRaizByUniverso.tradicional, row[MI_TRAD_TIPO_CAUSA_RAIZ], id);
+        addCount(processoOrigemByUniverso.tradicional, row[MI_TRAD_PROCESSO_ORIGEM], id);
       }
     });
 
-    const toSortedList = (counts) => Object.keys(counts)
-      .map(label => ({ label: label, count: counts[label] }))
+    const toSortedList = (map) => Object.keys(map)
+      .map(label => ({ label: label, count: map[label].count, ids: map[label].ids }))
       .sort((a, b) => b.count - a.count);
 
     const pct = (n, d) => d > 0 ? Math.round((n / d) * 1000) / 10 : null;
 
-    const formatBlock = (b) => {
+    const formatBlock = (b, universoKey) => {
       const out = { total: b.total };
       if ('rcaFilled' in b) { out.qualidadeRcaPct = pct(b.rcaBoa, b.rcaFilled); out.qualidadeRcaBase = b.rcaFilled; }
       if ('planoFilled' in b) { out.qualidadePlanoAcaoPct = pct(b.planoBoa, b.planoFilled); out.qualidadePlanoAcaoBase = b.planoFilled; }
@@ -162,16 +168,81 @@ function getQualidadeMudancaData() {
       if ('rollbackFilled' in b) { out.qualidadeRollbackPct = pct(b.rollbackBoa, b.rollbackFilled); out.qualidadeRollbackBase = b.rollbackFilled; }
       if ('planoTestesFilled' in b) { out.qualidadePlanoTestesPct = pct(b.planoTestesBoa, b.planoTestesFilled); out.qualidadePlanoTestesBase = b.planoTestesFilled; }
       if ('naoProdFilled' in b) { out.testadoNaoProdPct = pct(b.naoProdSim, b.naoProdFilled); out.testadoNaoProdBase = b.naoProdFilled; }
+      out.causaRaiz = toSortedList(causaRaizByUniverso[universoKey]);
+      out.processoOrigem = toSortedList(processoOrigemByUniverso[universoKey]);
       return out;
     };
 
     return {
-      geral: formatBlock(geral),
-      deploy: formatBlock(deploy),
-      tradicional: formatBlock(tradicional),
-      causaRaiz: toSortedList(causaRaizCounts),
-      processoOrigem: toSortedList(processoOrigemCounts)
+      geral: formatBlock(geral, 'geral'),
+      deploy: formatBlock(deploy, 'deploy'),
+      tradicional: formatBlock(tradicional, 'tradicional')
     };
+  } catch (e) {
+    return { error: e.toString() };
+  }
+}
+
+/**
+ * Busca os detalhes de um conjunto de Incidentes (por ticket) em todas as abas MajorIncidentes{ano}
+ * disponíveis. Usado no drill-down: ao clicar numa Causa Raiz ou Processo de Origem recorrente,
+ * mostra o período e os detalhes dos incidentes que compartilham aquele valor.
+ */
+function getIncidentsByIds(ids) {
+  try {
+    if (!ids || !ids.length) return [];
+    const idSet = {};
+    ids.forEach(id => { idSet[String(id).trim()] = true; });
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheets = ss.getSheets();
+    const regex = /^MajorIncidentes(\d{4})$/i;
+    const results = [];
+
+    const pad = n => n.toString().padStart(2, '0');
+    const formatDate = (val) => {
+      if (val instanceof Date) {
+        return `${pad(val.getDate())}/${pad(val.getMonth() + 1)}/${val.getFullYear()} ${pad(val.getHours())}:${pad(val.getMinutes())}`;
+      }
+      return val ? String(val) : "N/A";
+    };
+
+    sheets.forEach(sheet => {
+      const match = sheet.getName().match(regex);
+      if (!match) return;
+
+      const values = sheet.getDataRange().getValues();
+      const rows = values.slice(1);
+      if (rows.length === 0) return;
+      const durationDisplayValues = sheet.getRange(2, COL_DURACAO + 1, rows.length, 1).getDisplayValues();
+
+      rows.forEach((row, i) => {
+        const ticketId = String(row[0] || '').trim();
+        if (!ticketId || !idSet[ticketId]) return;
+
+        const openDate = row[COL_ABERTURA] instanceof Date ? row[COL_ABERTURA] : null;
+        const durRaw = durationDisplayValues[i] ? durationDisplayValues[i][0] : "00:00";
+
+        results.push({
+          id: ticketId,
+          severidade: String(row[COL_SEVERIDADE] || '').trim(),
+          abrangencia: String(row[9] || '').trim() || "N/A",
+          descImpacto: String(row[7] || '').trim() || "N/A",
+          offender: String(row[COL_OFENSOR] || '').trim() || "N/A",
+          descOfensor: String(row[10] || '').trim() || "N/A",
+          solucao: String(row[11] || '').trim() || "N/A",
+          dataDefinicao: formatDate(row[COL_ABERTURA]),
+          dataAberturaTimestamp: openDate ? openDate.getTime() : 0,
+          dataEncerramento: formatDate(row[3]),
+          ttr: durRaw,
+          jornada: String(row[5] || '').trim() || "N/A",
+          ano: match[1]
+        });
+      });
+    });
+
+    results.sort((a, b) => b.dataAberturaTimestamp - a.dataAberturaTimestamp);
+    return results;
   } catch (e) {
     return { error: e.toString() };
   }

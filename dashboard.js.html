@@ -928,130 +928,245 @@
             .getQualidadeMudancaData();
     }
 
+    // Config de quais métricas de qualidade fazem sentido em cada Universo (nunca mistura perguntas
+    // que não se aplicam, ex: "Testado em Não-Prod" só existe para o Universo Tradicional)
+    const QM_METRIC_CONFIG = {
+        geral: [
+            { key: 'qualidadeRcaPct', label: 'Qualidade do RCA', suffix: '% Boa' },
+            { key: 'qualidadePlanoAcaoPct', label: 'Qualidade do Plano de Ação', suffix: '% Boa' }
+        ],
+        deploy: [
+            { key: 'qualidadeRcaPct', label: 'Qualidade do RCA', suffix: '% Boa' },
+            { key: 'qualidadePlanoAcaoPct', label: 'Qualidade do Plano de Ação', suffix: '% Boa' },
+            { key: 'ambienteAdequadoPct', label: 'Ambiente Adequado', suffix: '% Sim' },
+            { key: 'estrategiaTestesPct', label: 'Estratégia de Testes', suffix: '% Sim' }
+        ],
+        tradicional: [
+            { key: 'qualidadeRcaPct', label: 'Qualidade do RCA', suffix: '% Boa' },
+            { key: 'qualidadePlanoAcaoPct', label: 'Qualidade do Plano de Ação', suffix: '% Boa' },
+            { key: 'ambienteAdequadoPct', label: 'Ambiente Adequado', suffix: '% Sim' },
+            { key: 'estrategiaTestesPct', label: 'Estratégia de Testes', suffix: '% Sim' },
+            { key: 'qualidadeRollbackPct', label: 'Qualidade do Rollback', suffix: '% Boa' },
+            { key: 'qualidadePlanoTestesPct', label: 'Qualidade do Plano de Testes', suffix: '% Boa' },
+            { key: 'testadoNaoProdPct', label: 'Testado em Não-Prod', suffix: '% Sim' }
+        ]
+    };
+    const QM_N_ELEMENT_ID = { geral: 'qm-geral-n', deploy: 'qm-deploy-n', tradicional: 'qm-trad-n' };
+    const QM_UNIVERSO_LABEL = { geral: 'Geral', deploy: 'Deploy', tradicional: 'Tradicional' };
+
+    // Registro de itens clicáveis (Causa Raiz / Processo de Origem) para o drill-down,
+    // evitando embutir dados dinâmicos (com aspas, acentos, etc.) direto em atributos onclick.
+    let QM_ITEM_REGISTRY = {};
+    let qmRegistryCounter = 0;
+
     function renderQualidadeMudancaData(data) {
         if (!data || data.error) {
             logDebug("Qualidade Mudança Data Error: " + (data ? data.error : 'sem resposta'));
             return;
         }
 
-        const setPct = (id, pct) => {
-            const el = document.getElementById(id);
-            if (el) el.textContent = (pct === null || pct === undefined) ? '—' : `${pct}%`;
-        };
-        const setN = (id, n) => {
-            const el = document.getElementById(id);
-            if (el) el.textContent = n || 0;
-        };
+        QM_ITEM_REGISTRY = {};
+        qmRegistryCounter = 0;
 
-        const geral = data.geral || {};
-        const deploy = data.deploy || {};
-        const trad = data.tradicional || {};
+        ['geral', 'deploy', 'tradicional'].forEach(universoKey => {
+            const block = data[universoKey] || {};
+            renderQmMetricsTiles(`qm-metrics-${universoKey}`, block, QM_METRIC_CONFIG[universoKey]);
 
-        setPct('qm-geral-rca', geral.qualidadeRcaPct);
-        setPct('qm-geral-plano', geral.qualidadePlanoAcaoPct);
-        setN('qm-geral-n', geral.total);
+            const nEl = document.getElementById(QM_N_ELEMENT_ID[universoKey]);
+            if (nEl) nEl.textContent = block.total || 0;
 
-        setPct('qm-deploy-rca', deploy.qualidadeRcaPct);
-        setPct('qm-deploy-plano', deploy.qualidadePlanoAcaoPct);
-        setPct('qm-deploy-ambiente', deploy.ambienteAdequadoPct);
-        setPct('qm-deploy-estrategia', deploy.estrategiaTestesPct);
-        setN('qm-deploy-n', deploy.total);
-
-        setPct('qm-trad-rca', trad.qualidadeRcaPct);
-        setPct('qm-trad-plano', trad.qualidadePlanoAcaoPct);
-        setPct('qm-trad-ambiente', trad.ambienteAdequadoPct);
-        setPct('qm-trad-estrategia', trad.estrategiaTestesPct);
-        setPct('qm-trad-rollback', trad.qualidadeRollbackPct);
-        setPct('qm-trad-planotestes', trad.qualidadePlanoTestesPct);
-        setPct('qm-trad-naoprod', trad.testadoNaoProdPct);
-        setN('qm-trad-n', trad.total);
-
-        renderCausaRaizChart(data.causaRaiz || []);
-        renderProcessoOrigemChart(data.processoOrigem || []);
-    }
-
-    // Donut: distribuição do Tipo de Causa Raiz (classificado pelo NotebookLM a partir do RCA)
-    function renderCausaRaizChart(items) {
-        const emptyEl = document.getElementById('qm-causaraiz-empty');
-        const canvas = document.getElementById('chartCausaRaiz');
-        if (!canvas) return;
-
-        if (!items.length) {
-            if (emptyEl) emptyEl.classList.remove('hidden');
-            canvas.classList.add('hidden');
-            if (charts['chartCausaRaiz']) { charts['chartCausaRaiz'].destroy(); delete charts['chartCausaRaiz']; }
-            return;
-        }
-        if (emptyEl) emptyEl.classList.add('hidden');
-        canvas.classList.remove('hidden');
-
-        const labels = items.map(i => i.label);
-        const counts = items.map(i => i.count);
-        const colors = labels.map(l => getColorForKey(l));
-
-        const ctx = canvas.getContext('2d');
-        if (charts['chartCausaRaiz']) charts['chartCausaRaiz'].destroy();
-        charts['chartCausaRaiz'] = new Chart(ctx, {
-            type: 'doughnut',
-            data: { labels: labels, datasets: [{ data: counts, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 } } },
-                    datalabels: {
-                        color: '#fff',
-                        font: { weight: 'bold', size: 10 },
-                        formatter: (value, ctxD) => {
-                            const total = ctxD.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
-                            return total > 0 ? `${((value / total) * 100).toFixed(0)}%` : '';
-                        }
-                    }
-                }
-            }
+            renderQmRankedList(`qm-causaraiz-${universoKey}`, block.causaRaiz || [], universoKey, 'causaRaiz');
+            renderQmRankedList(`qm-processo-${universoKey}`, block.processoOrigem || [], universoKey, 'processoOrigem');
         });
     }
 
-    // Barras horizontais: distribuição do Processo de Origem (Tarefa de RCA no ServiceNow)
-    function renderProcessoOrigemChart(items) {
-        const emptyEl = document.getElementById('qm-processoorigem-empty');
-        const canvas = document.getElementById('chartProcessoOrigem');
-        if (!canvas) return;
+    function formatQmPct(v) {
+        return (v === null || v === undefined) ? '—' : `${v}%`;
+    }
+
+    function renderQmMetricsTiles(containerId, block, metricConfig) {
+        const el = document.getElementById(containerId);
+        if (!el) return;
+        el.innerHTML = metricConfig.map(m => `
+            <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wide mb-1 leading-tight">${m.label}</p>
+                <p class="text-xl font-extrabold text-slate-800">${formatQmPct(block[m.key])}</p>
+                <p class="text-[9px] text-slate-400">${m.suffix}</p>
+            </div>
+        `).join('');
+    }
+
+    // Lista rankeada (Causa Raiz / Processo de Origem): mostra Top 5 recorrentes, com botão para
+    // expandir o restante. Cada item é clicável e abre o drill-down com os incidentes por trás dele.
+    function renderQmRankedList(containerId, items, universoKey, kind) {
+        const el = document.getElementById(containerId);
+        if (!el) return;
 
         if (!items.length) {
-            if (emptyEl) emptyEl.classList.remove('hidden');
-            canvas.classList.add('hidden');
-            if (charts['chartProcessoOrigem']) { charts['chartProcessoOrigem'].destroy(); delete charts['chartProcessoOrigem']; }
+            el.innerHTML = `<p class="text-xs text-slate-300 italic py-2">Nenhum registro classificado ainda.</p>`;
             return;
         }
-        if (emptyEl) emptyEl.classList.add('hidden');
-        canvas.classList.remove('hidden');
 
-        const top = items.slice(0, 10);
-        const labels = top.map(i => i.label);
-        const counts = top.map(i => i.count);
-        const colors = labels.map(l => getColorForKey(l));
+        const maxCount = items[0].count;
+        const universoLabel = QM_UNIVERSO_LABEL[universoKey];
 
-        const ctx = canvas.getContext('2d');
-        if (charts['chartProcessoOrigem']) charts['chartProcessoOrigem'].destroy();
-        charts['chartProcessoOrigem'] = new Chart(ctx, {
-            type: 'bar',
-            data: { labels: labels, datasets: [{ label: 'Incidentes', data: counts, backgroundColor: colors, borderRadius: 4, barPercentage: 0.6 }] },
-            options: {
-                indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: false,
-                layout: { padding: { right: 40 } },
-                scales: {
-                    x: { grid: { display: false }, ticks: { autoSkip: false }, grace: '15%' },
-                    y: { beginAtZero: true }
-                },
-                plugins: {
-                    legend: { display: false },
-                    datalabels: { anchor: 'end', align: 'end', color: '#334155', font: { weight: 'bold', size: 10 } }
+        const buildRow = (item) => {
+            const key = 'qm' + (qmRegistryCounter++);
+            QM_ITEM_REGISTRY[key] = { item: item, universoLabel: universoLabel, kind: kind };
+            const widthPct = maxCount > 0 ? Math.round((item.count / maxCount) * 100) : 0;
+            return `
+                <button type="button" data-qm-key="${key}" class="qm-drill-btn w-full text-left group">
+                    <div class="flex items-center justify-between text-xs mb-0.5 gap-2">
+                        <span class="font-semibold text-slate-700 group-hover:text-natura-orange transition-colors truncate">${item.label}</span>
+                        <span class="font-bold text-slate-500 flex-none">${item.count}</span>
+                    </div>
+                    <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div class="h-full bg-natura-orange/70 group-hover:bg-natura-orange transition-colors" style="width:${widthPct}%"></div>
+                    </div>
+                </button>
+            `;
+        };
+
+        const top = items.slice(0, 5);
+        const rest = items.slice(5);
+
+        let html = `<div class="space-y-2">${top.map(buildRow).join('')}</div>`;
+
+        if (rest.length > 0) {
+            const restId = `${containerId}-rest`;
+            html += `<div id="${restId}" class="hidden space-y-2 mt-2">${rest.map(buildRow).join('')}</div>`;
+            html += `<button type="button" class="text-[10px] font-bold text-natura-orange hover:underline mt-2" onclick="toggleQmExpand('${restId}')">Ver mais ${rest.length}</button>`;
+        }
+
+        el.innerHTML = html;
+    }
+
+    function toggleQmExpand(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const isHidden = el.classList.contains('hidden');
+        el.classList.toggle('hidden', !isHidden);
+        const btn = el.nextElementSibling;
+        if (btn) btn.textContent = isHidden ? 'Ver menos' : `Ver mais ${el.children.length}`;
+    }
+
+    // Delegação de clique para os itens de Causa Raiz / Processo de Origem (registrados em QM_ITEM_REGISTRY)
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.qm-drill-btn');
+        if (!btn) return;
+        const entry = QM_ITEM_REGISTRY[btn.dataset.qmKey];
+        if (!entry) return;
+        openQualidadeDrillModal(entry.item.label, entry.item.ids, entry.universoLabel, entry.kind);
+    });
+
+    // Card de incidente reutilizado no drill-down (mesmo template visual do modal de Incidentes)
+    function buildIncidentCardHtml(inc) {
+        return `
+            <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+                <div class="flex flex-col sm:flex-row justify-between items-start mb-4 gap-2">
+                    <div class="flex items-center gap-3">
+                        <h3 class="text-lg font-bold text-slate-800">${inc.id}</h3>
+                        <span class="px-2 py-1 text-xs font-bold rounded-md ${inc.severidade.startsWith('0') ? 'bg-natura-red-buriti/10 text-natura-red-buriti' : 'bg-natura-orange/10 text-natura-orange'}">
+                            SEV ${inc.severidade}
+                        </span>
+                    </div>
+                    <div class="text-xs text-slate-500 sm:text-right flex flex-col gap-0.5">
+                        <p><span class="font-bold text-slate-600">Abertura:</span> ${inc.dataDefinicao}</p>
+                        <p><span class="font-bold text-slate-600">Encerramento:</span> ${inc.dataEncerramento}</p>
+                        <p class="text-natura-green-cerrado font-bold text-sm mt-1">TTR: ${inc.ttr}</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mt-4 pt-4 border-t border-slate-100">
+                    <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Abrangência</p>
+                        <p class="text-slate-700 font-medium">${renderFlags(inc.abrangencia)}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Jornada Impactada</p>
+                        ${renderJornadas(inc.jornada)}
+                    </div>
+                    <div class="md:col-span-2">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Descrição do Impacto</p>
+                        <p class="text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100 leading-relaxed text-xs">${inc.descImpacto}</p>
+                    </div>
+                    <div class="md:col-span-2">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Descrição do Ofensor</p>
+                        <div class="bg-slate-50 p-3 rounded-lg border border-slate-100 leading-relaxed text-xs">
+                            <span class="font-bold text-slate-800 text-sm block mb-1">${inc.offender}</span>
+                            <span class="text-slate-700">${inc.descOfensor}</span>
+                        </div>
+                    </div>
+                    <div class="md:col-span-2">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Solução Aplicada</p>
+                        <p class="text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100 leading-relaxed text-xs">${inc.solucao}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Drill-down: ao clicar numa Causa Raiz ou Processo de Origem recorrente, mostra o período e os
+    // detalhes de todos os incidentes que compartilham aquele valor.
+    function openQualidadeDrillModal(label, ids, universoLabel, kind) {
+        const modal = document.getElementById('qualidade-drill-modal');
+        const titleEl = document.getElementById('qualidade-drill-title');
+        const subtitleEl = document.getElementById('qualidade-drill-subtitle');
+        const loadingEl = document.getElementById('qualidade-drill-loading');
+        const listEl = document.getElementById('qualidade-drill-list');
+        if (!modal || !ids || !ids.length) return;
+
+        const kindLabel = kind === 'causaRaiz' ? 'Causa Raiz' : 'Processo de Origem';
+        titleEl.textContent = label;
+        subtitleEl.textContent = `${kindLabel} · Universo ${universoLabel} · ${ids.length} incidente(s)`;
+
+        loadingEl.classList.remove('hidden');
+        listEl.classList.add('hidden');
+        listEl.classList.remove('flex');
+        listEl.innerHTML = '';
+
+        modal.classList.remove('hidden');
+        setTimeout(() => modal.classList.remove('opacity-0'), 10);
+
+        google.script.run
+            .withSuccessHandler(incidents => {
+                loadingEl.classList.add('hidden');
+                listEl.classList.remove('hidden');
+                listEl.classList.add('flex', 'flex-col', 'gap-4');
+
+                if (!incidents || incidents.error) {
+                    listEl.innerHTML = `<div class="text-sm text-red-600 p-4 text-center">Erro ao buscar os incidentes.</div>`;
+                    return;
                 }
-            }
-        });
+                if (!incidents.length) {
+                    listEl.innerHTML = `<div class="text-sm text-slate-500 italic p-4 text-center">Nenhum incidente encontrado para este filtro.</div>`;
+                    return;
+                }
+
+                incidents.sort((a, b) => b.dataAberturaTimestamp - a.dataAberturaTimestamp);
+                const newest = incidents[0];
+                const oldest = incidents[incidents.length - 1];
+                const periodText = (oldest && newest)
+                    ? `Período: ${oldest.dataDefinicao.split(' ')[0]} a ${newest.dataDefinicao.split(' ')[0]}`
+                    : '';
+                subtitleEl.textContent = `${kindLabel} · Universo ${universoLabel} · ${incidents.length} incidente(s) · ${periodText}`;
+
+                listEl.innerHTML = incidents.map(inc => buildIncidentCardHtml(inc)).join('');
+            })
+            .withFailureHandler(e => {
+                loadingEl.classList.add('hidden');
+                listEl.classList.remove('hidden');
+                listEl.innerHTML = `<div class="text-sm text-red-600 p-4 text-center">Falha na comunicação: ${e.message}</div>`;
+            })
+            .getIncidentsByIds(ids);
+    }
+
+    function closeQualidadeDrillModal() {
+        const modal = document.getElementById('qualidade-drill-modal');
+        if (modal) {
+            modal.classList.add('opacity-0');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
     }
 
     // Deprecated but kept for compatibility if needed (redirects to new logic)
