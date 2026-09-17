@@ -50,10 +50,14 @@ function buildChangeMap(ss) {
 // Mapeamento da aba Manual_Info (Range A1:AB) - 3 blocos lado a lado (Base 0)
 // Bloco Geral (demais Incidentes, não causados por Mudança Deploy/Tradicional)
 const MI_GERAL_ID = 0;                    // A
+const MI_GERAL_TIPO_CAUSA_RAIZ = 2;       // C
+const MI_GERAL_PROCESSO_ORIGEM = 3;       // D
 const MI_GERAL_QUALIDADE_RCA = 4;         // E
 const MI_GERAL_QUALIDADE_PLANO_ACAO = 5;  // F
 // Bloco Deploys
 const MI_DEPLOY_ID = 6;                       // G
+const MI_DEPLOY_TIPO_CAUSA_RAIZ = 10;         // K
+const MI_DEPLOY_PROCESSO_ORIGEM = 11;         // L
 const MI_DEPLOY_QUALIDADE_RCA = 12;           // M
 const MI_DEPLOY_QUALIDADE_PLANO_ACAO = 13;    // N
 const MI_DEPLOY_AMBIENTE_ADEQUADO = 14;       // O
@@ -63,6 +67,8 @@ const MI_TRAD_ID = 16;                     // Q
 const MI_TRAD_QUALIDADE_ROLLBACK = 19;     // T
 const MI_TRAD_QUALIDADE_PLANO_TESTES = 20; // U
 const MI_TRAD_TESTADO_NAO_PROD = 21;       // V
+const MI_TRAD_TIPO_CAUSA_RAIZ = 22;        // W
+const MI_TRAD_PROCESSO_ORIGEM = 23;        // X
 const MI_TRAD_QUALIDADE_RCA = 24;          // Y
 const MI_TRAD_QUALIDADE_PLANO_ACAO = 25;   // Z
 const MI_TRAD_AMBIENTE_ADEQUADO = 26;      // AA
@@ -99,11 +105,22 @@ function getQualidadeMudancaData() {
       naoProdFilled: 0, naoProdSim: 0
     };
 
+    // Distribuição consolidada (Geral + Deploy + Tradicional) por Tipo de Causa Raiz e Processo de Origem
+    const causaRaizCounts = {};
+    const processoOrigemCounts = {};
+    const addCount = (map, rawValue) => {
+      if (!isFilled(rawValue)) return;
+      const label = String(rawValue).trim();
+      map[label] = (map[label] || 0) + 1;
+    };
+
     rows.forEach(row => {
       if (isFilled(row[MI_GERAL_ID])) {
         geral.total++;
         if (isFilled(row[MI_GERAL_QUALIDADE_RCA])) { geral.rcaFilled++; if (isBoa(row[MI_GERAL_QUALIDADE_RCA])) geral.rcaBoa++; }
         if (isFilled(row[MI_GERAL_QUALIDADE_PLANO_ACAO])) { geral.planoFilled++; if (isBoa(row[MI_GERAL_QUALIDADE_PLANO_ACAO])) geral.planoBoa++; }
+        addCount(causaRaizCounts, row[MI_GERAL_TIPO_CAUSA_RAIZ]);
+        addCount(processoOrigemCounts, row[MI_GERAL_PROCESSO_ORIGEM]);
       }
 
       if (isFilled(row[MI_DEPLOY_ID])) {
@@ -112,6 +129,8 @@ function getQualidadeMudancaData() {
         if (isFilled(row[MI_DEPLOY_QUALIDADE_PLANO_ACAO])) { deploy.planoFilled++; if (isBoa(row[MI_DEPLOY_QUALIDADE_PLANO_ACAO])) deploy.planoBoa++; }
         if (isFilled(row[MI_DEPLOY_AMBIENTE_ADEQUADO])) { deploy.ambienteFilled++; if (isSim(row[MI_DEPLOY_AMBIENTE_ADEQUADO])) deploy.ambienteAdequado++; }
         if (isFilled(row[MI_DEPLOY_ESTRATEGIA_TESTES])) { deploy.estrategiaFilled++; if (isSim(row[MI_DEPLOY_ESTRATEGIA_TESTES])) deploy.estrategiaAdequada++; }
+        addCount(causaRaizCounts, row[MI_DEPLOY_TIPO_CAUSA_RAIZ]);
+        addCount(processoOrigemCounts, row[MI_DEPLOY_PROCESSO_ORIGEM]);
       }
 
       if (isFilled(row[MI_TRAD_ID])) {
@@ -123,8 +142,14 @@ function getQualidadeMudancaData() {
         if (isFilled(row[MI_TRAD_QUALIDADE_PLANO_ACAO])) { tradicional.planoFilled++; if (isBoa(row[MI_TRAD_QUALIDADE_PLANO_ACAO])) tradicional.planoBoa++; }
         if (isFilled(row[MI_TRAD_AMBIENTE_ADEQUADO])) { tradicional.ambienteFilled++; if (isSim(row[MI_TRAD_AMBIENTE_ADEQUADO])) tradicional.ambienteAdequado++; }
         if (isFilled(row[MI_TRAD_ESTRATEGIA_TESTES])) { tradicional.estrategiaFilled++; if (isSim(row[MI_TRAD_ESTRATEGIA_TESTES])) tradicional.estrategiaAdequada++; }
+        addCount(causaRaizCounts, row[MI_TRAD_TIPO_CAUSA_RAIZ]);
+        addCount(processoOrigemCounts, row[MI_TRAD_PROCESSO_ORIGEM]);
       }
     });
+
+    const toSortedList = (counts) => Object.keys(counts)
+      .map(label => ({ label: label, count: counts[label] }))
+      .sort((a, b) => b.count - a.count);
 
     const pct = (n, d) => d > 0 ? Math.round((n / d) * 1000) / 10 : null;
 
@@ -143,7 +168,9 @@ function getQualidadeMudancaData() {
     return {
       geral: formatBlock(geral),
       deploy: formatBlock(deploy),
-      tradicional: formatBlock(tradicional)
+      tradicional: formatBlock(tradicional),
+      causaRaiz: toSortedList(causaRaizCounts),
+      processoOrigem: toSortedList(processoOrigemCounts)
     };
   } catch (e) {
     return { error: e.toString() };

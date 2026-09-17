@@ -658,6 +658,46 @@
                             </tbody>
                         </table>
                     </div>
+
+                    <!-- Causa Raiz & Processo de Origem -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                            <div class="flex items-center gap-2 mb-4">
+                                <h3 class="text-sm font-bold text-slate-700 uppercase">Tipo de Causa Raiz</h3>
+                                <span class="info-tooltip" tabindex="0">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span class="tooltip-bubble">Classificação da causa raiz de cada RCA, feita pelo
+                                        NotebookLM a partir da análise do que foi preenchido no RCA. Considera apenas
+                                        registros já classificados (Geral + Deploy + Tradicional).</span>
+                                </span>
+                            </div>
+                            <div id="qm-causaraiz-empty" class="hidden text-xs text-slate-400 italic py-8 text-center">
+                                Nenhum Tipo de Causa Raiz classificado até o momento.</div>
+                            <div class="relative w-full h-64"><canvas id="chartCausaRaiz"></canvas></div>
+                        </div>
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                            <div class="flex items-center gap-2 mb-4">
+                                <h3 class="text-sm font-bold text-slate-700 uppercase">Processo de Origem</h3>
+                                <span class="info-tooltip" tabindex="0">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span class="tooltip-bubble">Processo de Origem declarado no campo da Tarefa de
+                                        RCA no ServiceNow. Considera apenas registros já preenchidos (Geral + Deploy +
+                                        Tradicional).</span>
+                                </span>
+                            </div>
+                            <div id="qm-processoorigem-empty" class="hidden text-xs text-slate-400 italic py-8 text-center">
+                                Nenhum Processo de Origem preenchido até o momento.</div>
+                            <div class="relative w-full h-64"><canvas id="chartProcessoOrigem"></canvas></div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Evolution Chart -->
