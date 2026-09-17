@@ -1,4 +1,4 @@
-<script>
+﻿<script>
     let ALL_DATA = {};
     let CURRENT_FILTERS = {
         card: 'total',
@@ -323,15 +323,15 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    y: { 
-                        beginAtZero: true, 
+                    y: {
+                        beginAtZero: true,
                         title: { display: true, text: 'Resolvidos' },
                         max: axisMaxResolved
                     },
-                    'y-aging': { 
-                        position: 'right', 
-                        beginAtZero: true, 
-                        title: { display: true, text: 'Aging (Dias)' }, 
+                    'y-aging': {
+                        position: 'right',
+                        beginAtZero: true,
+                        title: { display: true, text: 'Aging (Dias)' },
                         grid: { drawOnChartArea: false },
                         max: axisMaxAging
                     }
@@ -380,15 +380,15 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    y: { 
-                        beginAtZero: true, 
+                    y: {
+                        beginAtZero: true,
                         title: { display: true, text: 'Resolvidos' },
                         max: axisMaxResolved
                     },
-                    'y-aging': { 
-                        position: 'right', 
-                        beginAtZero: true, 
-                        title: { display: true, text: 'Aging (Dias)' }, 
+                    'y-aging': {
+                        position: 'right',
+                        beginAtZero: true,
+                        title: { display: true, text: 'Aging (Dias)' },
                         grid: { drawOnChartArea: false },
                         max: axisMaxAging
                     }
@@ -507,14 +507,14 @@
             return;
         }
         renderKpiCards(data.kpis);
-        
+
         // Save these for switching views WITHOUT server reload
         ALL_DATA.currentKpis = data.kpis;
         ALL_DATA.rawIncidents = data.rawIncidents || [];
         ALL_DATA.evolutionData = {
-          monthly: { metrics: data.monthlyMetrics, mttr: data.mttrPorMesEmHoras, title: "Evolução Mensal" },
-          weekly: { metrics: data.weeklyMetrics, mttr: data.mttrSemanalEmHoras, title: "Evolução Semanal" },
-          quarterly: { metrics: data.quarterlyMetrics, mttr: data.mttrTrimestralEmHoras, title: "Evolução Trimestral" }
+            monthly: { metrics: data.monthlyMetrics, mttr: data.mttrPorMesEmHoras, title: "Evolução Mensal" },
+            weekly: { metrics: data.weeklyMetrics, mttr: data.mttrSemanalEmHoras, title: "Evolução Semanal" },
+            quarterly: { metrics: data.quarterlyMetrics, mttr: data.mttrTrimestralEmHoras, title: "Evolução Trimestral" }
         };
 
         const group = CURRENT_FILTERS.evolutionGrouping || 'monthly';
@@ -533,22 +533,22 @@
 
         const loader = document.getElementById('loader-container');
         if (loader) loader.classList.add('hidden');
-        
+
         if (CURRENT_FILTERS.periodKey === 'T4Industria') {
             const dataStoryBtn = document.getElementById('btn-data-story');
             if (dataStoryBtn) dataStoryBtn.classList.add('hidden');
-            
+
             const concessaoContainer = document.getElementById('concessao-container');
             if (concessaoContainer) concessaoContainer.classList.remove('hidden');
-            
+
             renderConcessaoTimeline();
         } else {
             initDataStory();
-            
+
             const concessaoContainer = document.getElementById('concessao-container');
             if (concessaoContainer) concessaoContainer.classList.add('hidden');
         }
-        
+
         logDebug("Tab 1 Render Complete.");
     }
 
@@ -948,12 +948,12 @@
     function setupEvolutionToggle() {
         const container = document.getElementById('evolution-toggle-container');
         if (!container) return;
-        
+
         container.querySelectorAll('button').forEach(btn => {
             btn.addEventListener('click', () => {
                 const group = btn.dataset.group;
                 CURRENT_FILTERS.evolutionGrouping = group;
-                
+
                 // Update UI active state
                 container.querySelectorAll('button').forEach(b => {
                     b.classList.remove('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
@@ -961,7 +961,7 @@
                 });
                 btn.classList.remove('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
                 btn.classList.add('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
-                
+
                 // Redraw
                 const data = ALL_DATA.evolutionData[group];
                 if (data) {
@@ -976,11 +976,11 @@
         if (titleEl) titleEl.textContent = title;
 
         const ctx = document.getElementById('monthlyIncidentsChart').getContext('2d');
-        
+
         // Custom order for months to ensure they are sorted correctly
         const monthsOrder = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
         const quartersOrder = ["Q1", "Q2", "Q3", "Q4"];
-        
+
         let labels = [];
         if (title.includes("Mensal")) {
             labels = monthsOrder.filter(m => metrics[m] !== undefined);
@@ -1036,15 +1036,15 @@
                     }
                 },
                 scales: {
-                    'y-count': { 
-                        position: 'left', 
-                        beginAtZero: true, 
+                    'y-count': {
+                        position: 'left',
+                        beginAtZero: true,
                         grid: { display: false },
                         max: axisMaxCounts
                     },
-                    'y-mttr': { 
-                        position: 'right', 
-                        beginAtZero: true, 
+                    'y-mttr': {
+                        position: 'right',
+                        beginAtZero: true,
                         grid: { display: true },
                         max: axisMaxMTTR
                     }
@@ -1077,30 +1077,30 @@
     function initDataStory() {
         const btn = document.getElementById('btn-data-story');
         if (!btn) return;
-        
+
         // Ativar apenas para 2026 (comparando com 2025)
         if (CURRENT_FILTERS.year == "2026") {
             btn.classList.remove('hidden');
         } else {
             btn.classList.add('hidden');
         }
-    
+
         btn.onclick = () => {
             document.getElementById('data-story-modal').classList.remove('hidden');
             document.getElementById('story-loading').classList.remove('hidden');
             document.getElementById('story-content').classList.add('hidden');
-            
+
             // Lógica de Comparação Espelhada (YTD - Year to Day)
             const today = new Date();
             const baseYear = 2025;
-            
+
             let start = CURRENT_FILTERS.startDate;
             let end = CURRENT_FILTERS.endDate;
-            
+
             // Mirror today into 2025 for ceiling comparison
             let mirrorToday = new Date(today);
             mirrorToday.setFullYear(baseYear);
-    
+
             if (CURRENT_FILTERS.periodKey === 'All') {
                 // De 01/01/2025 até hoje/2025
                 let s = new Date(baseYear, 0, 1, 0, 0, 0);
@@ -1124,9 +1124,9 @@
                     end = mirrorToday.getTime();
                 }
             }
-            
+
             logDebug(`Requesting baseline story for ${baseYear}. Range: ${start ? new Date(start).toLocaleDateString() : 'Start'} to ${end ? new Date(end).toLocaleDateString() : 'End'}`);
-    
+
             // Busca dos dados de 2025 com o intervalo ESPELHADO
             google.script.run
                 .withSuccessHandler(renderDataStory)
@@ -1156,7 +1156,7 @@
     function renderDataStory(baselineData) {
         document.getElementById('story-loading').classList.add('hidden');
         document.getElementById('story-content').classList.remove('hidden');
-        
+
         const curr = ALL_DATA.currentKpis;
         const volCurr = curr.incidentesTotal || 0;
         const mttrCurrMin = parseDataStoryTime(curr.mttrTotal);
@@ -1165,7 +1165,7 @@
         const group = CURRENT_FILTERS.evolutionGrouping || 'monthly';
         const currMetrics = ALL_DATA.evolutionData[group].metrics;
         const currMttr = ALL_DATA.evolutionData[group].mttr;
-        
+
         let prevMetrics = {};
         let prevMttrMap = {};
         let titleLabel = "";
@@ -1187,7 +1187,7 @@
         // --- AGREGACAO PARA COMPARACAO JUSTA (PERIODO VS PERIODO) ---
         // Descobrir quais chaves (meses/semanas) tem dados em 2026
         const activeKeys = Object.keys(currMetrics).filter(k => currMetrics[k].count > 0);
-        
+
         let volPrev = 0;
         let fairTotalDurationMinPrev = 0;
 
@@ -1205,21 +1205,21 @@
             return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
         };
         const mttrPrevFormatted = formatMttr(mttrPrevMin);
-        
+
         let volDiff = volCurr - volPrev;
         let volDiffPct = volPrev > 0 ? (volDiff / volPrev) * 100 : (volCurr > 0 ? 100 : 0);
-        
+
         let mttrDiff = mttrCurrMin - mttrPrevMin;
         let mttrDiffPct = mttrPrevMin > 0 ? (mttrDiff / mttrPrevMin) * 100 : (mttrCurrMin > 0 ? 100 : 0);
-        
+
         // Define situation
         let isBetter = (volCurr <= volPrev && mttrCurrMin < mttrPrevMin) || (volCurr < volPrev && mttrCurrMin <= mttrPrevMin);
         let isWorse = (volCurr > volPrev && volDiffPct > 10) || (mttrCurrMin > mttrPrevMin && mttrDiffPct > 10);
-        
+
         let headline = "";
         let alertClass = "";
         let alertBg = "";
-        
+
         if (isBetter) {
             headline = "🎉 Excelente! Reduzimos o volume e o tempo de impacto em relação ao mesmo período de 2025.";
             alertClass = "border-natura-green-cerrado";
@@ -1233,16 +1233,16 @@
             alertClass = "border-natura-blue-profundo";
             alertBg = "bg-natura-blue-ceu/20";
         }
-        
+
         const box = document.getElementById('story-alert-box');
         box.className = `border-l-4 p-4 rounded-r-xl shadow-sm transition-all mb-2 ${alertClass} ${alertBg}`;
         document.getElementById('story-headline').textContent = headline;
-        
+
         // Update DOM Elements
         document.getElementById('story-vol-curr').textContent = volCurr;
         document.getElementById('story-vol-prev').textContent = volPrev;
         const volEl = document.getElementById('story-vol-diff');
-        
+
         if (volDiff > 0) {
             volEl.innerHTML = `<span class="text-natura-red-buriti">↑ +${volDiffPct.toFixed(1)}%</span>`;
         } else if (volDiff < 0) {
@@ -1250,11 +1250,11 @@
         } else {
             volEl.innerHTML = `<span class="text-slate-400">= 0%</span>`;
         }
-        
+
         document.getElementById('story-mttr-curr').textContent = curr.mttrTotal;
         document.getElementById('story-mttr-prev').textContent = mttrPrevFormatted;
         const mttrEl = document.getElementById('story-mttr-diff');
-        
+
         if (mttrDiff > 0) {
             mttrEl.innerHTML = `<span class="text-natura-red-buriti">↑ +${mttrDiffPct.toFixed(1)}%</span>`;
         } else if (mttrDiff < 0) {
@@ -1262,7 +1262,7 @@
         } else {
             mttrEl.innerHTML = `<span class="text-slate-400">= 0%</span>`;
         }
-        
+
         // Build summary paragraph
         let summary = `Comparando exclusivamente os mesmos períodos do ano anterior, observamos que o volume de Major Incidentes `;
         if (volDiffPct !== 0) {
@@ -1270,16 +1270,16 @@
         } else {
             summary += `manteve-se idêntico (${volCurr} incidentes). `;
         }
-        
+
         summary += `Enquanto isso, a velocidade de recuperação (MTTR) `;
         if (mttrDiffPct !== 0) {
             summary += `${mttrDiff > 0 ? 'piorou' : 'melhorou'} em ${Math.abs(mttrDiffPct).toFixed(1)}%, mudando de ${mttrPrevFormatted} para ${curr.mttrTotal}.`;
         } else {
             summary += `está rigorosamente igual (${curr.mttrTotal}).`;
         }
-        
+
         document.getElementById('story-summary').textContent = summary;
-        
+
         // --- BREAKDOWN SECTION ---
         // Ordenação das chaves já identificadas como ativas
         if (group === 'monthly') {
@@ -1298,27 +1298,27 @@
             activeKeys.forEach(k => {
                 const cVol = currMetrics[k] ? currMetrics[k].count : 0;
                 const pVol = prevMetrics[k] ? prevMetrics[k].count : 0;
-                
+
                 const cMttr = currMttr[k] || 0;
                 const pMttr = prevMttrMap[k] || 0;
-                
+
                 const fmtMttr = (val) => {
                     const h = Math.floor(val);
                     const m = Math.round((val - h) * 60);
                     return `${h}h ${m}m`;
                 };
-                
+
                 let volDiffLocal = cVol - pVol;
                 let mttrDiffLocal = cMttr - pMttr;
-                
+
                 let volDiffLocalPct = pVol > 0 ? (volDiffLocal / pVol) * 100 : (cVol > 0 ? 100 : 0);
                 let mttrDiffLocalPct = pMttr > 0 ? (mttrDiffLocal / pMttr) * 100 : (cMttr > 0 ? 100 : 0);
-                
+
                 let volBadge = volDiffLocal > 0 ? `<span class="text-natura-red-buriti font-bold">↑ +${volDiffLocal} (+${Math.abs(volDiffLocalPct).toFixed(1)}%)</span>` : (volDiffLocal < 0 ? `<span class="text-natura-green-cerrado font-bold">↓ ${Math.abs(volDiffLocal)} (-${Math.abs(volDiffLocalPct).toFixed(1)}%)</span>` : `<span class="text-slate-400">=</span>`);
                 let mttrBadge = mttrDiffLocal > 0 ? `<span class="text-natura-red-buriti font-bold">↑ +${fmtMttr(mttrDiffLocal)} (+${Math.abs(mttrDiffLocalPct).toFixed(1)}%)</span>` : (mttrDiffLocal < 0 ? `<span class="text-natura-green-cerrado font-bold">↓ ${fmtMttr(Math.abs(mttrDiffLocal))} (-${Math.abs(mttrDiffLocalPct).toFixed(1)}%)</span>` : `<span class="text-slate-400">=</span>`);
 
                 const displayLabel = k.charAt(0).toUpperCase() + k.slice(1);
-                
+
                 html += `
                 <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[inset_0_2px_4px_rgba(0,0,0,0.01)] hover:bg-white transition-colors">
                     <span class="font-bold text-slate-700 w-28 shrink-0 flex items-center gap-2"><div class="w-1.5 h-1.5 rounded-full bg-slate-300"></div>${displayLabel}</span>
@@ -1355,7 +1355,7 @@
     function handleError(e) { console.error(e); }
 
     let RANKING_STATE = {
-        category: 'tech', 
+        category: 'tech',
         type: 'vol',
         context: 'vol',
         searchQuery: ''
@@ -1367,14 +1367,14 @@
         RANKING_STATE.type = parts[1];
         RANKING_STATE.context = parts[1];
         RANKING_STATE.searchQuery = '';
-        
+
         // Reset Search Input
         const searchInput = document.getElementById('ranking-search');
         if (searchInput) searchInput.value = '';
 
         const modal = document.getElementById('ranking-modal');
         const toggleWrapper = document.getElementById('ranking-toggle-wrapper');
-        
+
         if (toggleWrapper) {
             if (RANKING_STATE.context === 'mttr') {
                 toggleWrapper.classList.remove('hidden');
@@ -1422,12 +1422,12 @@
         }
 
         listEl.innerHTML = '';
-        
+
         let dataObj = category === 'tech' ? ALL_DATA.techMetrics : ALL_DATA.offenderMetrics;
         if (!dataObj) return;
 
         titleEl.textContent = `Ranking: ${category === 'tech' ? 'Tecnologia' : 'Ofensor'}`;
-        
+
         let sortFn;
         if (type === 'vol') {
             sortFn = (a, b) => dataObj[b].count - dataObj[a].count;
@@ -1438,16 +1438,16 @@
                 return valB - valA;
             };
         }
-        
+
         let sortedKeys = Object.keys(dataObj).sort(sortFn);
-        
+
         // Filter by Search Query
         if (searchQuery) {
             sortedKeys = sortedKeys.filter(k => k.toLowerCase().includes(searchQuery));
         }
 
         const totalIncidents = (ALL_DATA.currentKpis && ALL_DATA.currentKpis.incidentesTotal) || 1;
-        
+
         if (sortedKeys.length === 0) {
             listEl.innerHTML = `<div class="col-span-full text-center py-10 text-slate-400 italic">Nenhum resultado encontrado para "${searchQuery}"</div>`;
             return;
@@ -1456,7 +1456,7 @@
         sortedKeys.forEach((key, index) => {
             const count = dataObj[key].count;
             const pct = ((count / totalIncidents) * 100).toFixed(1);
-            
+
             let mainValue = '';
             let subValue = '';
 
@@ -1468,7 +1468,7 @@
                 mainValue = `${count}`;
                 subValue = `${pct}% do total`;
             }
-            
+
             const itemHtml = `
                 <div class="flex justify-between items-center py-2 px-3 border border-slate-100 hover:border-natura-orange/30 hover:bg-white rounded-lg transition-all bg-white/50 shadow-sm">
                     <div class="flex items-center gap-2 min-w-0">
@@ -1534,7 +1534,7 @@
         return `<div class="flex flex-wrap gap-2 mt-1">` + jornadas.map(j => {
             let keyMatch = Object.keys(JORNADA_MAP).find(k => k.toLowerCase() === j.toLowerCase());
             let mapped = keyMatch ? JORNADA_MAP[keyMatch] : { label: j, color: 'bg-slate-50 text-slate-700 border-slate-200', icon: '🔹' };
-            
+
             return `<span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-bold border shadow-sm ${mapped.color}">
                         <span>${mapped.icon}</span>
                         <span>${mapped.label}</span>
@@ -1660,25 +1660,25 @@
         setTimeout(() => {
             google.script.run
                 .withSuccessHandler(data => {
-                if (loader) loader.classList.add('hidden');
-                if (data.error) {
-                    alert("Erro ao carregar dados de Mudança: " + data.error);
-                    return;
-                }
-                GLOBAL_MUDANCA_DATA = data;
-                
-                const modal = document.getElementById('mudanca-details-modal');
-                modal.classList.remove('hidden');
-                setTimeout(() => modal.classList.remove('opacity-0'), 10);
+                    if (loader) loader.classList.add('hidden');
+                    if (data.error) {
+                        alert("Erro ao carregar dados de Mudança: " + data.error);
+                        return;
+                    }
+                    GLOBAL_MUDANCA_DATA = data;
 
-                // Default to first tab
-                switchMudancaTab('detalhes');
-            })
-            .withFailureHandler(e => {
-                if (loader) loader.classList.add('hidden');
-                alert("Falha na comunicação: " + e.message);
-            })
-            .getMudancaAnalytics(CURRENT_FILTERS.year, CURRENT_FILTERS.periodKey, CURRENT_FILTERS.startDate, CURRENT_FILTERS.endDate);
+                    const modal = document.getElementById('mudanca-details-modal');
+                    modal.classList.remove('hidden');
+                    setTimeout(() => modal.classList.remove('opacity-0'), 10);
+
+                    // Default to first tab
+                    switchMudancaTab('detalhes');
+                })
+                .withFailureHandler(e => {
+                    if (loader) loader.classList.add('hidden');
+                    alert("Falha na comunicação: " + e.message);
+                })
+                .getMudancaAnalytics(CURRENT_FILTERS.year, CURRENT_FILTERS.periodKey, CURRENT_FILTERS.startDate, CURRENT_FILTERS.endDate);
         }, 50);
     }
 
@@ -1749,12 +1749,12 @@
             if (inc.offender !== 'Mudança') return false;
             // If nothing selected, show nothing
             if (selectedTypes.length === 0) return false;
-            
+
             const incType = String(inc.tipoSm || "").toUpperCase();
             // Match against selected types
             return selectedTypes.some(t => incType.includes(t));
         });
-        
+
         filtered.sort((a, b) => b.dataAberturaTimestamp - a.dataAberturaTimestamp);
 
         if (filtered.length === 0) {
@@ -1817,23 +1817,23 @@
                 </div>
             </div>
         `).join('');
-        
+
         listEl.innerHTML = cardsHtml;
     }
 
     function renderMudancaAnalytics(categoryKey) {
         if (!GLOBAL_MUDANCA_DATA) return;
-        
+
         const data26 = GLOBAL_MUDANCA_DATA.year26[categoryKey];
         if (!data26) return;
 
         // 1. Render KPIs
         document.getElementById('mudanca-kpi-total').textContent = data26.kpis.incidentesTotal;
         document.getElementById('mudanca-kpi-mttr-total').textContent = data26.kpis.mttrTotal;
-        
+
         document.getElementById('mudanca-kpi-sev0').textContent = data26.kpis.incidentesSev0;
         document.getElementById('mudanca-kpi-mttr-sev0').textContent = data26.kpis.mttrSev0;
-        
+
         document.getElementById('mudanca-kpi-sev1').textContent = data26.kpis.incidentesSev1;
         document.getElementById('mudanca-kpi-mttr-sev1').textContent = data26.kpis.mttrSev1;
 
@@ -1942,14 +1942,14 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { 
+                plugins: {
                     legend: { position: 'bottom' },
                     datalabels: {
                         display: false // Disable by default, enable per dataset
                     },
                     tooltip: {
                         callbacks: {
-                            label: function(context) {
+                            label: function (context) {
                                 let label = context.dataset.label || '';
                                 if (label) {
                                     label += ': ';
@@ -1970,13 +1970,13 @@
                 },
                 scales: {
                     y: { beginAtZero: true, position: 'left', title: { display: true, text: 'Volume' } },
-                    y1: { 
-                        beginAtZero: true, 
-                        position: 'right', 
-                        grid: { drawOnChartArea: false }, 
+                    y1: {
+                        beginAtZero: true,
+                        position: 'right',
+                        grid: { drawOnChartArea: false },
                         title: { display: true, text: 'MTTR' },
                         ticks: {
-                            callback: function(value) {
+                            callback: function (value) {
                                 return value + 'h';
                             }
                         }
@@ -1989,7 +1989,7 @@
         const histContainer = document.getElementById('mudanca-history-container');
         if (CURRENT_FILTERS.year == "2026" && GLOBAL_MUDANCA_DATA.year25) {
             const hist25 = GLOBAL_MUDANCA_DATA.year25;
-            
+
             const formatMttrStr = (totalMin) => {
                 if (isNaN(totalMin) || totalMin === 0) return "00:00";
                 const h = Math.floor(totalMin / 60);
@@ -2004,11 +2004,11 @@
                 if (parts.length >= 2) return (parts[0] * 60) + parts[1];
                 return parts[0] || 0;
             };
-            
+
             const renderHistBlock = (title, curVal, baseVal) => {
                 const diff = curVal - baseVal;
                 let pct = baseVal > 0 ? (diff / baseVal) * 100 : (curVal > 0 ? 100 : 0);
-                
+
                 let color = "text-slate-500";
                 let icon = "";
                 let symbol = "";
@@ -2027,11 +2027,11 @@
                     </div>
                 `;
             };
-            
+
             const renderMttrBlock = (title, curMttrStr, curMttrMin, baseMttrStr, baseMttrMin) => {
                 const diff = curMttrMin - baseMttrMin;
                 let pct = baseMttrMin > 0 ? (diff / baseMttrMin) * 100 : (curMttrMin > 0 ? 100 : 0);
-                
+
                 let color = "text-slate-500";
                 let icon = "";
                 let symbol = "";
@@ -2069,7 +2069,7 @@
 
             // Comparação Exata Baseada na Evolução
             const activeKeys = Object.keys(metrics).filter(k => metrics[k].count > 0);
-            
+
             // ORDENAÇÃO CRONOLÓGICA
             const monthOrder = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
             activeKeys.sort((a, b) => {
@@ -2084,10 +2084,10 @@
                 }
                 return 0;
             });
-            
+
             let volPrev = 0;
             let durPrevMin = 0;
-            
+
             if (prevMetricsHist) {
                 activeKeys.forEach(k => {
                     if (prevMetricsHist[k]) {
@@ -2096,20 +2096,20 @@
                     }
                 });
             }
-            
+
             let volCur = 0;
             let durCurMin = 0;
             activeKeys.forEach(k => {
                 volCur += metrics[k].count;
                 durCurMin += metrics[k].durationMin;
             });
-            
+
             const mttrPrevMin = volPrev > 0 ? (durPrevMin / volPrev) : 0;
             const mttrCurMin = volCur > 0 ? (durCurMin / volCur) : 0;
 
             const groupLabelMap = { 'weekly': 'Semana', 'monthly': 'Mês', 'quarterly': 'Trimestre' };
             const groupName = groupLabelMap[group] || 'Período';
-            
+
             // Build the string representation of active keys for the title (e.g. "Janeiro, Fevereiro")
             let keysTitle = activeKeys.length > 2 ? activeKeys.slice(0, 2).join(', ') + '...' : activeKeys.join(', ');
             if (!keysTitle) keysTitle = "Período Vazio";
@@ -2168,7 +2168,7 @@
                 const prev = (prevMetricsHist && prevMetricsHist[k]) ? prevMetricsHist[k] : { count: 0, durationMin: 0 };
                 const curMttrMin = cur.count > 0 ? (cur.durationMin / cur.count) : 0;
                 const prevMttrMin = prev.count > 0 ? (prev.durationMin / prev.count) : 0;
-                
+
                 html += renderComparisonRow(k, cur.count, prev.count, curMttrMin, prevMttrMin);
             });
 
@@ -2176,7 +2176,7 @@
                     </div>
                 </div>
             `;
-            
+
             histContainer.innerHTML = html;
         } else {
             histContainer.innerHTML = `<div class="text-sm text-slate-400 italic text-center p-6">Análise histórica disponível apenas para o ano de 2026.</div>`;
@@ -2189,7 +2189,7 @@
 
         // Define periods (using timestamp for easy comparison)
         // Month is 0-indexed in JS Date: April = 3, May = 4, June = 5
-        const p1Start = new Date(2026, 3, 12).getTime(); 
+        const p1Start = new Date(2026, 3, 12).getTime();
         const p1End = new Date(2026, 3, 24, 23, 59, 59).getTime();
 
         const p2Start = new Date(2026, 4, 31).getTime();
@@ -2209,7 +2209,7 @@
 
         // Build a horizontal timeline layout with flex wrap
         let html = `<div class="relative flex flex-col md:flex-row flex-wrap gap-6 items-stretch">`;
-        
+
         // Horizontal dashed line connecting dots (only visible on md+ screens)
         html += `<div class="hidden md:block absolute top-[22px] left-8 right-8 h-px border-t-2 border-dashed border-slate-200 z-0"></div>`;
 
@@ -2247,8 +2247,8 @@
     }
 
     function exportData(e) {
-        if(e) e.stopPropagation();
-        
+        if (e) e.stopPropagation();
+
         if (!ALL_DATA.rawIncidents || ALL_DATA.rawIncidents.length === 0) {
             alert("Nenhum dado disponível para exportar.");
             return;
@@ -2279,11 +2279,11 @@
     function openSubjectiveDecisionsModal() {
         const modal = document.getElementById('subjective-decisions-modal');
         const list = document.getElementById('subjective-decisions-list');
-        
+
         if (!modal || !list) return;
 
         list.innerHTML = '';
-        
+
         const filteredIncidents = (ALL_DATA.rawIncidents || []).filter(inc => inc.consideracoes && inc.consideracoes.trim() !== "");
 
         if (filteredIncidents.length === 0) {
