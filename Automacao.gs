@@ -89,6 +89,7 @@ function importCsvToSheet(sheet, csvString) {
     sheet.clearContents();
     
     // Importa todo o conteúdo do CSV (incluindo cabeçalho) começando da linha 1
+    // ola
     sheet.getRange(1, 1, csvData.length, csvData[0].length).setValues(csvData);
     
     Logger.log(`Dados na guia ${sheet.getName()} foram substituídos com sucesso.`);
