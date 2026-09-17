@@ -42,6 +42,7 @@
         if (typeof ChartDataLabels !== 'undefined') Chart.register(ChartDataLabels);
 
         setupTabs();
+        setupFiltersToggle();
         loadInitialConfig();
         const yearSelect = document.getElementById('year-select');
         yearSelect.addEventListener('change', function (e) {
@@ -72,6 +73,20 @@
             });
         }
     });
+
+    // Seção de Filtros: recolhida por padrão, abre/fecha de forma interativa ao clicar no cabeçalho
+    function setupFiltersToggle() {
+        const btn = document.getElementById('btn-toggle-filters');
+        const body = document.getElementById('filters-body');
+        const chevron = document.getElementById('filters-toggle-chevron');
+        if (!btn || !body) return;
+
+        btn.addEventListener('click', () => {
+            const isHidden = body.classList.contains('hidden');
+            body.classList.toggle('hidden', !isHidden);
+            if (chevron) chevron.classList.toggle('rotate-180', isHidden);
+        });
+    }
 
     function setupTabs() {
         const tabs = document.querySelectorAll('.tab-btn');
@@ -779,9 +794,15 @@
         const arrow = diff === 0 ? '≈' : (diff > 0 ? '▲' : '▼');
         const isGood = opts.isPercentagePoints ? diff >= 0 : diff <= 0;
 
-        const valueText = opts.isPercentagePoints
-            ? `${diff > 0 ? '+' : ''}${diff.toFixed(1)}pp`
-            : `${diff > 0 ? '+' : ''}${diff}`;
+        let valueText;
+        if (opts.isPercentagePoints) {
+            // Aderência OLA já é percentual: variação expressa em pontos percentuais (pp)
+            valueText = `${diff > 0 ? '+' : ''}${diff.toFixed(1)}pp`;
+        } else {
+            // Volume de incidentes: variação expressa em % (mais elegante para leitura executiva)
+            const pctChange = previous !== 0 ? (diff / previous) * 100 : (current > 0 ? 100 : 0);
+            valueText = `${pctChange > 0 ? '+' : ''}${pctChange.toFixed(1)}%`;
+        }
 
         el.textContent = `${arrow} ${valueText} vs ${COMPARISON_LABEL || 'período anterior'}`;
         el.classList.remove('hidden', 'bg-natura-green-cerrado/10', 'text-natura-green-cerrado',

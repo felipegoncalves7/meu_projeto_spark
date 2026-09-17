@@ -132,16 +132,33 @@
             <!-- Tab 1 -->
             <div id="tab-major" class="tab-content space-y-6 transition-opacity duration-300 hidden">
 
-                <!-- Filter Section (White Card) -->
+                <!-- Filter Section (White Card, expansível) -->
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                    <!-- Active Filters Indicator -->
-                    <div class="mb-4 pb-4 border-b border-slate-100 flex items-center gap-2">
-                        <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Filtros Ativos:</span>
-                        <span id="active-filters-text" class="text-sm font-semibold text-slate-700">Nenhum</span>
-                    </div>
+                    <!-- Cabeçalho clicável: abre/fecha o corpo de filtros -->
+                    <button id="btn-toggle-filters" type="button"
+                        class="w-full flex items-center justify-between gap-2 text-left focus:outline-none group">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <div class="p-1.5 rounded-lg bg-natura-gray-light text-natura-green-cerrado"><svg
+                                    xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                                </svg></div>
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Filtros
+                                Ativos:</span>
+                            <span id="active-filters-text" class="text-sm font-semibold text-slate-700">Nenhum</span>
+                        </div>
+                        <svg id="filters-toggle-chevron" xmlns="http://www.w3.org/2000/svg"
+                            class="h-5 w-5 text-slate-400 transition-transform duration-200 flex-none"
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
 
+                    <div id="filters-body" class="hidden">
                     <!-- Linha 1: Período Padrão + Grupo de Períodos Estratégicos -->
-                    <div class="flex flex-wrap items-center gap-3">
+                    <div class="mt-4 pt-4 border-t border-slate-100 flex flex-wrap items-center gap-3">
                         <div id="period-filter-default" class="flex items-center gap-3">
                             <div class="animate-pulse h-9 w-40 bg-slate-100 rounded-full"></div>
                         </div>
@@ -217,6 +234,7 @@
                         </select>
                         <span class="text-[10px] text-slate-400 italic">Mês → mês anterior · Trimestre → trimestre
                             anterior · Demais períodos → mesmo período no ano anterior.</span>
+                    </div>
                     </div>
                 </div>
 
