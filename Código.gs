@@ -13,6 +13,39 @@ const COL_OFENSOR = 16;    // Q
 const COL_MES = 1;         // B
 const COL_ABERTURA = 2;    // C
 const COL_PROBLEMA = 13;   // N
+const COL_TYPE_SM = 21;    // V
+const COL_SM_NUMBER = 22;  // W
+
+// Metas de OLA (minutos) para Aderência - usadas enquanto a aba Task_SLA não é alimentada
+const OLA_TARGET_SEV0_MIN = 120; // 2h
+const OLA_TARGET_SEV1_MIN = 360; // 6h
+
+// Mapeamento da aba Change_MI (Range A1:Z)
+const CHG_COL_NUMBER = 0;        // A
+const CHG_COL_PLANNED_START = 9; // J
+const CHG_COL_PLANNED_END = 10;  // K
+
+/**
+ * Monta um mapa Number -> {plannedStart, plannedEnd} a partir da aba Change_MI,
+ * usado para calcular o MTTD (tempo entre início/término planejado da Mudança e a abertura do incidente).
+ */
+function buildChangeMap(ss) {
+  const map = {};
+  const sheet = ss.getSheetByName('Change_MI');
+  if (!sheet) return map;
+
+  const values = sheet.getDataRange().getValues();
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const number = String(row[CHG_COL_NUMBER] || '').trim();
+    if (!number) continue;
+    map[number] = {
+      plannedStart: row[CHG_COL_PLANNED_START] instanceof Date ? row[CHG_COL_PLANNED_START] : null,
+      plannedEnd: row[CHG_COL_PLANNED_END] instanceof Date ? row[CHG_COL_PLANNED_END] : null
+    };
+  }
+  return map;
+}
 
 /**
  * Ponto de entrada
@@ -336,6 +369,9 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
              incidentesTotal: 0, mttrTotal: "00:00",
              incidentesSev0: 0, mttrSev0: "00:00",
              incidentesSev1: 0, mttrSev1: "00:00",
+             aderenciaOLA: 0, aderenciaOLABase: 0,
+             incidentesMudanca: 0, pctMudanca: 0,
+             mttdInicioMedioHoras: null, mttdTerminoMedioHoras: null
            },
            monthlyMetrics: {},
            mttrPorMesEmHoras: {},
@@ -345,10 +381,12 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
     }
 
     const durationDisplayValues = sheetDados.getRange(2, COL_DURACAO + 1, dataRows.length, 1).getDisplayValues();
-   
+
     const start = startDate ? new Date(startDate) : null;
     const end = endDate ? new Date(endDate) : null;
     if (end) end.setHours(23, 59, 59, 999);
+
+    const changeMap = buildChangeMap(ss);
 
     let metrics = {
         incidentesTotal: 0, totalDuracaoMinutos: 0,
@@ -359,7 +397,12 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         quarterlyMetrics: {},
         techMetrics: {},
         offenderMetrics: {},
-        rawIncidents: []
+        rawIncidents: [],
+        // Visão Executiva: Mudança & OLA
+        sev0DentroOLA: 0, sev1DentroOLA: 0,
+        incidentesMudanca: 0,
+        mttdInicioSomaHoras: 0, mttdInicioCount: 0,
+        mttdTerminoSomaHoras: 0, mttdTerminoCount: 0
     };
 
     dataRows.forEach((row, i) => {
@@ -417,9 +460,37 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         if (isSev0) {
         metrics.sev0Incidentes++;
         metrics.sev0DuracaoMinutos += durMin;
+        if (durMin <= OLA_TARGET_SEV0_MIN) metrics.sev0DentroOLA++;
         } else if (isSev1) {
         metrics.sev1Incidentes++;
         metrics.sev1DuracaoMinutos += durMin;
+        if (durMin <= OLA_TARGET_SEV1_MIN) metrics.sev1DentroOLA++;
+        }
+
+        // Visão Executiva: Incidentes causados por Mudança + MTTD (Início/Término)
+        if (ofensor === 'Mudança') {
+            metrics.incidentesMudanca++;
+
+            const tipoSm = String(row[COL_TYPE_SM]).trim().toUpperCase();
+            const numSm = String(row[COL_SM_NUMBER]).trim();
+            const chg = numSm ? changeMap[numSm] : null;
+
+            if (chg && openDate) {
+                if (chg.plannedStart) {
+                    const diffInicioH = (openDate.getTime() - chg.plannedStart.getTime()) / (1000 * 60 * 60);
+                    if (diffInicioH >= 0) {
+                        metrics.mttdInicioSomaHoras += diffInicioH;
+                        metrics.mttdInicioCount++;
+                    }
+                }
+                if (tipoSm === 'DEPLOY' && chg.plannedEnd) {
+                    const diffTerminoH = (openDate.getTime() - chg.plannedEnd.getTime()) / (1000 * 60 * 60);
+                    if (diffTerminoH >= 0) {
+                        metrics.mttdTerminoSomaHoras += diffTerminoH;
+                        metrics.mttdTerminoCount++;
+                    }
+                }
+            }
         }
 
 
@@ -508,6 +579,13 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         mttrTrimestralEmHoras[quarter] = item.count > 0 ? (item.durationMin / item.count) / 60 : 0;
     }
 
+    const sev0Sev1Total = metrics.sev0Incidentes + metrics.sev1Incidentes;
+    const dentroOLATotal = metrics.sev0DentroOLA + metrics.sev1DentroOLA;
+    const aderenciaOLA = sev0Sev1Total > 0 ? (dentroOLATotal / sev0Sev1Total) * 100 : 0;
+    const pctMudanca = metrics.incidentesTotal > 0 ? (metrics.incidentesMudanca / metrics.incidentesTotal) * 100 : 0;
+    const mttdInicioMedio = metrics.mttdInicioCount > 0 ? metrics.mttdInicioSomaHoras / metrics.mttdInicioCount : null;
+    const mttdTerminoMedio = metrics.mttdTerminoCount > 0 ? metrics.mttdTerminoSomaHoras / metrics.mttdTerminoCount : null;
+
     return {
         kpis: {
         incidentesTotal: metrics.incidentesTotal,
@@ -516,6 +594,13 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         mttrSev0: calculateMTTR(metrics.sev0DuracaoMinutos, metrics.sev0Incidentes),
         incidentesSev1: metrics.sev1Incidentes,
         mttrSev1: calculateMTTR(metrics.sev1DuracaoMinutos, metrics.sev1Incidentes),
+        // Visão Executiva
+        aderenciaOLA: Math.round(aderenciaOLA * 10) / 10,
+        aderenciaOLABase: sev0Sev1Total,
+        incidentesMudanca: metrics.incidentesMudanca,
+        pctMudanca: Math.round(pctMudanca * 10) / 10,
+        mttdInicioMedioHoras: mttdInicioMedio !== null ? Math.round(mttdInicioMedio * 10) / 10 : null,
+        mttdTerminoMedioHoras: mttdTerminoMedio !== null ? Math.round(mttdTerminoMedio * 10) / 10 : null
         },
         monthlyMetrics: metrics.monthlyMetrics,
         mttrPorMesEmHoras: mttrPorMesEmHoras,

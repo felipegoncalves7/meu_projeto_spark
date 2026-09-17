@@ -723,7 +723,29 @@
         };
         setPct('val-sev0-pct', kpis.incidentesSev0);
         setPct('val-sev1-pct', kpis.incidentesSev1);
+
+        // Visão Executiva: Mudança & OLA
+        setText('val-aderencia-ola', (kpis.aderenciaOLA != null ? kpis.aderenciaOLA : 0) + '%');
+        setText('val-incidentes-mudanca', kpis.incidentesMudanca || 0);
+        setText('val-pct-mudanca', `(${kpis.pctMudanca != null ? kpis.pctMudanca : 0}%)`);
+
+        const formatHoras = (h) => {
+            if (h === null || h === undefined) return 'N/A';
+            const hh = Math.floor(h);
+            const mm = Math.round((h - hh) * 60);
+            return `${hh}h${String(mm).padStart(2, '0')}m`;
+        };
+        setText('val-mttd-inicio', formatHoras(kpis.mttdInicioMedioHoras));
+        setText('val-mttd-termino', formatHoras(kpis.mttdTerminoMedioHoras));
     }
+
+    // Clique no card de Visão Executiva "Incidentes por Mudança" -> abre a seção/análise detalhada
+    document.addEventListener('DOMContentLoaded', () => {
+        const cardMudancaResumo = document.getElementById('card-mudanca-resumo');
+        if (cardMudancaResumo) {
+            cardMudancaResumo.addEventListener('click', () => openMudancaModal());
+        }
+    });
 
     function sortObjByCount(obj) {
         return Object.keys(obj).sort((a, b) => obj[b].count - obj[a].count);
