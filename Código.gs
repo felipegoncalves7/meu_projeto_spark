@@ -370,6 +370,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
              incidentesSev0: 0, mttrSev0: "00:00",
              incidentesSev1: 0, mttrSev1: "00:00",
              aderenciaOLA: 0, aderenciaOLABase: 0,
+             aderenciaOLASev0: 0, aderenciaOLASev1: 0,
              incidentesMudanca: 0, pctMudanca: 0,
              mttdInicioMedioHoras: null, mttdTerminoMedioHoras: null,
              incidentesMudancaDeploy: 0, incidentesMudancaTradicional: 0,
@@ -594,6 +595,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
     const sev0Sev1Total = metrics.sev0Incidentes + metrics.sev1Incidentes;
     const dentroOLATotal = metrics.sev0DentroOLA + metrics.sev1DentroOLA;
     const aderenciaOLA = sev0Sev1Total > 0 ? (dentroOLATotal / sev0Sev1Total) * 100 : 0;
+    const aderenciaOLASev0 = metrics.sev0Incidentes > 0 ? (metrics.sev0DentroOLA / metrics.sev0Incidentes) * 100 : 0;
+    const aderenciaOLASev1 = metrics.sev1Incidentes > 0 ? (metrics.sev1DentroOLA / metrics.sev1Incidentes) * 100 : 0;
     const pctMudanca = metrics.incidentesTotal > 0 ? (metrics.incidentesMudanca / metrics.incidentesTotal) * 100 : 0;
     const mttdInicioMedio = metrics.mttdInicioCount > 0 ? metrics.mttdInicioSomaHoras / metrics.mttdInicioCount : null;
     const mttdTerminoMedio = metrics.mttdTerminoCount > 0 ? metrics.mttdTerminoSomaHoras / metrics.mttdTerminoCount : null;
@@ -614,6 +617,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         // Visão Executiva
         aderenciaOLA: Math.round(aderenciaOLA * 10) / 10,
         aderenciaOLABase: sev0Sev1Total,
+        aderenciaOLASev0: Math.round(aderenciaOLASev0 * 10) / 10,
+        aderenciaOLASev1: Math.round(aderenciaOLASev1 * 10) / 10,
         incidentesMudanca: metrics.incidentesMudanca,
         pctMudanca: Math.round(pctMudanca * 10) / 10,
         mttdInicioMedioHoras: mttdInicioMedio !== null ? Math.round(mttdInicioMedio * 10) / 10 : null,
@@ -636,6 +641,148 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
   } catch (e) {
       return { error: "Erro no servidor: " + e.message };
   }
+}
+
+/**
+ * Versão enxuta de getFilteredData: calcula apenas os KPIs essenciais (Total, Sev0, Sev1, Aderência OLA)
+ * para um intervalo de datas, usada nas comparações "vs período anterior".
+ */
+function getPeriodKpisOnly(year, startDate, endDate) {
+    const targetSheetName = `MajorIncidentes${year}`;
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheetDados = ss.getSheetByName(targetSheetName);
+    if (!sheetDados) return null;
+
+    const values = sheetDados.getDataRange().getValues();
+    const dataRows = values.slice(1);
+
+    const calcMTTR = (t, c) => {
+        if (c === 0) return "00:00";
+        const avg = t / c;
+        const h = Math.floor(avg / 60);
+        const m = Math.round(avg % 60);
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    };
+
+    if (dataRows.length === 0) {
+        return {
+            incidentesTotal: 0, mttrTotal: "00:00",
+            incidentesSev0: 0, mttrSev0: "00:00",
+            incidentesSev1: 0, mttrSev1: "00:00",
+            aderenciaOLA: 0, aderenciaOLASev0: 0, aderenciaOLASev1: 0
+        };
+    }
+
+    const durationDisplayValues = sheetDados.getRange(2, COL_DURACAO + 1, dataRows.length, 1).getDisplayValues();
+    const start = startDate ? new Date(startDate) : null;
+    const end = endDate ? new Date(endDate) : null;
+    if (end) end.setHours(23, 59, 59, 999);
+
+    let total = 0, totalDur = 0, sev0 = 0, sev0Dur = 0, sev1 = 0, sev1Dur = 0, sev0OLA = 0, sev1OLA = 0;
+
+    dataRows.forEach((row, i) => {
+        const colMVal = String(row[COL_TECNOLOGIA]).trim().toUpperCase();
+        const isTecnologia = colMVal === 'SIM';
+        const openDate = row[COL_ABERTURA] instanceof Date ? row[COL_ABERTURA] : null;
+        if (!isTecnologia) return;
+        if (start && openDate && openDate < start) return;
+        if (end && openDate && openDate > end) return;
+
+        const severidade = String(row[COL_SEVERIDADE]).trim();
+        const isSev0 = severidade.startsWith('0');
+        const isSev1 = severidade.startsWith('1');
+
+        const durRaw = durationDisplayValues[i] ? durationDisplayValues[i][0] : "00:00";
+        const durMin = parseDurationString(durRaw);
+
+        total++;
+        totalDur += durMin;
+        if (isSev0) {
+            sev0++; sev0Dur += durMin;
+            if (durMin <= OLA_TARGET_SEV0_MIN) sev0OLA++;
+        } else if (isSev1) {
+            sev1++; sev1Dur += durMin;
+            if (durMin <= OLA_TARGET_SEV1_MIN) sev1OLA++;
+        }
+    });
+
+    const sev0Sev1Total = sev0 + sev1;
+    const dentroOLATotal = sev0OLA + sev1OLA;
+
+    return {
+        incidentesTotal: total,
+        mttrTotal: calcMTTR(totalDur, total),
+        incidentesSev0: sev0,
+        mttrSev0: calcMTTR(sev0Dur, sev0),
+        incidentesSev1: sev1,
+        mttrSev1: calcMTTR(sev1Dur, sev1),
+        aderenciaOLA: sev0Sev1Total > 0 ? Math.round((dentroOLATotal / sev0Sev1Total) * 1000) / 10 : 0,
+        aderenciaOLASev0: sev0 > 0 ? Math.round((sev0OLA / sev0) * 1000) / 10 : 0,
+        aderenciaOLASev1: sev1 > 0 ? Math.round((sev1OLA / sev1) * 1000) / 10 : 0
+    };
+}
+
+/**
+ * Determina o intervalo de datas do "período anterior equivalente" para fins de comparação:
+ * - Filtro de Mês específico -> mês anterior (considerando virada de ano)
+ * - Filtro de Trimestre específico -> trimestre anterior (considerando virada de ano)
+ * - Demais casos (Período Completo, Freeze, T4 Indústria, etc.) -> mesmo intervalo no ano anterior
+ */
+function computePreviousPeriod(year, periodKey, startDate, endDate) {
+    year = parseInt(year, 10);
+    const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+    if (periodKey && periodKey.indexOf('Mes_') === 0) {
+        const m = parseInt(periodKey.split('_')[1], 10);
+        let py = year, pm = m - 1;
+        if (pm < 0) { pm = 11; py = year - 1; }
+        const start = new Date(py, pm, 1, 0, 0, 0);
+        const end = new Date(py, pm + 1, 0, 23, 59, 59);
+        return { year: py, start: start.getTime(), end: end.getTime(), label: `${monthNames[pm]}/${py}` };
+    }
+
+    if (periodKey && periodKey.indexOf('Trimestre_') === 0) {
+        const q = parseInt(periodKey.split('_')[1], 10);
+        let py = year, pq = q - 1;
+        if (pq < 1) { pq = 4; py = year - 1; }
+        const startMonth = (pq - 1) * 3;
+        const start = new Date(py, startMonth, 1, 0, 0, 0);
+        const end = new Date(py, startMonth + 3, 0, 23, 59, 59);
+        return { year: py, start: start.getTime(), end: end.getTime(), label: `Q${pq}/${py}` };
+    }
+
+    // Demais casos: mesmo intervalo, ano anterior (Período Completo vira YTD espelhado)
+    const py = year - 1;
+    let start, end;
+    if (!startDate && !endDate) {
+        const today = new Date();
+        const mirrorToday = new Date(today);
+        mirrorToday.setFullYear(py);
+        start = new Date(py, 0, 1, 0, 0, 0);
+        end = mirrorToday;
+    } else {
+        start = startDate ? new Date(startDate) : new Date(py, 0, 1);
+        end = endDate ? new Date(endDate) : new Date();
+        start.setFullYear(py);
+        end.setFullYear(py);
+    }
+    return { year: py, start: start.getTime(), end: end.getTime(), label: `${py} (mesmo período)` };
+}
+
+/**
+ * Busca os KPIs do "período anterior equivalente" para exibir comparativos nos cards executivos.
+ */
+function getComparisonData(year, periodKey, startDate, endDate) {
+    try {
+        const prev = computePreviousPeriod(year, periodKey, startDate, endDate);
+        if (!prev) return { available: false };
+        const kpis = getPeriodKpisOnly(prev.year, prev.start, prev.end);
+        if (!kpis) return { available: false };
+        return { available: true, label: prev.label, kpis: kpis };
+    } catch (e) {
+        return { error: e.toString() };
+    }
 }
 
 /**

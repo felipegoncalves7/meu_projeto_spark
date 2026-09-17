@@ -6,8 +6,10 @@
         startDate: null,
         endDate: null,
         year: null,
-        evolutionGrouping: 'monthly'
+        evolutionGrouping: 'monthly',
+        comparisonMode: 'none' // 'none' | 'previous'
     };
+    let COMPARISON_LABEL = '';
 
     // Globals for Chart Instances
     let charts = {};
@@ -170,6 +172,7 @@
         setupCardFilter('card-sev1', 'sev1');
 
         setupSpecificFilters();
+        setupComparisonFilter();
         setupEvolutionToggle();
 
         logDebug("Initial setup complete. Loading Tab 1 data...");
@@ -506,6 +509,7 @@
 
         // Save these for switching views WITHOUT server reload
         ALL_DATA.currentKpis = data.kpis;
+        updateComparisonDisplay();
         ALL_DATA.rawIncidents = data.rawIncidents || [];
         ALL_DATA.evolutionData = {
             monthly: { metrics: data.monthlyMetrics, mttr: data.mttrPorMesEmHoras, title: "Evolução Mensal" },
@@ -560,12 +564,17 @@
     };
 
     function setupPeriodFilters(filters) {
-        const container = document.getElementById('period-filter-container');
-        if (!container) return;
-        container.innerHTML = '';
+        const defaultContainer = document.getElementById('period-filter-default');
+        const dropdownContainer = document.getElementById('strategic-periods-dropdown');
+        if (!defaultContainer || !dropdownContainer) return;
+        defaultContainer.innerHTML = '';
+        dropdownContainer.innerHTML = '';
 
         filters.forEach(filter => {
+            const isDefault = filter.key === 'All';
             const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.dataset.key = filter.key;
             let displayLabel = LABEL_MAP[filter.key] || filter.key;
 
             if (filter.key === 'T4Industria') {
@@ -573,8 +582,9 @@
             } else {
                 btn.textContent = displayLabel;
             }
-            // Check based on Key, but display text is different
-            btn.className = getBtnClass(filter.key === CURRENT_FILTERS.periodKey);
+            btn.className = isDefault
+                ? getBtnClass(filter.key === CURRENT_FILTERS.periodKey)
+                : getStrategicBtnClass(filter.key === CURRENT_FILTERS.periodKey);
 
             btn.onclick = () => {
                 CURRENT_FILTERS.periodKey = filter.key;
@@ -582,16 +592,78 @@
                 CURRENT_FILTERS.endDate = filter.end;
                 resetSpecificFilterSelects();
 
-                updateFilterButtonsUI(container, filter.key, LABEL_MAP);
+                updateAllPeriodButtonsUI(filter.key);
                 refreshActiveFilterText(); // Use centralized logic
+                closeStrategicDropdown();
 
                 loadFilteredData();
             };
-            container.appendChild(btn);
+
+            if (isDefault) defaultContainer.appendChild(btn);
+            else dropdownContainer.appendChild(btn);
         });
 
+        setupStrategicDropdownToggle();
         // Init logic for active filters text
         refreshActiveFilterText();
+    }
+
+    // Estilo dos itens dentro do dropdown "Períodos Estratégicos"
+    function getStrategicBtnClass(isActive) {
+        return isActive
+            ? 'text-left px-3 py-2 rounded-lg text-sm font-bold bg-natura-green-cerrado text-white shadow-sm transition-colors'
+            : 'text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors';
+    }
+
+    // Atualiza visualmente TODOS os botões de período (padrão + dropdown estratégico) com base na chave ativa
+    function updateAllPeriodButtonsUI(activeKey) {
+        const defaultContainer = document.getElementById('period-filter-default');
+        const dropdownContainer = document.getElementById('strategic-periods-dropdown');
+        let strategicActive = false;
+
+        if (defaultContainer) {
+            defaultContainer.querySelectorAll('button').forEach(b => {
+                b.className = getBtnClass(b.dataset.key === activeKey);
+            });
+        }
+        if (dropdownContainer) {
+            dropdownContainer.querySelectorAll('button').forEach(b => {
+                const isActive = b.dataset.key === activeKey;
+                if (isActive) strategicActive = true;
+                b.className = getStrategicBtnClass(isActive);
+            });
+        }
+
+        const trigger = document.getElementById('btn-strategic-periods');
+        if (trigger) {
+            trigger.classList.toggle('border-natura-orange', strategicActive);
+            trigger.classList.toggle('text-natura-orange', strategicActive);
+            trigger.classList.toggle('border-slate-200', !strategicActive);
+            trigger.classList.toggle('text-slate-600', !strategicActive);
+        }
+    }
+
+    // Abre/fecha o dropdown de Períodos Estratégicos e fecha ao clicar fora
+    function setupStrategicDropdownToggle() {
+        const trigger = document.getElementById('btn-strategic-periods');
+        const dropdown = document.getElementById('strategic-periods-dropdown');
+        if (!trigger || !dropdown || trigger.dataset.wired) return;
+        trigger.dataset.wired = 'true';
+
+        trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.classList.toggle('hidden');
+        });
+        document.addEventListener('click', (e) => {
+            if (!dropdown.classList.contains('hidden') && !dropdown.contains(e.target) && e.target !== trigger) {
+                dropdown.classList.add('hidden');
+            }
+        });
+    }
+
+    function closeStrategicDropdown() {
+        const dropdown = document.getElementById('strategic-periods-dropdown');
+        if (dropdown) dropdown.classList.add('hidden');
     }
 
     // Recalcula o intervalo de datas do filtro de Mês/Trimestre ativo quando o Ano de Referência muda
@@ -634,10 +706,7 @@
         const quarterSelect = document.getElementById('quarter-filter-select');
         if (!monthSelect || !quarterSelect) return;
 
-        const periodContainer = document.getElementById('period-filter-container');
-        const clearPeriodButtons = () => {
-            if (periodContainer) periodContainer.querySelectorAll('button').forEach(b => b.className = getBtnClass(false));
-        };
+        const clearPeriodButtons = () => updateAllPeriodButtonsUI(null);
 
         monthSelect.addEventListener('change', () => {
             const val = monthSelect.value;
@@ -681,6 +750,78 @@
             refreshActiveFilterText();
             loadFilteredData();
         });
+    }
+
+    // Filtro de Comparação: "Nenhuma" ou "Período anterior equivalente"
+    function setupComparisonFilter() {
+        const comparisonSelect = document.getElementById('comparison-select');
+        if (!comparisonSelect || comparisonSelect.dataset.wired) return;
+        comparisonSelect.dataset.wired = 'true';
+
+        comparisonSelect.addEventListener('change', () => {
+            CURRENT_FILTERS.comparisonMode = comparisonSelect.value;
+            updateComparisonDisplay();
+        });
+    }
+
+    // Aplica (ou esconde) o badge de variação de um card em relação ao período de comparação
+    function applyDeltaBadge(elId, current, previous, opts) {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        opts = opts || {};
+
+        if (previous === null || previous === undefined || CURRENT_FILTERS.comparisonMode !== 'previous') {
+            el.classList.add('hidden');
+            return;
+        }
+
+        const diff = current - previous;
+        const arrow = diff === 0 ? '≈' : (diff > 0 ? '▲' : '▼');
+        const isGood = opts.isPercentagePoints ? diff >= 0 : diff <= 0;
+
+        const valueText = opts.isPercentagePoints
+            ? `${diff > 0 ? '+' : ''}${diff.toFixed(1)}pp`
+            : `${diff > 0 ? '+' : ''}${diff}`;
+
+        el.textContent = `${arrow} ${valueText} vs ${COMPARISON_LABEL || 'período anterior'}`;
+        el.classList.remove('hidden', 'bg-natura-green-cerrado/10', 'text-natura-green-cerrado',
+            'bg-natura-red-buriti/10', 'text-natura-red-buriti');
+        el.classList.add(...(isGood
+            ? ['bg-natura-green-cerrado/10', 'text-natura-green-cerrado']
+            : ['bg-natura-red-buriti/10', 'text-natura-red-buriti']));
+    }
+
+    // Busca os KPIs do período anterior equivalente e atualiza os badges de comparação dos cards
+    function updateComparisonDisplay() {
+        const badgeIds = ['delta-badge-total', 'delta-badge-sev0', 'delta-badge-sev1',
+            'delta-badge-ola', 'delta-badge-ola-sev0', 'delta-badge-ola-sev1'];
+
+        if (CURRENT_FILTERS.comparisonMode !== 'previous' || !ALL_DATA.currentKpis) {
+            badgeIds.forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
+            return;
+        }
+
+        google.script.run
+            .withSuccessHandler(data => {
+                if (!data || data.error || !data.available) {
+                    badgeIds.forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
+                    return;
+                }
+                COMPARISON_LABEL = data.label || 'período anterior';
+                const cur = ALL_DATA.currentKpis;
+                const prev = data.kpis;
+
+                applyDeltaBadge('delta-badge-total', cur.incidentesTotal, prev.incidentesTotal);
+                applyDeltaBadge('delta-badge-sev0', cur.incidentesSev0, prev.incidentesSev0);
+                applyDeltaBadge('delta-badge-sev1', cur.incidentesSev1, prev.incidentesSev1);
+                applyDeltaBadge('delta-badge-ola', cur.aderenciaOLA, prev.aderenciaOLA, { isPercentagePoints: true });
+                applyDeltaBadge('delta-badge-ola-sev0', cur.aderenciaOLASev0, prev.aderenciaOLASev0, { isPercentagePoints: true });
+                applyDeltaBadge('delta-badge-ola-sev1', cur.aderenciaOLASev1, prev.aderenciaOLASev1, { isPercentagePoints: true });
+            })
+            .withFailureHandler(e => {
+                logDebug("getComparisonData FAILED: " + e.message);
+            })
+            .getComparisonData(CURRENT_FILTERS.year, CURRENT_FILTERS.periodKey, CURRENT_FILTERS.startDate, CURRENT_FILTERS.endDate);
     }
 
     // Helper to refresh Active Filters text based on ALL current filters
@@ -728,7 +869,7 @@
                     CURRENT_FILTERS.startDate = null;
                     CURRENT_FILTERS.endDate = null;
                     resetSpecificFilterSelects();
-                    updateFilterButtonsUI(document.getElementById('period-filter-container'), 'All', LABEL_MAP);
+                    updateAllPeriodButtonsUI('All');
                     refreshActiveFilterText();
                     loadFilteredData();
                 }
@@ -773,14 +914,6 @@
             : 'px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ease-in-out border border-transparent text-slate-600 hover:bg-slate-100 bg-transparent';
     }
 
-    function updateFilterButtonsUI(container, activeKey, map) {
-        container.querySelectorAll('button').forEach(b => {
-            const targetLabel = map[activeKey] || activeKey;
-            const isTarget = b.textContent === targetLabel;
-            b.className = getBtnClass(isTarget);
-        });
-    }
-
     // --- Helpers (unchanged) ---
     function formatMinutesToHHMM(val) {
         if (val < 0) val = 0; const h = Math.floor(val / 60); const m = Math.round(val % 60); return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m`;
@@ -811,8 +944,12 @@
         setPct('val-sev0-pct', kpis.incidentesSev0);
         setPct('val-sev1-pct', kpis.incidentesSev1);
 
-        // Visão Executiva: Mudança & OLA
+        // Aderência OLA (Geral + por Severidade)
         setText('val-aderencia-ola', (kpis.aderenciaOLA != null ? kpis.aderenciaOLA : 0) + '%');
+        setText('val-aderencia-ola-sev0', (kpis.aderenciaOLASev0 != null ? kpis.aderenciaOLASev0 : 0) + '%');
+        setText('val-aderencia-ola-sev1', (kpis.aderenciaOLASev1 != null ? kpis.aderenciaOLASev1 : 0) + '%');
+
+        // Visão Executiva: Mudança
         setText('val-incidentes-mudanca', kpis.incidentesMudanca || 0);
         setText('val-pct-mudanca', `(${kpis.pctMudanca != null ? kpis.pctMudanca : 0}%)`);
         setText('val-mudanca-deploy', kpis.incidentesMudancaDeploy || 0);
