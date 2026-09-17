@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão de Incidentes e Problemas ITSM</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        natura: {
+                            orange: '#FF6600',
+                            'yellow-tucuma': '#E29627',
+                            'yellow-balsamo': '#FFBE28',
+                            'green-amazonia': '#112E22',
+                            'green-cerrado': '#1B472A',
+                            'green-murumuru': '#6A803E',
+                            'green-capim': '#C9E055',
+                            'brown-terra': '#4a1c0e',
+                            'red-boca': '#ac2f1c',
+                            'red-buriti': '#e94839',
+                            'blue-atlantico': '#11252e',
+                            'blue-profundo': '#045473',
+                            'blue-ceu': '#99aedb',
+                            'acai': '#60002C',
+                            'amora': '#930E44',
+                            'gray-light': '#ECEDEB',
+                            'gray-medium': '#E2D6C5',
+                            'gray-dark': '#262523'
+                        },
+                        slate: { 50: '#ECEDEB', 100: '#E2D6C5', 500: '#6A803E', 600: '#1B472A', 700: '#112E22', 800: '#262523', 900: '#000000' }
+                    }
+                }
+            }
+        }
+    </script>
+    <?!= include('dashboard.css'); ?>
+</head>
+
+<body class="bg-slate-50 text-slate-800 h-screen flex flex-col overflow-hidden">
+    <!-- Header (Dark Green) -->
+    <header class="bg-natura-green-cerrado shadow-md z-20 flex-none">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="flex flex-col md:flex-row md:items-start justify-between gap-4">
+
+                <!-- Left Side: Title & Info -->
+                <div class="flex flex-col gap-1">
+                    <h1 class="text-3xl font-bold text-white tracking-tight leading-none">
+                        Gestão de Incidentes e Problemas ITSM
+                    </h1>
+                    <div class="flex items-center gap-3 text-natura-gray-light text-sm mt-1">
+                        <span class="opacity-90">Boa Tarde TD</span>
+                    </div>
+
+                    <!-- Year Selector Row -->
+                    <div class="mt-4 flex items-center gap-2">
+                        <label for="year-select"
+                            class="text-xs font-bold text-natura-gray-medium uppercase tracking-wide">Ano de
+                            Referência:</label>
+                        <select id="year-select"
+                            class="text-sm font-semibold text-white bg-natura-green-amazonia/50 border border-natura-green-murumuru rounded px-3 py-1 focus:ring-1 focus:ring-natura-orange focus:border-natura-orange outline-none transition-shadow cursor-pointer hover:bg-natura-green-amazonia">
+                            <option value="2025" selected>2025</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Right Side: Updated Pill -->
+                <div class="self-start md:self-center">
+                    <div
+                        class="text-xs text-white/90 flex items-center gap-2 bg-natura-green-amazonia/40 px-4 py-2 rounded-full border border-natura-green-murumuru/30 backdrop-blur-sm">
+                        <span class="font-medium">Atualizado:</span>
+                        <span id="last-updated" class="font-bold text-natura-yellow-balsamo">...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Tabs Bar (White) -->
+    <div class="bg-white border-b border-slate-200 shadow-sm z-10 flex-none">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex gap-8">
+                <button
+                    class="tab-btn active-tab border-b-2 border-natura-orange text-natura-orange px-1 py-4 text-sm font-bold transition-colors focus:outline-none hover:text-natura-orange"
+                    data-target="tab-major">
+                    <span class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        Major Incidentes
+                    </span>
+                </button>
+                <button
+                    class="tab-btn border-b-2 border-transparent text-slate-500 hover:text-natura-green-cerrado hover:border-natura-green-murumuru/30 px-1 py-4 text-sm font-medium transition-colors focus:outline-none"
+                    data-target="tab-problems">
+                    <span class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        Major Problems
+                    </span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content -->
+    <main class="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-8 relative">
+        <div class="max-w-7xl mx-auto">
+            <!-- Loader consolidated at the end of the file -->
+
+            <div id="error-message" class="hidden bg-red-50 border-l-4 border-red-500 p-4 rounded-md shadow-sm mb-6">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                                clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-red-700"><span class="font-bold">Erro:</span> <span></span></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 1 -->
+            <div id="tab-major" class="tab-content space-y-6 transition-opacity duration-300 hidden">
+
+                <!-- Filter Section (White Card) -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                    <!-- Active Filters Indicator -->
+                    <div class="mb-4 pb-4 border-b border-slate-100 flex items-center gap-2">
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Filtros Ativos:</span>
+                        <span id="active-filters-text" class="text-sm font-semibold text-slate-700">Nenhum</span>
+                    </div>
+
+                    <!-- Filter Buttons -->
+                    <div class="flex flex-wrap items-center gap-3" id="period-filter-container">
+                        <div class="animate-pulse flex space-x-2 w-full">
+                            <div class="h-9 w-24 bg-slate-100 rounded-full"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KPI Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div id="card-total"
+                        class="group kpi-card cursor-pointer rounded-2xl p-5 border border-slate-200 transition-all duration-200 hover:-translate-y-1"
+                        data-filter-value="total">
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-sm font-bold tracking-wider text-slate-400 uppercase">Total Geral</span>
+                            <div class="flex gap-2 items-center">
+                                <button onclick="exportData(event)"
+                                    class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1 rounded transition-colors font-bold shadow-sm"
+                                    title="Exportar para Excel">Exportar dados</button>
+                                <div class="p-2 bg-natura-gray-light rounded-lg text-natura-green-cerrado"><svg
+                                        xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                    </svg></div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 divide-x divide-slate-100">
+                            <div>
+                                <p class="text-xs text-slate-500 mb-1">Volume</p>
+                                <p id="val-total-incidents" class="text-3xl font-extrabold text-slate-900">0</p>
+                            </div>
+                            <div class="pl-4">
+                                <p class="text-xs text-slate-500 mb-1">MTTR Médio</p>
+                                <p id="val-mttr-total" class="text-xl font-bold text-slate-700">00:00</p>
+                            </div>
+                        </div>
+                        <!-- Baseline Info -->
+                        <div class="mt-4 pt-3 border-t border-slate-50 text-right">
+                            <p class="text-[10px] text-slate-400 font-medium">Baseline 2025: <span
+                                    class="text-slate-500 font-bold">06:42</span></p>
+                        </div>
+                    </div>
+                    <div id="card-sev0"
+                        class="group kpi-card cursor-pointer rounded-2xl p-5 border border-slate-200 transition-all duration-200 hover:-translate-y-1 bg-white hover:shadow-md"
+                        data-filter-value="0">
+                        <div class="flex items-center justify-between mb-4"><span
+                                class="text-sm font-bold tracking-wider uppercase flex items-center gap-1"
+                                style="color: #e94839;"><span class="w-2 h-2 rounded-full"
+                                    style="background-color: #e94839;"></span> SEV 0</span></div>
+                        <div class="grid grid-cols-2 gap-4 divide-x divide-slate-100">
+                            <div>
+                                <p class="text-xs text-slate-500 mb-1">Incidentes</p>
+                                <div class="flex items-baseline">
+                                    <p id="val-sev0-incidents" class="text-3xl font-extrabold text-slate-900">0</p>
+                                    <span id="val-sev0-pct" class="text-xs font-semibold text-slate-400 ml-1"></span>
+                                </div>
+                            </div>
+                            <div class="pl-4">
+                                <p class="text-xs text-slate-500 mb-1">MTTR</p>
+                                <p id="val-mttr-sev0" class="text-xl font-bold text-slate-700">00:00</p>
+                            </div>
+                        </div>
+                        <!-- Baseline & Meta -->
+                        <div class="mt-4 pt-3 border-t border-slate-50 text-right">
+                            <span class="text-[10px] text-slate-400 font-medium">Baseline 2025: <span
+                                    class="text-slate-500 font-bold">04:29</span></span>
+                            <span class="mx-1 text-slate-200 text-[10px]">|</span>
+                            <span class="text-[10px] text-natura-green-cerrado font-bold">Meta: 02:00</span>
+                        </div>
+                    </div>
+                    <div id="card-sev1"
+                        class="group kpi-card cursor-pointer rounded-2xl p-5 border border-slate-200 transition-all duration-200 hover:-translate-y-1 bg-white hover:shadow-md"
+                        data-filter-value="1">
+                        <div class="flex items-center justify-between mb-4"><span
+                                class="text-sm font-bold tracking-wider uppercase flex items-center gap-1"
+                                style="color: #FF6600;"><span class="w-2 h-2 rounded-full"
+                                    style="background-color: #FF6600;"></span> SEV 1</span></div>
+                        <div class="grid grid-cols-2 gap-4 divide-x divide-slate-100">
+                            <div>
+                                <p class="text-xs text-slate-500 mb-1">Incidentes</p>
+                                <div class="flex items-baseline">
+                                    <p id="val-sev1-incidents" class="text-3xl font-extrabold text-slate-900">0</p>
+                                    <span id="val-sev1-pct" class="text-xs font-semibold text-slate-400 ml-1"></span>
+                                </div>
+                            </div>
+                            <div class="pl-4">
+                                <p class="text-xs text-slate-500 mb-1">MTTR</p>
+                                <p id="val-mttr-sev1" class="text-xl font-bold text-slate-700">00:00</p>
+                            </div>
+                        </div>
+                        <!-- Baseline & Meta -->
+                        <div class="mt-4 pt-3 border-t border-slate-50 text-right">
+                            <span class="text-[10px] text-slate-400 font-medium">Baseline 2025: <span
+                                    class="text-slate-500 font-bold">09:29</span></span>
+                            <span class="mx-1 text-slate-200 text-[10px]">|</span>
+                            <span class="text-[10px] text-natura-orange font-bold">Meta: 06:00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Evolution Chart -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                        <h2 id="evolution-chart-title" class="text-lg font-bold text-slate-800">Evolução Mensal</h2>
+                        <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100"
+                            id="evolution-toggle-container">
+                            <button id="btn-ev-weekly"
+                                class="px-3 py-1 text-xs font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white"
+                                data-group="weekly">Semanal</button>
+                            <button id="btn-ev-monthly"
+                                class="px-3 py-1 text-xs font-bold rounded-md transition-all bg-white text-natura-green-cerrado shadow-sm border border-slate-200"
+                                data-group="monthly">Mensal</button>
+                            <button id="btn-ev-quarterly"
+                                class="px-3 py-1 text-xs font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white"
+                                data-group="quarterly">Trimestral</button>
+                        </div>
+                    </div>
+                    <div class="relative w-full h-80 sm:h-96"><canvas id="monthlyIncidentsChart"></canvas></div>
+
+                    <!-- Botão Data Story -->
+                    <div class="mt-4 flex justify-end">
+                        <button id="btn-data-story"
+                            class="hidden flex items-center gap-2 bg-natura-orange text-white px-4 py-2 rounded-lg shadow-sm hover:bg-natura-orange/90 transition-colors font-bold text-sm border border-transparent hover:shadow-md transform hover:-translate-y-0.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 12l2 2 4-4" />
+                            </svg>
+                            Ver Análise (vs 2025)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Integrated Technology & Offender Metrics -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-slate-100">
+                    <!-- Chart 1: Incidents by Tech -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-sm font-bold text-slate-700 uppercase">Incidentes por Tecnologia Impactada
+                            </h3>
+                            <button class="text-xs font-bold text-natura-orange hover:underline focus:outline-none"
+                                onclick="openRankingModal('tech_vol')">Expandir tudo</button>
+                        </div>
+                        <div class="relative w-full h-64"><canvas id="chartIncidentsByTech"></canvas></div>
+                    </div>
+
+                    <!-- Chart 2: Duration by Tech -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-sm font-bold text-slate-700 uppercase">MTTR por Tecnologia</h3>
+                            <button class="text-xs font-bold text-natura-orange hover:underline focus:outline-none"
+                                onclick="openRankingModal('tech_mttr')">Expandir tudo</button>
+                        </div>
+                        <div class="relative w-full h-64"><canvas id="chartDurationByTech"></canvas></div>
+                    </div>
+
+                    <!-- Chart 3: Incidents by Offender -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-sm font-bold text-slate-700 uppercase">Incidentes por Ofensor</h3>
+                            <button class="text-xs font-bold text-natura-orange hover:underline focus:outline-none"
+                                onclick="openRankingModal('offender_vol')">Expandir tudo</button>
+                        </div>
+                        <div class="relative w-full h-64"><canvas id="chartIncidentsByOffender"></canvas></div>
+                    </div>
+
+                    <!-- Chart 4: Duration by Offender -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-sm font-bold text-slate-700 uppercase">MTTR por Ofensor</h3>
+                            <button class="text-xs font-bold text-natura-orange hover:underline focus:outline-none"
+                                onclick="openRankingModal('offender_mttr')">Expandir tudo</button>
+                        </div>
+                        <div class="relative w-full h-64"><canvas id="chartDurationByOffender"></canvas></div>
+                    </div>
+                </div>
+
+                <!-- Concessão Timeline Section (Hidden by Default) -->
+                <div id="concessao-container"
+                    class="bg-white rounded-xl shadow-lg border border-natura-gray-medium p-6 hidden mt-6">
+                    <div class="mb-6">
+                        <h3 class="text-xl font-bold text-natura-green-cerrado flex items-center gap-2 mb-2">
+                            <span class="text-2xl">⚖️</span>
+                            O que é a Concessão de Major Incidents?
+                        </h3>
+                        <div
+                            class="bg-slate-50 border border-slate-200 p-4 rounded-lg text-sm text-slate-700 leading-relaxed">
+                            <p class="mb-2">A Concessão é um regime excepcional de governança de incidentes críticos,
+                                aplicado exclusivamente durante grandes implantações ou transformações de TD (como o
+                                projeto T4 Indústria). Em cenários de alta complexidade, o volume de atividades e
+                                intervenções simultâneas pode gerar efeitos colaterais temporários nos sistemas. Por
+                                isso, a concessão atua como uma medida administrativa que permite:</p>
+
+                            <p class="mb-2 font-bold text-natura-green-cerrado">Períodos de Concessão de Incidentes:</p>
+                            <ul class="list-disc pl-5 mb-4 text-xs">
+                                <li><strong>1º Período:</strong> 12/04/2026 até 24/04/2026</li>
+                                <li><strong>2º Período:</strong> 31/05/2026 até 10/07/2026</li>
+                            </ul>
+
+                            <ul class="list-disc pl-5 mb-2 font-medium">
+                                <li>O expurgo de eventuais Major Incidents (Sev0 e Sev1) da estatística geral;</li>
+                                <li>A isenção do impacto desses eventos nos indicadores de disponibilidade (SLAs).</li>
+                            </ul>
+                            <p
+                                class="text-natura-orange font-bold text-xs bg-natura-orange/10 p-2 rounded border border-natura-orange/20">
+                                Atenção: Apesar de ser uma "concessão", o rigor técnico permanece o mesmo: Incidentes
+                                Sev0 e Sev1 continuam sendo tratados com escalonamento máximo e salas de crise (War
+                                Rooms).
+                            </p>
+                        </div>
+                        <div class="mt-4 flex justify-end">
+                            <a href="https://sites.google.com/natura.net/portaldatd/itsm-e-eus/t4all-brasil/t4-ind%C3%BAstria-br-freeze-e-concess%C3%A3o?authuser=0"
+                                target="_blank" rel="noopener noreferrer"
+                                class="inline-flex items-center gap-2 bg-natura-green-cerrado text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-natura-green-amazonia transition-colors shadow-sm hover:shadow-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                                Saiba mais sobre as Diretrizes de Concessão
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="mt-8">
+                        <h4 class="text-lg font-bold text-slate-800 mb-4 border-b border-slate-200 pb-2">Linha do Tempo
+                            de Incidentes onde a Concessão foi aplicada</h4>
+
+                        <div id="concessao-timeline-content" class="relative py-8">
+                            <!-- Timeline UI Injetada via JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Drill Down Section -->
+                <div id="drilldown-container"
+                    class="bg-white rounded-xl shadow-lg border border-natura-gray-medium p-6 hidden">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-lg font-bold text-natura-green-cerrado flex items-center gap-2">
+                            <span id="drilldown-title">Detalhes</span>
+                        </h3>
+                        <button onclick="document.getElementById('drilldown-container').classList.add('hidden')"
+                            class="text-slate-400 hover:text-slate-600">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
+                                fill="currentColor">
+                                <path fill-rule="evenodd"
+                                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="relative w-full h-72"><canvas id="drilldownChart"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Tab 2: Major Problems -->
+            <div id="tab-problems" class="tab-content transition-opacity duration-300 opacity-0 hidden space-y-6">
+                <!-- KPI Grid (6 cards) -->
+                <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <!-- 1. Total Incidentes -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Total de Incidentes
+                        </p>
+                        <div class="flex items-center justify-between">
+                            <p id="mp-total-incidencts" class="text-3xl font-extrabold text-slate-900">0</p>
+                            <div class="p-2 bg-slate-100 rounded-lg text-slate-500"><svg
+                                    xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg></div>
+                        </div>
+                    </div>
+                    <!-- 2. Total Problemas -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Total de Problemas</p>
+                        <div class="flex items-center justify-between">
+                            <p id="mp-total-problems" class="text-3xl font-extrabold text-natura-orange">0</p>
+                            <div class="p-2 bg-natura-orange/10 rounded-lg text-natura-orange"><svg
+                                    xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                                </svg></div>
+                        </div>
+                    </div>
+                    <!-- 3. Problemas Abertos -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Problemas Abertos</p>
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span id="mp-open-problems"
+                                    class="text-3xl font-extrabold text-natura-red-buriti">0</span>
+                                <span id="mp-open-problems-pct"
+                                    class="text-xs font-semibold text-slate-400 ml-1">0%</span>
+                            </div>
+                            <div class="w-3 h-3 rounded-full bg-natura-red-buriti animate-pulse"></div>
+                        </div>
+                    </div>
+                    <!-- 4. Problemas Resolvidos -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Problemas Resolvidos
+                        </p>
+                        <div>
+                            <span id="mp-resolved-problems"
+                                class="text-3xl font-extrabold text-natura-green-cerrado">0</span>
+                            <span id="mp-resolved-problems-pct"
+                                class="text-xs font-semibold text-slate-400 ml-1">0%</span>
+                        </div>
+                    </div>
+                    <!-- 5. Problemas em Implementação -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Em Implementação</p>
+                        <div>
+                            <span id="mp-impl-problems"
+                                class="text-3xl font-extrabold text-natura-yellow-tucuma">0</span>
+                            <span id="mp-impl-problems-pct" class="text-xs font-semibold text-slate-400 ml-1">0%</span>
+                        </div>
+                    </div>
+                    <!-- 6. RCAs Pendentes -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Na fase de RCA</p>
+                        <div>
+                            <span id="mp-rca-pending" class="text-3xl font-extrabold text-natura-blue-profundo">0</span>
+                            <span id="mp-rca-pending-pct" class="text-xs font-semibold text-slate-400 ml-1">0%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mixed Chart & Explanatory Box -->
+                <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-stretch">
+                    <!-- Chart Column -->
+                    <div class="lg:col-span-3 bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col">
+                        <h2 class="text-lg font-bold text-slate-800 mb-6">Evolução de Problemas e Incidentes</h2>
+                        <div class="relative w-full h-80 sm:h-96"><canvas id="majorProblemsChart"></canvas></div>
+                    </div>
+
+                    <!-- Explanatory Box (Timeline Style) -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col h-full">
+                        <h2 class="text-md font-bold text-natura-green-amazonia mb-6 border-b border-slate-100 pb-2">
+                            Sequência de Estados do Problema
+                        </h2>
+
+                        <div class="space-y-0">
+                            <!-- State: RCA -->
+                            <div class="relative flex gap-4 pb-8">
+                                <!-- Line part 1 -->
+                                <div class="absolute left-[11px] top-6 bottom-0 w-[2px] bg-slate-100"></div>
+                                <div
+                                    class="relative z-10 flex-none w-6 h-6 rounded-full bg-natura-blue-profundo flex items-center justify-center border-4 border-white shadow-sm">
+                                </div>
+                                <div>
+                                    <h3 class="text-sm font-bold text-natura-blue-profundo">
+                                        Análise de Causa Raiz (RCA)
+                                    </h3>
+                                    <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+                                        Investigar, documentar e identificar a Causa Raiz, elaborar Plano de Ação e um
+                                        Workaround.
+                                        <span class="font-bold text-natura-red-buriti block mt-1">SLA de 7 dias.</span>
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- State: Implementation -->
+                            <div class="relative flex gap-4 pb-8">
+                                <!-- Line part 2 -->
+                                <div class="absolute left-[11px] top-6 bottom-0 w-[2px] bg-slate-100"></div>
+                                <div
+                                    class="relative z-10 flex-none w-6 h-6 rounded-full bg-natura-yellow-tucuma flex items-center justify-center border-4 border-white shadow-sm">
+                                </div>
+                                <div>
+                                    <h3 class="text-sm font-bold text-natura-yellow-tucuma">
+                                        Implementação
+                                    </h3>
+                                    <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+                                        Execução do Plano de Ação via Mudança. Necessário informar prazo estimado.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- State: Resolved -->
+                            <div class="relative flex gap-4">
+                                <div
+                                    class="relative z-10 flex-none w-6 h-6 rounded-full bg-natura-green-cerrado flex items-center justify-center border-4 border-white shadow-sm">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-white"
+                                        viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd"
+                                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                            clip-rule="evenodd" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-sm font-bold text-natura-green-cerrado">
+                                        Resolvido
+                                    </h3>
+                                    <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+                                        Etapas concluídas. Problema encerrado.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Secondary KPI Grid (Aging & MTTRC) -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-slate-100">
+                    <!-- 7. Aging AVG Resolvidos -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Aging AVG Resolvidos
+                            (Dias)</p>
+                        <p id="mp-avg-aging-resolved" class="text-3xl font-extrabold text-natura-green-cerrado">0</p>
+                        <!-- Legend -->
+                        <div class="mt-3 pt-3 border-t border-slate-50 space-y-1">
+                            <div class="text-[10px] flex justify-between items-center">
+                                <span class="text-slate-400">Mínimo:</span>
+                                <span class="font-bold text-slate-500">31d - 40d</span>
+                            </div>
+                            <div class="text-[10px] flex justify-between items-center">
+                                <span class="text-natura-green-cerrado opacity-70">Meta:</span>
+                                <span class="font-bold text-natura-green-cerrado">30d - 25d</span>
+                            </div>
+                            <div class="text-[10px] flex justify-between items-center">
+                                <span class="text-natura-blue-profundo opacity-70">Desafio:</span>
+                                <span class="font-bold text-natura-blue-profundo">&lt;= 24d</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 8. MTTRC -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">MTTRC (Horas)</p>
+                        <p id="mp-avg-mttrc" class="text-3xl font-extrabold text-[#E29627]">0</p>
+                        <p class="text-[10px] text-slate-400 mt-1 leading-tight">
+                            Tempo médio em horas para identificar e documentar as Causas Raízes.
+                        </p>
+                    </div>
+                    <!-- 9. Aging AVG Backlog -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Aging AVG Backlog
+                            (Dias)</p>
+                        <p id="mp-avg-aging-backlog" class="text-3xl font-extrabold text-natura-blue-profundo">0</p>
+                        <p class="text-[10px] text-slate-400 mt-1 leading-tight">
+                            Backlog = Soma dos estados RCA e Implementação.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- New Charts Section -->
+                <div class="flex flex-col gap-8 mt-8">
+                    <!-- Monthly YTD Aging -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col">
+                        <h2 class="text-lg font-bold text-slate-800 mb-2">Evolução Mensal de Problemas Resolvidos e
+                            Aging (YTD)</h2>
+                        <p class="text-xs text-slate-500 mb-6 italic">
+                            Mede o volume de problemas Resolvidos (barra azul) e o Aging médio (linha verde) para os
+                            problemas que foram abertos no respectivo mês e posteriormente resolvidos.
+                        </p>
+                        <div class="relative w-full h-80 sm:h-96"><canvas id="majorProblemsMonthlyYTD"></canvas></div>
+                    </div>
+
+                    <!-- Weekly WTD Aging -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col">
+                        <h2 class="text-lg font-bold text-slate-800 mb-2">Evolução Semanal de Problemas Resolvidos e
+                            Aging (WTD)</h2>
+                        <p class="text-xs text-slate-500 mb-6 italic">
+                            Mede o volume de problemas Resolvidos (barra azul) e o Aging médio (linha verde) para os
+                            problemas que foram resolvidos a cada semana.
+                        </p>
+                        <div class="relative w-full h-80 sm:h-96"><canvas id="majorProblemsWeeklyWTD"></canvas></div>
+                    </div>
+                </div>
+
+                <!-- TOP 5 Ranking Lists -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+                    <!-- Top 5 Backlog -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div
+                                class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 text-xs font-bold border border-slate-100">
+                                01</div>
+                            <div>
+                                <h3 class="text-sm font-bold text-slate-800">TOP 5 Áreas Responsáveis com Maior Backlog
+                                </h3>
+                                <p class="text-[10px] text-slate-400">RCAs pendentes e média de envelhecimento.</p>
+                            </div>
+                        </div>
+                        <div id="mp-top-backlog-list" class="space-y-2">
+                            <div class="text-[11px] text-slate-300 italic py-2">Carregando rankings...</div>
+                        </div>
+                    </div>
+
+                    <!-- Top 5 Resolved -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                        <div class="flex items-center gap-3 mb-4">
+                            <div
+                                class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 text-xs font-bold border border-slate-100">
+                                02</div>
+                            <div>
+                                <h3 class="text-sm font-bold text-slate-800">TOP 5 Áreas Responsáveis em Resolução de
+                                    RCAs</h3>
+                                <p class="text-[10px] text-slate-400">As áreas que mais resolveram RCAs no período.</p>
+                            </div>
+                        </div>
+                        <div id="mp-top-resolved-list" class="space-y-2">
+                            <div class="text-[11px] text-slate-300 italic py-2">Carregando rankings...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Debug Log Container -->
+            <div id="debug-log-container"
+                class="hidden fixed bottom-0 left-0 w-full h-48 bg-gray-900/90 text-green-400 font-mono text-xs p-4 overflow-y-auto z-[9999] border-t border-gray-700 shadow-xl backdrop-blur-sm">
+                <p class="border-b border-gray-700 pb-2 mb-2 font-bold text-gray-200 flex justify-between">
+                    <span>System Logs</span>
+                    <button onclick="document.getElementById('debug-log-container').classList.toggle('hidden')"
+                        class="text-xs bg-gray-700 px-2 rounded hover:bg-gray-600">Toggle</button>
+                </p>
+                <!-- Logs will be injected here -->
+            </div>
+
+            <!-- Data Story Modal (Pop-up) -->
+            <div id="data-story-modal"
+                class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-opacity duration-300">
+                <div
+                    class="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col transform transition-all scale-100">
+                    <!-- Header -->
+                    <div class="bg-natura-green-cerrado p-5 flex justify-between items-center text-white">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 bg-white/10 rounded-lg">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-natura-yellow-balsamo"
+                                    fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h2 class="text-xl font-bold leading-none">Análise Comparativa Histórica</h2>
+                                <p class="text-[11px] text-white/80 mt-1 uppercase tracking-wider font-semibold">2026
+                                    (YTD) vs Mesmo Período 2025</p>
+                            </div>
+                        </div>
+                        <button onclick="document.getElementById('data-story-modal').classList.add('hidden')"
+                            class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="p-6 overflow-y-auto custom-scrollbar flex-1">
+                        <div id="story-loading" class="py-12 flex flex-col items-center justify-center text-slate-500">
+                            <div class="loader-spinner mb-4"></div>
+                            <p class="font-medium animate-pulse">Buscando contexto histórico de 2025...</p>
+                        </div>
+
+                        <div id="story-content" class="hidden space-y-6 fade-in">
+                            <!-- Headline -->
+                            <div class="border-l-4 p-4 rounded-r-xl shadow-sm transition-all" id="story-alert-box">
+                                <h3 id="story-headline"
+                                    class="text-lg md:text-xl font-extrabold text-slate-800 leading-tight"></h3>
+                            </div>
+
+                            <!-- Detailed Cards -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <!-- Volume Card -->
+                                <div
+                                    class="bg-slate-50 p-5 rounded-xl border border-slate-200 shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]">
+                                    <div class="flex items-center gap-2 mb-3">
+                                        <div class="w-2 h-2 rounded-full bg-slate-400"></div>
+                                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Volume de
+                                            Incidentes</p>
+                                    </div>
+                                    <div class="flex items-end gap-3 mb-1">
+                                        <span id="story-vol-curr"
+                                            class="text-3xl font-black text-slate-800 leading-none"></span>
+                                        <div id="story-vol-diff"
+                                            class="text-sm font-bold bg-white px-2 py-0.5 rounded shadow-sm border border-slate-100 flex items-center gap-1 mb-1">
+                                        </div>
+                                    </div>
+                                    <p class="text-[11px] text-slate-400 font-medium">No ano anterior: <span
+                                            id="story-vol-prev" class="font-bold text-slate-500"></span></p>
+                                </div>
+
+                                <!-- MTTR Card -->
+                                <div
+                                    class="bg-slate-50 p-5 rounded-xl border border-slate-200 shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]">
+                                    <div class="flex items-center gap-2 mb-3">
+                                        <div class="w-2 h-2 rounded-full bg-slate-400"></div>
+                                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Tempo Médio
+                                            (MTTR)</p>
+                                    </div>
+                                    <div class="flex items-end gap-3 mb-1">
+                                        <span id="story-mttr-curr"
+                                            class="text-3xl font-black text-slate-800 leading-none"></span>
+                                        <div id="story-mttr-diff"
+                                            class="text-sm font-bold bg-white px-2 py-0.5 rounded shadow-sm border border-slate-100 flex items-center gap-1 mb-1">
+                                        </div>
+                                    </div>
+                                    <p class="text-[11px] text-slate-400 font-medium">No ano anterior: <span
+                                            id="story-mttr-prev" class="font-bold text-slate-500"></span></p>
+                                </div>
+                            </div>
+
+                            <!-- Data Story paragraph -->
+                            <div class="pt-2 border-t border-slate-100">
+                                <p id="story-summary" class="text-sm text-slate-600 leading-relaxed font-medium"></p>
+                            </div>
+
+                            <!-- Breakdown Section -->
+                            <div class="mt-4 pt-4 border-t border-slate-100">
+                                <h4 class="text-sm font-bold text-slate-800 mb-3" id="story-breakdown-title">Comparação
+                                    Detalhada</h4>
+                                <div id="story-breakdown-list" class="space-y-2 pr-1">
+                                    <!-- Injetado via JS -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Ranking Modal (Pop-up) -->
+            <div id="ranking-modal"
+                class="hidden opacity-0 fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-opacity duration-300">
+                <div
+                    class="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col transform transition-all scale-100">
+                    <!-- Header -->
+                    <div class="bg-natura-green-cerrado p-5 flex justify-between items-center text-white">
+                        <div class="flex items-center gap-3">
+                            <h2 id="ranking-modal-title" class="text-xl font-bold leading-none">Rankeamento Completo
+                            </h2>
+                        </div>
+                        <button onclick="closeRankingModal()"
+                            class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Search and Ranking Toggle -->
+                    <div
+                        class="bg-white border-b border-slate-200 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div class="relative w-full sm:w-64">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </span>
+                            <input type="text" id="ranking-search" placeholder="Buscar..."
+                                class="block w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-natura-orange/20 focus:border-natura-orange transition-all">
+                        </div>
+
+                        <div id="ranking-toggle-wrapper" class="flex items-center gap-3">
+                            <span
+                                class="text-[10px] font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">Ordenar
+                                por:</span>
+                            <div class="flex bg-slate-50 p-1 rounded-lg border border-slate-200 shadow-sm"
+                                id="ranking-toggle-container">
+                                <button id="btn-ranking-vol" onclick="switchRanking('vol')"
+                                    class="px-5 py-1.5 text-[10px] font-extrabold rounded-md transition-all">VOLUME</button>
+                                <button id="btn-ranking-mttr" onclick="switchRanking('mttr')"
+                                    class="px-5 py-1.5 text-[10px] font-extrabold rounded-md transition-all">MTTR</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="p-6 overflow-y-auto custom-scrollbar flex-1 bg-slate-50">
+                        <div id="ranking-list" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <!-- Injetado via JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Incident Details Modal (Pop-up) -->
+            <div id="incidents-details-modal"
+                class="hidden opacity-0 fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-opacity duration-300">
+                <div
+                    class="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col transform transition-all scale-100">
+                    <!-- Header -->
+                    <div class="bg-natura-green-cerrado p-5 flex justify-between items-center text-white">
+                        <div class="flex items-center gap-3">
+                            <h2 id="incidents-modal-title" class="text-xl font-bold leading-none">Detalhes dos
+                                Incidentes</h2>
+                        </div>
+                        <button onclick="closeIncidentsModal()"
+                            class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="p-6 overflow-y-auto custom-scrollbar flex-1 bg-slate-50">
+                        <div id="incidents-list" class="flex flex-col gap-4">
+                            <!-- Injetado via JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mudança Details Modal (Pop-up) -->
+        <div id="mudanca-details-modal"
+            class="hidden opacity-0 fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-opacity duration-300">
+            <div
+                class="bg-white rounded-2xl shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col transform transition-all scale-100 overflow-hidden">
+                <!-- Header -->
+                <div class="bg-natura-green-cerrado p-5 flex justify-between items-center text-white shrink-0">
+                    <div class="flex items-center gap-3">
+                        <h2 class="text-xl font-bold leading-none">Análise de Incidentes - Mudança</h2>
+                    </div>
+                    <button onclick="closeMudancaModal()"
+                        class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Tabs Navigation -->
+                <div class="bg-white border-b border-slate-200 px-6 pt-4 flex flex-wrap gap-2 shrink-0">
+                    <button onclick="switchMudancaTab('detalhes')" id="tab-btn-mudanca-detalhes"
+                        class="px-4 py-2 text-sm font-bold border-b-2 border-natura-orange text-natura-orange transition-colors">Detalhes</button>
+                    <button onclick="switchMudancaTab('geral')" id="tab-btn-mudanca-geral"
+                        class="px-4 py-2 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-colors">Visão
+                        Geral</button>
+                    <button onclick="switchMudancaTab('deploys')" id="tab-btn-mudanca-deploys"
+                        class="px-4 py-2 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-colors">Deploys</button>
+                    <button onclick="switchMudancaTab('tradicionais')" id="tab-btn-mudanca-tradicionais"
+                        class="px-4 py-2 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-colors">Tradicionais</button>
+                    <button onclick="switchMudancaTab('normais')" id="tab-btn-mudanca-normais"
+                        class="px-4 py-2 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-colors">Normais</button>
+                    <button onclick="switchMudancaTab('urgente')" id="tab-btn-mudanca-urgente"
+                        class="px-4 py-2 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-colors">Urgente</button>
+                    <button onclick="switchMudancaTab('emergencial')" id="tab-btn-mudanca-emergencial"
+                        class="px-4 py-2 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-colors">Emergencial</button>
+                </div>
+
+                <!-- Content Area -->
+                <div class="flex-1 overflow-y-auto custom-scrollbar bg-slate-50 relative">
+                    <!-- Aba Detalhes -->
+                    <div id="tab-content-mudanca-detalhes" class="p-6 block">
+                        <!-- Filtros de Tipo de SM -->
+                        <div class="max-w-4xl mx-auto mb-6 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Filtrar por
+                                Tipo de SM</p>
+                            <div class="flex flex-wrap gap-3" id="mudanca-filter-sm-types">
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" value="DEPLOY" checked onchange="renderMudancaDetalhes()"
+                                        class="w-4 h-4 rounded border-slate-300 text-natura-orange focus:ring-natura-orange">
+                                    <span
+                                        class="text-xs font-bold text-slate-600 group-hover:text-natura-orange transition-colors">DEPLOYS</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" value="NORMAL" checked onchange="renderMudancaDetalhes()"
+                                        class="w-4 h-4 rounded border-slate-300 text-natura-orange focus:ring-natura-orange">
+                                    <span
+                                        class="text-xs font-bold text-slate-600 group-hover:text-natura-orange transition-colors">NORMAIS</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" value="URGENTE" checked onchange="renderMudancaDetalhes()"
+                                        class="w-4 h-4 rounded border-slate-300 text-natura-orange focus:ring-natura-orange">
+                                    <span
+                                        class="text-xs font-bold text-slate-600 group-hover:text-natura-orange transition-colors">URGENTES</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" value="EMERGENCIAL" checked
+                                        onchange="renderMudancaDetalhes()"
+                                        class="w-4 h-4 rounded border-slate-300 text-natura-orange focus:ring-natura-orange">
+                                    <span
+                                        class="text-xs font-bold text-slate-600 group-hover:text-natura-orange transition-colors">EMERGENCIAIS</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="mudanca-incidents-list" class="grid grid-cols-1 gap-6 max-w-4xl mx-auto">
+                            <!-- Injetado via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Aba Analytics (Template Dinâmico) -->
+                    <div id="tab-content-mudanca-analytics" class="p-6 hidden">
+                        <!-- KPIs -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                                <div class="flex justify-between items-start mb-4">
+                                    <h3 class="text-sm font-bold text-slate-500 uppercase">Total de Incidentes</h3>
+                                </div>
+                                <div class="flex items-end gap-3">
+                                    <span id="mudanca-kpi-total"
+                                        class="text-4xl font-black text-slate-800 leading-none">0</span>
+                                </div>
+                                <div class="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center">
+                                    <span class="text-sm font-medium text-slate-500">MTTR Geral</span>
+                                    <span id="mudanca-kpi-mttr-total"
+                                        class="text-sm font-bold text-natura-orange">00:00</span>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                                <div class="flex justify-between items-start mb-4">
+                                    <h3 class="text-sm font-bold text-slate-500 uppercase">Incidentes SEV 0</h3>
+                                </div>
+                                <div class="flex items-end gap-3">
+                                    <span id="mudanca-kpi-sev0"
+                                        class="text-4xl font-black text-natura-red-buriti leading-none">0</span>
+                                </div>
+                                <div class="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center">
+                                    <span class="text-sm font-medium text-slate-500">MTTR SEV 0</span>
+                                    <span id="mudanca-kpi-mttr-sev0"
+                                        class="text-sm font-bold text-natura-red-buriti">00:00</span>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                                <div class="flex justify-between items-start mb-4">
+                                    <h3 class="text-sm font-bold text-slate-500 uppercase">Incidentes SEV 1</h3>
+                                </div>
+                                <div class="flex items-end gap-3">
+                                    <span id="mudanca-kpi-sev1"
+                                        class="text-4xl font-black text-natura-orange leading-none">0</span>
+                                </div>
+                                <div class="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center">
+                                    <span class="text-sm font-medium text-slate-500">MTTR SEV 1</span>
+                                    <span id="mudanca-kpi-mttr-sev1"
+                                        class="text-sm font-bold text-natura-orange">00:00</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Evolution & Data Story -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                                <div
+                                    class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                                    <h3 id="mudanca-chart-title" class="text-sm font-bold text-slate-700 uppercase">
+                                        Evolução Mensal</h3>
+                                    <div class="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                                        <button onclick="switchMudancaEvolution('weekly')" id="mudanca-btn-weekly"
+                                            class="px-3 py-1 text-[10px] font-bold rounded-md text-slate-500 transition-colors">Semanal</button>
+                                        <button onclick="switchMudancaEvolution('monthly')" id="mudanca-btn-monthly"
+                                            class="px-3 py-1 text-[10px] font-bold rounded-md bg-white shadow-sm text-natura-orange transition-colors">Mensal</button>
+                                        <button onclick="switchMudancaEvolution('quarterly')" id="mudanca-btn-quarterly"
+                                            class="px-3 py-1 text-[10px] font-bold rounded-md text-slate-500 transition-colors">Trimestral</button>
+                                    </div>
+                                </div>
+                                <div class="relative w-full h-64"><canvas id="mudanca-chart-evolution"></canvas></div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col h-full">
+                                <h3 class="text-sm font-bold text-slate-700 uppercase mb-4">Análise Histórica</h3>
+                                <div id="mudanca-history-container" class="flex-1 flex flex-col justify-center gap-6">
+                                    <!-- Injetado via JS -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Decisões Subjetivas Modal -->
+        <div id="subjective-decisions-modal"
+            class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-opacity duration-300">
+            <div
+                class="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col transform transition-all scale-100">
+                <div class="bg-natura-green-cerrado p-5 flex justify-between items-center text-white">
+                    <div class="flex items-center gap-3">
+                        <h2 class="text-xl font-bold leading-none">Decisões Subjetivas de Major Incidents</h2>
+                    </div>
+                    <button onclick="document.getElementById('subjective-decisions-modal').classList.add('hidden')"
+                        class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-6 overflow-y-auto custom-scrollbar flex-1 bg-slate-50">
+                    <!-- Breve descrição explicativa sobre Decisões Subjetivas -->
+                    <div class="mb-6 bg-white border border-slate-200 rounded-xl p-5 shadow-sm leading-relaxed">
+                        <h3 class="text-sm font-bold text-natura-green-cerrado flex items-center gap-2 mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-natura-orange"
+                                viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd"
+                                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                            Sobre as Decisões Subjetivas de Major Incidents
+                        </h3>
+                        <p class="text-xs text-slate-500 font-medium">
+                            Esta seção reúne os Major Incidents que possuem considerações específicas e decisões
+                            qualitativas registradas pela equipe de governança. Estes registros incluem justificativas
+                            de SLA em janelas excepcionais, anistias de incidentes durante concessões ou análises
+                            qualitativas detalhadas de impacto, complementando os critérios puramente quantitativos dos
+                            indicadores padrão.
+                        </p>
+                    </div>
+
+                    <div id="subjective-decisions-list" class="flex flex-col gap-6">
+                        <!-- Injetado via JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer for Decisões Subjetivas -->
+        <!-- <div class="mt-8 pt-4 border-t border-slate-200 flex justify-center pb-8">
+            <button onclick="openSubjectiveDecisionsModal()"
+                class="text-sm font-bold text-natura-orange hover:underline focus:outline-none flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Decisões subjetivas de Major Incidents
+            </button>
+        </div> -->
+    </main>
+    <?!= include('dashboard.js.html'); ?>
+    <!-- Loader Overlay -->
+    <div id="loader-container"
+        class="hidden fixed inset-0 z-[200] flex items-center justify-center bg-natura-green-cerrado/60 backdrop-blur-sm transition-opacity duration-300">
+        <div class="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 border border-white/20">
+            <div class="relative w-16 h-16">
+                <div class="absolute inset-0 border-4 border-slate-100 rounded-full"></div>
+                <div
+                    class="absolute inset-0 border-4 border-natura-orange rounded-full border-t-transparent animate-spin">
+                </div>
+            </div>
+            <div class="flex flex-col items-center">
+                <p class="text-slate-800 font-black text-lg tracking-tight">Carregando Dados</p>
+                <p class="text-slate-500 text-xs font-medium animate-pulse">Buscando análise de incidentes...</p>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

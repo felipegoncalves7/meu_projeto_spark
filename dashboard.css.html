@@ -1,0 +1,151 @@
+<style>
+    /* Import Inter font from Google Fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    /* Natura Color Palette - CSS Variables */
+    :root {
+        /* Primary Colors */
+        --natura-orange: #FF6600;
+        --natura-yellow-tucuma: #E29627;
+        --natura-yellow-balsamo: #FFBE28;
+
+        /* Green Palette */
+        --natura-green-amazonia: #112E22;
+        --natura-green-cerrado: #1B472A;
+        --natura-green-murumuru: #6A803E;
+        --natura-green-capim: #C9E055;
+
+        /* Earth Tones */
+        --natura-brown-terra: #4a1c0e;
+        --natura-red-boca: #ac2f1c;
+        --natura-red-buriti: #e94839;
+
+        /* Blue Palette */
+        --natura-blue-atlantico: #11252e;
+        --natura-blue-profundo: #045473;
+        --natura-blue-ceu: #99aedb;
+
+        /* Purple/Pink Palette */
+        --natura-acai: #60002C;
+        --natura-amora: #930E44;
+        --natura-amora-light: #FF92C5;
+
+        /* Neutrals */
+        --natura-black: #000000;
+        --natura-gray-dark: #262523;
+        --natura-gray-medium: #E2D6C5;
+        --natura-gray-light: #ECEDEB;
+        --natura-white: #FFFFFF;
+
+        /* Semantic Colors for Dashboard */
+        --color-primary: var(--natura-green-cerrado);
+        --color-primary-light: var(--natura-green-murumuru);
+        --color-accent: var(--natura-orange);
+        --color-success: var(--natura-green-capim);
+        --color-warning: var(--natura-yellow-balsamo);
+        --color-danger: var(--natura-red-buriti);
+        --color-info: var(--natura-blue-ceu);
+
+        /* Severity Colors */
+        --color-sev0: var(--natura-red-buriti);
+        --color-sev1: var(--natura-orange);
+
+        /* Background & Text */
+        --bg-primary: var(--natura-white);
+        --bg-secondary: var(--natura-gray-light);
+        --text-primary: var(--natura-gray-dark);
+        --text-secondary: var(--natura-green-amazonia);
+        --border-color: var(--natura-gray-medium);
+    }
+
+    body {
+        font-family: 'Inter', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        background-color: var(--bg-secondary);
+        color: var(--text-primary);
+    }
+
+    /* Custom Scrollbar with Natura colors */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: var(--natura-green-murumuru);
+        border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: var(--natura-green-cerrado);
+    }
+
+    /* Animations */
+    .fade-in {
+        animation: fadeIn 0.5s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Loading Spinner with Natura Green */
+    .loader-spinner {
+        border: 3px solid rgba(27, 71, 42, 0.1);
+        border-radius: 50%;
+        border-top: 3px solid var(--natura-green-cerrado);
+        width: 24px;
+        height: 24px;
+        -webkit-animation: spin 1s linear infinite;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+
+    /* KPI Card Hover Effects */
+    .kpi-card {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        background: var(--bg-primary);
+        border-color: var(--border-color);
+    }
+
+    .kpi-card:hover {
+        box-shadow: 0 10px 25px -5px rgba(27, 71, 42, 0.15), 0 8px 10px -6px rgba(27, 71, 42, 0.1);
+        border-color: var(--natura-green-murumuru);
+    }
+
+    /* Active Tab Styling Handled mostly by Tailwind classes in HTML now */
+
+    /* Natura Brand Gradient Background Option */
+    .natura-gradient {
+        background: linear-gradient(135deg, var(--natura-green-cerrado) 0%, var(--natura-green-murumuru) 100%);
+    }
+
+    /* Chart Color Enhancement */
+    .chart-container {
+        background: var(--bg-primary);
+        border-radius: 12px;
+        padding: 1.5rem;
+    }
+</style>

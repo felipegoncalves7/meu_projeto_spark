@@ -1,0 +1,2354 @@
+<script>
+    let ALL_DATA = {};
+    let CURRENT_FILTERS = {
+        card: 'total',
+        periodKey: 'All', // Tab 1
+        startDate: null,
+        endDate: null,
+        year: null,
+        evolutionGrouping: 'monthly'
+    };
+
+    // Globals for Chart Instances
+    let charts = {};
+
+    function logDebug(msg) {
+        const container = document.getElementById('debug-log-container');
+        if (container) {
+            const p = document.createElement('p');
+            p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            container.appendChild(p);
+            container.scrollTop = container.scrollHeight;
+        }
+        console.log(`[DEBUG] ${msg}`);
+    }
+
+    console.log("Dashboard Script Execution Started");
+
+    document.addEventListener('DOMContentLoaded', function () {
+        logDebug("DOM Loaded. Initializing...");
+
+        if (typeof Chart === 'undefined') {
+            logDebug("CRITICAL: Chart.js library NOT loaded.");
+            return;
+        }
+
+        Chart.defaults.font.family = "'Inter', sans-serif";
+        Chart.defaults.color = '#64748b';
+        Chart.defaults.borderColor = '#e2e8f0';
+
+        if (typeof ChartDataLabels !== 'undefined') Chart.register(ChartDataLabels);
+
+        setupTabs();
+        loadInitialConfig();
+        const yearSelect = document.getElementById('year-select');
+        yearSelect.addEventListener('change', function (e) {
+            logDebug("Year changed to: " + e.target.value);
+            CURRENT_FILTERS.year = e.target.value;
+
+            // Reload the currently active tab
+            const activeTab = document.querySelector('.tab-btn.active-tab');
+            if (activeTab) {
+                const targetId = activeTab.dataset.target;
+                if (targetId === 'tab-major') {
+                    loadFilteredData();
+                } else if (targetId === 'tab-problems') {
+                    loadProblemsTab();
+                }
+            } else {
+                loadFilteredData(); // Default
+            }
+        });
+
+        // Ranking Search Handler
+        const rankingSearch = document.getElementById('ranking-search');
+        if (rankingSearch) {
+            rankingSearch.addEventListener('input', (e) => {
+                RANKING_STATE.searchQuery = e.target.value.toLowerCase();
+                renderRanking();
+            });
+        }
+    });
+
+    function setupTabs() {
+        const tabs = document.querySelectorAll('.tab-btn');
+        logDebug(`Found ${tabs.length} tab buttons.`);
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                if (tab.classList.contains('active-tab')) return;
+                tabs.forEach(t => {
+                    // Reset to default state
+                    t.classList.remove('active-tab', 'border-natura-orange', 'text-natura-orange');
+                    t.classList.add('border-transparent', 'text-slate-500');
+                    // Remove hover needed? It's CSS.
+                });
+                // Set active state
+                tab.classList.add('active-tab', 'border-natura-orange', 'text-natura-orange');
+                tab.classList.remove('border-transparent', 'text-slate-500');
+
+                const targetId = tab.dataset.target;
+
+                // DATA LOADING TRIGGERS
+                if (targetId === 'tab-major' && !ALL_DATA.kpis) {
+                    // Usually already loaded by default, but good check
+                    loadFilteredData();
+                } else if (targetId === 'tab-problems') {
+                    loadProblemsTab();
+                }
+
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    if (content.id === targetId) {
+                        content.classList.remove('hidden');
+                        setTimeout(() => {
+                            content.classList.remove('opacity-0');
+                            content.classList.add('opacity-100');
+                        }, 10);
+                    } else {
+                        content.classList.remove('opacity-100');
+                        content.classList.add('opacity-0');
+                        setTimeout(() => content.classList.add('hidden'), 300);
+                    }
+                });
+            });
+        });
+    }
+
+    function loadInitialConfig() {
+        logDebug("Calling getInitialConfig (Backend)...");
+        const loader = document.getElementById('loader-container');
+        if (loader) loader.classList.remove('hidden');
+        google.script.run
+            .withSuccessHandler(setupDashboard)
+            .withFailureHandler((e) => {
+                logDebug("getInitialConfig FAILED: " + e.message);
+                handleError(e);
+            })
+            .getInitialConfig();
+    }
+
+    function setupDashboard(data) {
+        logDebug("getInitialConfig Success. Data received.");
+        if (data.error) {
+            logDebug("Server reported error: " + data.error);
+            handleError(data.error);
+            return;
+        }
+        ALL_DATA = data;
+
+        // Update Last Updated timestamp
+        const lastUpdatedEl = document.getElementById('last-updated');
+        if (lastUpdatedEl && data.lastUpdated) {
+            lastUpdatedEl.textContent = data.lastUpdated;
+        }
+
+        // Populate Year Selector
+        const yearSelect = document.getElementById('year-select');
+        if (yearSelect && data.availableYears && data.availableYears.length > 0) {
+            yearSelect.innerHTML = '';
+            data.availableYears.forEach(year => {
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                yearSelect.appendChild(option);
+            });
+            CURRENT_FILTERS.year = data.availableYears[0];
+        }
+
+        setupPeriodFilters(data.periodFilters); // Tab 1
+
+        // Setup Card Filters
+        const setupCardFilter = (id, type) => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('click', () => {
+                    CURRENT_FILTERS.card = type;
+                    logDebug(`Filter changed to: ${type}`);
+                    refreshActiveFilterText(); // Update UI
+                    loadFilteredData();
+                });
+                el.style.cursor = 'pointer';
+            }
+        };
+
+        setupCardFilter('card-total', 'total');
+        setupCardFilter('card-sev0', 'sev0');
+        setupCardFilter('card-sev1', 'sev1');
+
+        setupEvolutionToggle();
+
+        logDebug("Initial setup complete. Loading Tab 1 data...");
+
+        // Force Tab 1 Visibility immediately
+        const tab1Content = document.getElementById('tab-major');
+        if (tab1Content) {
+            tab1Content.classList.remove('hidden', 'opacity-0');
+            tab1Content.classList.add('opacity-100');
+        }
+
+        loadFilteredData();
+    }
+
+    function loadFilteredData() {
+        logDebug("Loading Tab 1 Data...");
+        const loader = document.getElementById('loader-container');
+        if (loader) loader.classList.remove('hidden');
+        google.script.run
+            .withSuccessHandler(renderTab1Data)
+            .withFailureHandler((e) => {
+                logDebug("getFilteredData (Tab 1) FAILED: " + e.message);
+                handleError(e);
+            })
+            .getFilteredData(
+                CURRENT_FILTERS.year,
+                CURRENT_FILTERS.periodKey,
+                CURRENT_FILTERS.startDate,
+                CURRENT_FILTERS.endDate,
+                CURRENT_FILTERS.card
+            );
+    }
+
+
+    function loadProblemsTab() {
+        logDebug("Loading Major Problems Data...");
+        const loader = document.getElementById('loader-container');
+        // Show loader if tab is visible
+        if (loader && !document.getElementById('tab-problems').classList.contains('hidden')) {
+            loader.classList.remove('hidden');
+        }
+
+        google.script.run
+            .withSuccessHandler(renderProblemsData)
+            .withFailureHandler((e) => {
+                logDebug("getMajorProblemsData FAILED: " + e.message);
+                handleError(e);
+            })
+            .getMajorProblemsData(CURRENT_FILTERS.year);
+    }
+
+    function renderProblemsData(data) {
+        logDebug("Problems Data Received.");
+        console.log("Full data object:", data);
+        if (data.error) {
+            logDebug("Problems Data Error: " + data.error);
+            handleError(data.error);
+            return;
+        }
+
+        // 1. KPIs
+        const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        const setPct = (id, val, total) => {
+            const el = document.getElementById(id);
+            if (el) {
+                const pct = total > 0 ? ((val / total) * 100).toFixed(1) : "0.0";
+                el.textContent = `(${pct}%)`;
+            }
+        };
+
+        setText('mp-total-incidencts', data.kpis.totalIncidentes);
+        setText('mp-total-problems', data.kpis.totalProblemas);
+
+        setText('mp-open-problems', data.kpis.problemasAbertos);
+        setPct('mp-open-problems-pct', data.kpis.problemasAbertos, data.kpis.totalProblemas);
+
+        setText('mp-resolved-problems', data.kpis.problemasResolvidos);
+        setPct('mp-resolved-problems-pct', data.kpis.problemasResolvidos, data.kpis.totalProblemas);
+
+        setText('mp-impl-problems', data.kpis.problemasImpl);
+        setPct('mp-impl-problems-pct', data.kpis.problemasImpl, data.kpis.totalProblemas);
+
+        setText('mp-rca-pending', data.kpis.rcaPendentes);
+        setPct('mp-rca-pending-pct', data.kpis.rcaPendentes, data.kpis.totalProblemas);
+
+        // New KPIs
+        setText('mp-avg-aging-resolved', data.kpis.avgAgingResolved + " Dias");
+        setText('mp-avg-mttrc', data.kpis.avgMTTRC + " Horas");
+        setText('mp-avg-aging-backlog', data.kpis.avgAgingBacklog + " Dias");
+
+        // 2. Charts
+        drawProblemsChart(data.monthly);
+        drawMonthlyYTDChart(data.monthlyYTD);
+        drawWeeklyWTDChart(data.weeklyWTD);
+
+        // 3. Rankings
+        const renderRank = (id, list) => {
+            const container = document.getElementById(id);
+            if (!container) return;
+            if (!list || list.length === 0) {
+                container.innerHTML = `<div class="text-[11px] text-slate-400 italic py-2 px-2">Nenhum dado encontrado.</div>`;
+                return;
+            }
+            container.innerHTML = list.map(item => {
+                return `<div class="flex justify-between items-center text-[11px] py-1.5 border-b border-slate-50 last:border-0 hover:bg-slate-50 px-2 rounded transition-colors">
+                    <span class="font-medium text-slate-700 truncate pr-2 uppercase" title="${item.name}">${item.name}</span>
+                    <span class="flex-none text-slate-500 whitespace-nowrap">
+                        <span class="font-bold text-natura-orange">${item.count}</span> RCAs | 
+                        <span class="font-bold text-natura-blue-profundo">${item.avgAging} Dias</span>
+                    </span>
+                </div>`;
+            }).join('');
+        };
+
+        renderRank('mp-top-backlog-list', data.topBacklogTeams);
+        renderRank('mp-top-resolved-list', data.topResolvedTeams);
+
+        const loader = document.getElementById('loader-container');
+        if (loader) loader.classList.add('hidden');
+    }
+
+    function drawMonthlyYTDChart(ytdData) {
+        const ctx = document.getElementById('majorProblemsMonthlyYTD').getContext('2d');
+        const months = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+        const active = months.filter(m => ytdData[m] !== undefined);
+        const labels = active.map(m => m.charAt(0).toUpperCase() + m.slice(1));
+        const resolved = active.map(m => ytdData[m].resolved);
+        const aging = active.map(m => ytdData[m].avgAging);
+
+        // Eixos dinâmicos
+        const maxResolved = Math.max(...resolved, 0);
+        const maxAging = Math.max(...aging, 0);
+        const axisMaxResolved = Math.ceil((maxResolved + 0.1) / 10) * 10;
+        const axisMaxAging = Math.ceil((maxAging + 0.1) / 10) * 10;
+
+        if (window.ytdChartInstance) window.ytdChartInstance.destroy();
+        window.ytdChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Resolvidos', data: resolved, backgroundColor: '#045473', order: 1 },
+                    { label: 'Aging Médio', data: aging, type: 'line', borderColor: '#1B472A', backgroundColor: '#1B472A', borderWidth: 2, pointRadius: 4, order: 0, yAxisID: 'y-aging' }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { 
+                        beginAtZero: true, 
+                        title: { display: true, text: 'Resolvidos' },
+                        max: axisMaxResolved
+                    },
+                    'y-aging': { 
+                        position: 'right', 
+                        beginAtZero: true, 
+                        title: { display: true, text: 'Aging (Dias)' }, 
+                        grid: { drawOnChartArea: false },
+                        max: axisMaxAging
+                    }
+                },
+                plugins: {
+                    datalabels: {
+                        color: '#FFFFFF',
+                        backgroundColor: (context) => context.dataset.type === 'line' ? '#1B472A' : null,
+                        borderRadius: 4,
+                        padding: { top: 4, bottom: 4, left: 6, right: 6 },
+                        font: { weight: 'bold', size: 10 },
+                        display: (context) => context.dataset.data[context.dataIndex] > 0
+                    }
+                }
+            }
+        });
+    }
+
+    function drawWeeklyWTDChart(wtdData) {
+        const ctx = document.getElementById('majorProblemsWeeklyWTD').getContext('2d');
+        const labels = Object.keys(wtdData).sort((a, b) => {
+            const nA = parseInt(a.replace(/\D/g, ''));
+            const nB = parseInt(b.replace(/\D/g, ''));
+            return nA - nB;
+        });
+        const resolved = labels.map(l => wtdData[l].resolved);
+        const aging = labels.map(l => wtdData[l].avgAging);
+
+        // Eixos dinâmicos
+        const maxResolved = Math.max(...resolved, 0);
+        const maxAging = Math.max(...aging, 0);
+        const axisMaxResolved = Math.ceil((maxResolved + 0.1) / 10) * 10;
+        const axisMaxAging = Math.ceil((maxAging + 0.1) / 10) * 10;
+
+        if (window.wtdChartInstance) window.wtdChartInstance.destroy();
+        window.wtdChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Resolvidos', data: resolved, backgroundColor: '#045473', order: 1 },
+                    { label: 'Aging Médio', data: aging, type: 'line', borderColor: '#112E22', backgroundColor: '#112E22', borderWidth: 2, pointRadius: 4, order: 0, yAxisID: 'y-aging' }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { 
+                        beginAtZero: true, 
+                        title: { display: true, text: 'Resolvidos' },
+                        max: axisMaxResolved
+                    },
+                    'y-aging': { 
+                        position: 'right', 
+                        beginAtZero: true, 
+                        title: { display: true, text: 'Aging (Dias)' }, 
+                        grid: { drawOnChartArea: false },
+                        max: axisMaxAging
+                    }
+                },
+                plugins: {
+                    datalabels: {
+                        color: '#FFFFFF',
+                        backgroundColor: (context) => context.dataset.type === 'line' ? '#112E22' : null,
+                        borderRadius: 4,
+                        padding: { top: 4, bottom: 4, left: 6, right: 6 },
+                        font: { weight: 'bold', size: 10 },
+                        display: (context) => context.dataset.data[context.dataIndex] > 0
+                    }
+                }
+            }
+        });
+    }
+
+    function drawProblemsChart(monthlyData) {
+        const ctx = document.getElementById('majorProblemsChart').getContext('2d');
+        const months = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+        // Filter out empty months if desired, or show all up to current?
+        // User asked "Grafico de tempo por mês", showing all is safer or active ones.
+        // Let's show active ones or all.
+        const active = months.filter(m => monthlyData[m] !== undefined);
+        const labels = active.map(m => m.charAt(0).toUpperCase() + m.slice(1));
+
+        const dataResolved = active.map(m => monthlyData[m].resolved);
+        const dataImpl = active.map(m => monthlyData[m].implementation);
+        const dataRca = active.map(m => monthlyData[m].rcaPending);
+        const dataIncidents = active.map(m => monthlyData[m].incidentsCount || 0);
+
+        // Eixo dinâmico (considerando stack de problemas + linha de incidentes)
+        const totals = active.map(m => (monthlyData[m].resolved || 0) + (monthlyData[m].implementation || 0) + (monthlyData[m].rcaPending || 0));
+        const maxVal = Math.max(...totals, ...dataIncidents, 0);
+        const axisMax = Math.ceil((maxVal + 0.1) / 10) * 10;
+
+        if (window.problemsChartInstance) window.problemsChartInstance.destroy();
+
+        window.problemsChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Incidentes',
+                        data: dataIncidents,
+                        type: 'line',
+                        borderColor: '#112E22', // Green Amazonia
+                        backgroundColor: '#112E22',
+                        borderWidth: 2,
+                        pointRadius: 4,
+                        order: 0
+                    },
+                    {
+                        label: 'Resolvidos',
+                        data: dataResolved,
+                        backgroundColor: '#1B472A', // Green Cerrado
+                        stack: 'stack1',
+                        order: 1
+                    },
+                    {
+                        label: 'Em Implementação',
+                        data: dataImpl,
+                        backgroundColor: '#E29627', // Yellow Tucuma
+                        stack: 'stack1',
+                        order: 1
+                    },
+                    {
+                        label: "RCA's Pendentes",
+                        data: dataRca,
+                        backgroundColor: '#045473', // Blue Profundo
+                        stack: 'stack1',
+                        order: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { stacked: true },
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Quantidade (Incidentes e Problemas)' },
+                        max: axisMax
+                    }
+                },
+                plugins: {
+                    tooltip: { mode: 'index', intersect: false },
+                    datalabels: {
+                        display: (context) => {
+                            return context.dataset.data[context.dataIndex] > 0;
+                        },
+                        color: '#FFFFFF', // All labels white
+                        backgroundColor: (context) => {
+                            // If it's the line, use the dark green background for the bubble
+                            return context.dataset.type === 'line' ? '#112E22' : null;
+                        },
+                        borderRadius: 4,
+                        padding: { top: 2, bottom: 2, left: 4, right: 4 },
+                        font: { weight: 'bold', size: 10 },
+                        formatter: (val) => val
+                    }
+                }
+            }
+        });
+    }
+
+    function renderTab1Data(data) {
+        logDebug("Tab 1 Data Received. Rendering...");
+        if (data.error) {
+            logDebug("Tab 1 Data Error: " + data.error);
+            handleError(data.error);
+            return;
+        }
+        renderKpiCards(data.kpis);
+        
+        // Save these for switching views WITHOUT server reload
+        ALL_DATA.currentKpis = data.kpis;
+        ALL_DATA.rawIncidents = data.rawIncidents || [];
+        ALL_DATA.evolutionData = {
+          monthly: { metrics: data.monthlyMetrics, mttr: data.mttrPorMesEmHoras, title: "Evolução Mensal" },
+          weekly: { metrics: data.weeklyMetrics, mttr: data.mttrSemanalEmHoras, title: "Evolução Semanal" },
+          quarterly: { metrics: data.quarterlyMetrics, mttr: data.mttrTrimestralEmHoras, title: "Evolução Trimestral" }
+        };
+
+        const group = CURRENT_FILTERS.evolutionGrouping || 'monthly';
+        const groupData = ALL_DATA.evolutionData[group];
+        drawEvolutionChart(groupData.metrics, groupData.mttr, groupData.title);
+
+        // Render Technology & Offender charts in the same flow
+        if (data.techMetrics) {
+            ALL_DATA.techMetrics = data.techMetrics;
+            renderTechCharts(data.techMetrics, data.kpis.incidentesTotal);
+        }
+        if (data.offenderMetrics) {
+            ALL_DATA.offenderMetrics = data.offenderMetrics;
+            renderOffenderCharts(data.offenderMetrics, data.kpis.incidentesTotal);
+        }
+
+        const loader = document.getElementById('loader-container');
+        if (loader) loader.classList.add('hidden');
+        
+        if (CURRENT_FILTERS.periodKey === 'T4Industria') {
+            const dataStoryBtn = document.getElementById('btn-data-story');
+            if (dataStoryBtn) dataStoryBtn.classList.add('hidden');
+            
+            const concessaoContainer = document.getElementById('concessao-container');
+            if (concessaoContainer) concessaoContainer.classList.remove('hidden');
+            
+            renderConcessaoTimeline();
+        } else {
+            initDataStory();
+            
+            const concessaoContainer = document.getElementById('concessao-container');
+            if (concessaoContainer) concessaoContainer.classList.add('hidden');
+        }
+        
+        logDebug("Tab 1 Render Complete.");
+    }
+
+    // --- FILTER LOGIC with MAPPING ---
+
+    // Mapeamento dos nomes de exibição
+    const LABEL_MAP = {
+        'All': 'Período Completo',
+        'Freeze': 'Freeze Q4',
+        'SoftFreeze': 'Soft Freeze Q4',
+        'HardFreeze': 'Hard Freeze Q4',
+        'T4Industria': 'T4 Industria'
+    };
+
+    function setupPeriodFilters(filters) {
+        const container = document.getElementById('period-filter-container');
+        if (!container) return;
+        container.innerHTML = '';
+
+        filters.forEach(filter => {
+            const btn = document.createElement('button');
+            let displayLabel = LABEL_MAP[filter.key] || filter.key;
+
+            if (filter.key === 'T4Industria') {
+                btn.innerHTML = `${displayLabel} <img src="https://flagcdn.com/w20/br.png" class="inline-block ml-1 mb-0.5" width="16" height="11">`;
+            } else {
+                btn.textContent = displayLabel;
+            }
+            // Check based on Key, but display text is different
+            btn.className = getBtnClass(filter.key === CURRENT_FILTERS.periodKey);
+
+            btn.onclick = () => {
+                CURRENT_FILTERS.periodKey = filter.key;
+                CURRENT_FILTERS.startDate = filter.start;
+                CURRENT_FILTERS.endDate = filter.end;
+
+                updateFilterButtonsUI(container, filter.key, LABEL_MAP);
+                refreshActiveFilterText(); // Use centralized logic
+
+                loadFilteredData();
+            };
+            container.appendChild(btn);
+        });
+
+        // Init logic for active filters text
+        refreshActiveFilterText();
+    }
+
+    // Helper to refresh Active Filters text based on ALL current filters
+    function refreshActiveFilterText() {
+        const periodKey = CURRENT_FILTERS.periodKey;
+        const cardKey = CURRENT_FILTERS.card;
+        const container = document.getElementById('active-filters-text');
+
+        if (!container) return;
+        container.innerHTML = ''; // Clear current content
+        container.className = "flex flex-wrap items-center gap-2"; // Ensure Flex container
+
+        let hasFilter = false;
+
+        // Helper to create filter tag
+        const createTag = (label, onRemove) => {
+            hasFilter = true;
+            const tag = document.createElement('span');
+            tag.className = 'inline-flex items-center px-2 py-1 rounded-md text-xs font-bold bg-natura-green-murumuru/10 text-natura-green-cerrado border border-natura-green-murumuru/20';
+
+            const text = document.createElement('span');
+            text.textContent = label;
+
+            const btn = document.createElement('button');
+            btn.className = 'ml-1 p-0.5 rounded-full hover:bg-natura-red-buriti hover:text-white transition-colors focus:outline-none';
+            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>`;
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                onRemove();
+            };
+
+            tag.appendChild(text);
+            tag.appendChild(btn);
+            container.appendChild(tag);
+        };
+
+        // 1. Period Part
+        const periodLabel = LABEL_MAP[periodKey] || periodKey;
+        if (periodLabel !== 'Período Completo') {
+            createTag(periodLabel, () => {
+                // Reset to All
+                const allFilter = ALL_DATA.periodFilters.find(f => f.key === 'All');
+                if (allFilter) {
+                    CURRENT_FILTERS.periodKey = 'All';
+                    CURRENT_FILTERS.startDate = null;
+                    CURRENT_FILTERS.endDate = null;
+                    updateFilterButtonsUI(document.getElementById('period-filter-container'), 'All', LABEL_MAP);
+                    refreshActiveFilterText();
+                    loadFilteredData();
+                }
+            });
+        }
+
+        // 2. Card Part
+        if (cardKey !== 'total') {
+            let label = cardKey;
+            if (cardKey === 'sev0') label = 'Sev 0';
+            else if (cardKey === 'sev1') label = 'Sev 1';
+
+            createTag(label, () => {
+                CURRENT_FILTERS.card = 'total';
+                refreshActiveFilterText();
+                loadFilteredData();
+            });
+        }
+
+        if (!hasFilter) {
+            container.textContent = 'Nenhum';
+            container.className = "text-sm font-semibold text-slate-700"; // Reset to text style
+        }
+    }
+
+    // Deprecated but kept for compatibility if needed (redirects to new logic)
+    function updateActiveFilterDisplay(elementId, label) {
+        if (elementId === 'active-filters-text') {
+            refreshActiveFilterText();
+        } else {
+            const el = document.getElementById(elementId);
+            if (el) {
+                if (label === 'Período Completo') el.textContent = 'Nenhum';
+                else el.textContent = label;
+            }
+        }
+    }
+
+    function getBtnClass(isActive) {
+        return isActive
+            ? 'px-4 py-1.5 rounded-full text-sm font-bold transition-all duration-200 ease-in-out bg-natura-green-cerrado text-white shadow-md hover:bg-natura-green-amazonia transform scale-105'
+            : 'px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ease-in-out border border-transparent text-slate-600 hover:bg-slate-100 bg-transparent';
+    }
+
+    function updateFilterButtonsUI(container, activeKey, map) {
+        container.querySelectorAll('button').forEach(b => {
+            const targetLabel = map[activeKey] || activeKey;
+            const isTarget = b.textContent === targetLabel;
+            b.className = getBtnClass(isTarget);
+        });
+    }
+
+    // --- Helpers (unchanged) ---
+    function formatMinutesToHHMM(val) {
+        if (val < 0) val = 0; const h = Math.floor(val / 60); const m = Math.round(val % 60); return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m`;
+    }
+
+    function formatDecimalHoursToHHMM(val) {
+        return formatMinutesToHHMM(Math.round(val * 60));
+    }
+
+    function renderKpiCards(kpis) {
+        const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        setText('val-total-incidents', kpis.incidentesTotal);
+        setText('val-mttr-total', kpis.mttrTotal);
+        setText('val-sev0-incidents', kpis.incidentesSev0);
+        setText('val-mttr-sev0', kpis.mttrSev0);
+        setText('val-sev1-incidents', kpis.incidentesSev1);
+        setText('val-mttr-sev1', kpis.mttrSev1);
+
+        // Percentages calculation
+        const total = kpis.incidentesTotal || 0;
+        const setPct = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) {
+                const pct = total > 0 ? ((val / total) * 100).toFixed(1) : "0.0";
+                el.textContent = `(${pct}%)`;
+            }
+        };
+        setPct('val-sev0-pct', kpis.incidentesSev0);
+        setPct('val-sev1-pct', kpis.incidentesSev1);
+    }
+
+    function sortObjByCount(obj) {
+        return Object.keys(obj).sort((a, b) => obj[b].count - obj[a].count);
+    }
+
+    const colorCache = {};
+    const fixedColors = [
+        '#1B472A', '#FF6600', '#6A803E', '#E29627', '#e94839',
+        '#045473', '#C9E055', '#930E44', '#99aedb', '#FFBE28',
+        '#112E22', '#ac2f1c', '#60002C', '#4a1c0e'
+    ];
+
+    function getColorForKey(key) {
+        if (colorCache[key]) return colorCache[key];
+        const existingKeys = Object.keys(colorCache);
+        const colorIndex = existingKeys.length % fixedColors.length;
+        const color = fixedColors[colorIndex];
+        colorCache[key] = color;
+        return color;
+    }
+
+    function renderTechCharts(techMetrics, totalIncidents) {
+        const sortedVol = Object.keys(techMetrics).sort((a, b) => techMetrics[b].count - techMetrics[a].count).slice(0, 10);
+        const labelsVol = sortedVol;
+        const counts = sortedVol.map(k => techMetrics[k].count);
+        const colorsVol = sortedVol.map(k => getColorForKey(k));
+        const drilldownVol = sortedVol.map(k => ({ label: k, breakdown: techMetrics[k].breakdown }));
+
+        createBarChart('chartIncidentsByTech', labelsVol, counts, totalIncidents, 'Incidente', drilldownVol, 'Tech -> Offender', false, colorsVol);
+
+        let setOfKeys = [...sortedVol];
+        setOfKeys.sort((a, b) => {
+            const valA = techMetrics[a].count ? (techMetrics[a].durationMin / techMetrics[a].count) : 0;
+            const valB = techMetrics[b].count ? (techMetrics[b].durationMin / techMetrics[b].count) : 0;
+            return valB - valA;
+        });
+
+        const labelsDur = setOfKeys;
+        const durations = setOfKeys.map(k => {
+            const val = techMetrics[k].count ? (techMetrics[k].durationMin / techMetrics[k].count / 60) : 0;
+            return val.toFixed(2);
+        });
+        const colorsDur = setOfKeys.map(k => getColorForKey(k));
+
+        const drilldownDur = setOfKeys.map(k => ({ label: k, breakdown: techMetrics[k].breakdown }));
+
+        createBarChart('chartDurationByTech', labelsDur, durations, null, 'MTTR (h)', drilldownDur, 'Tech -> Offender', true, colorsDur);
+    }
+
+    function renderOffenderCharts(offenderMetrics, totalIncidents) {
+        const sortedVol = Object.keys(offenderMetrics).sort((a, b) => offenderMetrics[b].count - offenderMetrics[a].count).slice(0, 10);
+        const labelsVol = sortedVol;
+        const counts = sortedVol.map(k => offenderMetrics[k].count);
+        const colorsVol = sortedVol.map(k => getColorForKey(k));
+        const drilldownVol = sortedVol.map(k => ({ label: k, breakdown: offenderMetrics[k].breakdown }));
+
+        createBarChart('chartIncidentsByOffender', labelsVol, counts, totalIncidents, 'Incidente', drilldownVol, 'Offender -> Tech', false, colorsVol);
+
+        let setOfKeys = [...sortedVol];
+        setOfKeys.sort((a, b) => {
+            const valA = offenderMetrics[a].count ? (offenderMetrics[a].durationMin / offenderMetrics[a].count) : 0;
+            const valB = offenderMetrics[b].count ? (offenderMetrics[b].durationMin / offenderMetrics[b].count) : 0;
+            return valB - valA;
+        });
+
+        const labelsDur = setOfKeys;
+        const durations = setOfKeys.map(k => {
+            const val = offenderMetrics[k].count ? (offenderMetrics[k].durationMin / offenderMetrics[k].count / 60) : 0;
+            return val.toFixed(2);
+        });
+        const colorsDur = setOfKeys.map(k => getColorForKey(k));
+
+        const drilldownDur = setOfKeys.map(k => ({ label: k, breakdown: offenderMetrics[k].breakdown }));
+
+        createBarChart('chartDurationByOffender', labelsDur, durations, null, 'MTTR (h)', drilldownDur, 'Offender -> Tech', true, colorsDur);
+    }
+
+    function createBarChart(canvasId, labels, dataArr, totalForPct, labelSuffix, drilldownData, type, isTime = false, customColors = null) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        if (charts[canvasId]) charts[canvasId].destroy();
+
+        charts[canvasId] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: isTime ? 'Horas' : 'Incidentes',
+                    data: dataArr,
+                    backgroundColor: customColors ? customColors : (isTime ? '#e94839' : '#1B472A'),
+                    borderRadius: 4,
+                    barPercentage: 0.6,
+                }]
+            },
+            options: {
+                indexAxis: 'y', // Vertical list is easier to read
+                responsive: true,
+                maintainAspectRatio: false,
+                onClick: (e, activeEls) => {
+                    if (activeEls.length > 0) {
+                        const idx = activeEls[0].index;
+                        const label = labels[idx];
+                        let contextType = canvasId.toLowerCase().includes('tech') ? 'tech' : 'offender';
+                        openIncidentsModal(contextType, label);
+                    }
+                },
+                layout: {
+                    padding: { right: 60 } // Prevent label clipping
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { autoSkip: false },
+                        grace: '15%' // Add extra space at the end of the axis for the labels
+                    },
+                    y: { beginAtZero: true }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: true },
+                    datalabels: {
+                        anchor: 'end', align: 'end',
+                        clip: false,
+                        formatter: (val) => {
+                            if (isTime) return formatDecimalHoursToHHMM(val);
+                            if (totalForPct) {
+                                const pct = ((val / totalForPct) * 100).toFixed(1) + '%';
+                                return `${val} (${pct})`;
+                            }
+                            return val;
+                        },
+                        font: { weight: 'bold', size: 10 },
+                        color: '#334155'
+                    }
+                }
+            }
+        });
+    }
+
+    function renderDrilldown(item, type) {
+        const container = document.getElementById('drilldown-container');
+        const title = document.getElementById('drilldown-title');
+        container.classList.remove('hidden');
+
+        let labelDesc = type === 'Tech -> Offender' ? `Ofensores relacionados à Tecnologia: ${item.label}` : `Tecnologias impactadas pelo Ofensor: ${item.label}`;
+        title.textContent = labelDesc;
+
+        const bd = item.breakdown;
+        const allKeys = Object.keys(bd).sort((a, b) => bd[b].count - bd[a].count);
+
+        let labels = [];
+        let counts = [];
+        let othersDetails = "";
+
+        if (allKeys.length > 10) {
+            labels = allKeys.slice(0, 10);
+            counts = labels.map(k => bd[k].count);
+
+            const othersList = allKeys.slice(10);
+            const othersSum = othersList.reduce((sum, k) => sum + bd[k].count, 0);
+
+            labels.push("Outros");
+            counts.push(othersSum);
+
+            // Build details for tooltip
+            othersDetails = othersList.map(k => `${k}: ${bd[k].count}`).join('\n');
+        } else {
+            labels = allKeys;
+            counts = allKeys.map(k => bd[k].count);
+        }
+
+        const ctx = document.getElementById('drilldownChart').getContext('2d');
+        if (charts['drilldown']) charts['drilldown'].destroy();
+
+        charts['drilldown'] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Incidentes',
+                    data: counts,
+                    backgroundColor: '#6A803E', // Verde Muru-Muru
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: {
+                    padding: { right: 60 } // Prevent label clipping
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        grace: '15%' // Extra space for labels
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            afterBody: function (context) {
+                                if (context[0].label === "Outros" && othersDetails) {
+                                    return "\nDetalhes:\n" + othersDetails;
+                                }
+                                return "";
+                            }
+                        }
+                    },
+                    datalabels: {
+                        anchor: 'end', align: 'end',
+                        color: '#112E22',
+                        font: { weight: 'bold' }
+                    }
+                }
+            }
+        });
+
+        container.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function setupEvolutionToggle() {
+        const container = document.getElementById('evolution-toggle-container');
+        if (!container) return;
+        
+        container.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const group = btn.dataset.group;
+                CURRENT_FILTERS.evolutionGrouping = group;
+                
+                // Update UI active state
+                container.querySelectorAll('button').forEach(b => {
+                    b.classList.remove('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
+                    b.classList.add('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
+                });
+                btn.classList.remove('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
+                btn.classList.add('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
+                
+                // Redraw
+                const data = ALL_DATA.evolutionData[group];
+                if (data) {
+                    drawEvolutionChart(data.metrics, data.mttr, data.title);
+                }
+            });
+        });
+    }
+
+    function drawEvolutionChart(metrics, mttrData, title) {
+        const titleEl = document.getElementById('evolution-chart-title');
+        if (titleEl) titleEl.textContent = title;
+
+        const ctx = document.getElementById('monthlyIncidentsChart').getContext('2d');
+        
+        // Custom order for months to ensure they are sorted correctly
+        const monthsOrder = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+        const quartersOrder = ["Q1", "Q2", "Q3", "Q4"];
+        
+        let labels = [];
+        if (title.includes("Mensal")) {
+            labels = monthsOrder.filter(m => metrics[m] !== undefined);
+        } else if (title.includes("Trimestral")) {
+            labels = quartersOrder.filter(q => metrics[q] !== undefined);
+        } else {
+            // Weekly: Sort by numeric part of "Wn"
+            labels = Object.keys(metrics).sort((a, b) => {
+                const na = parseInt(a.substring(1));
+                const nb = parseInt(b.substring(1));
+                return na - nb;
+            });
+        }
+
+        const displayLabels = labels.map(l => l.charAt(0).toUpperCase() + l.slice(1));
+        const counts = labels.map(l => metrics[l].count);
+        const mttrs = labels.map(l => { const v = mttrData[l]; return v !== undefined ? v.toFixed(2) : 0; });
+
+        // Cálculos para eixos dinâmicos (arredondando para cima nas dezenas)
+        const maxCounts = Math.max(...counts, 0);
+        const maxMTTR = Math.max(...mttrs.map(Number), 0);
+        const axisMaxCounts = Math.ceil((maxCounts + 0.1) / 10) * 10;
+        const axisMaxMTTR = Math.ceil((maxMTTR + 0.1) / 10) * 10;
+
+        if (window.monthlyChartInstance) window.monthlyChartInstance.destroy();
+        window.monthlyChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: displayLabels,
+                datasets: [
+                    {
+                        label: 'Incidentes', data: counts, backgroundColor: '#1B472A', order: 2, yAxisID: 'y-count',
+                        datalabels: {
+                            align: 'end', anchor: 'end', color: '#112E22', formatter: v => v > 0 ? v : ''
+                        }
+                    },
+                    {
+                        label: 'MTTR (h)', data: mttrs, type: 'line', borderColor: '#e94839', backgroundColor: '#e94839', order: 1,
+                        yAxisID: 'y-mttr', datalabels: { display: false }
+                    }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                onClick: (e, activeEls) => {
+                    if (activeEls.length > 0) {
+                        const idx = activeEls[0].index;
+                        const label = displayLabels[idx];
+                        let contextType = 'monthly';
+                        if (title.includes("Semanal")) contextType = 'weekly';
+                        else if (title.includes("Trimestral")) contextType = 'quarterly';
+                        openIncidentsModal(contextType, label);
+                    }
+                },
+                scales: {
+                    'y-count': { 
+                        position: 'left', 
+                        beginAtZero: true, 
+                        grid: { display: false },
+                        max: axisMaxCounts
+                    },
+                    'y-mttr': { 
+                        position: 'right', 
+                        beginAtZero: true, 
+                        grid: { display: true },
+                        max: axisMaxMTTR
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        labels: { boxWidth: 12, padding: 15, font: { size: 11 } }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function (context) {
+                                const label = context.dataset.label || '';
+                                const value = context.parsed.y;
+                                if (context.datasetIndex === 1) {
+                                    const hours = Math.floor(value);
+                                    const minutes = Math.round((value - hours) * 60);
+                                    return `${label}: ${hours}h ${minutes}m`;
+                                }
+                                return `${label}: ${value}`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function initDataStory() {
+        const btn = document.getElementById('btn-data-story');
+        if (!btn) return;
+        
+        // Ativar apenas para 2026 (comparando com 2025)
+        if (CURRENT_FILTERS.year == "2026") {
+            btn.classList.remove('hidden');
+        } else {
+            btn.classList.add('hidden');
+        }
+    
+        btn.onclick = () => {
+            document.getElementById('data-story-modal').classList.remove('hidden');
+            document.getElementById('story-loading').classList.remove('hidden');
+            document.getElementById('story-content').classList.add('hidden');
+            
+            // Lógica de Comparação Espelhada (YTD - Year to Day)
+            const today = new Date();
+            const baseYear = 2025;
+            
+            let start = CURRENT_FILTERS.startDate;
+            let end = CURRENT_FILTERS.endDate;
+            
+            // Mirror today into 2025 for ceiling comparison
+            let mirrorToday = new Date(today);
+            mirrorToday.setFullYear(baseYear);
+    
+            if (CURRENT_FILTERS.periodKey === 'All') {
+                // De 01/01/2025 até hoje/2025
+                let s = new Date(baseYear, 0, 1, 0, 0, 0);
+                start = s.getTime();
+                end = mirrorToday.getTime();
+            } else {
+                // Caso existam datas de filtro (ex: Freeze), espelhamos para 2025
+                if (start) {
+                    let s = new Date(start);
+                    s.setFullYear(baseYear);
+                    start = s.getTime();
+                }
+                if (end) {
+                    let e = new Date(end);
+                    e.setFullYear(baseYear);
+                    // Não comparar contra o futuro: limitamos ao mirrorToday
+                    if (e > mirrorToday) e = mirrorToday;
+                    end = e.getTime();
+                } else if (!end && CURRENT_FILTERS.periodKey) {
+                    // Se não tem end mas tem periodKey, limitamos ao mirrorToday
+                    end = mirrorToday.getTime();
+                }
+            }
+            
+            logDebug(`Requesting baseline story for ${baseYear}. Range: ${start ? new Date(start).toLocaleDateString() : 'Start'} to ${end ? new Date(end).toLocaleDateString() : 'End'}`);
+    
+            // Busca dos dados de 2025 com o intervalo ESPELHADO
+            google.script.run
+                .withSuccessHandler(renderDataStory)
+                .withFailureHandler(e => {
+                    alert("Erro ao buscar histórico: " + e.message);
+                    document.getElementById('data-story-modal').classList.add('hidden');
+                })
+                .getFilteredData(
+                    baseYear,
+                    CURRENT_FILTERS.periodKey,
+                    start,
+                    end,
+                    CURRENT_FILTERS.card
+                );
+        };
+    }
+
+    function parseDataStoryTime(timeStr) {
+        if (!timeStr) return 0;
+        const parts = timeStr.split(':');
+        if (parts.length === 2) {
+            return (parseInt(parts[0], 10) * 60) + parseInt(parts[1], 10);
+        }
+        return 0;
+    }
+
+    function renderDataStory(baselineData) {
+        document.getElementById('story-loading').classList.add('hidden');
+        document.getElementById('story-content').classList.remove('hidden');
+        
+        const curr = ALL_DATA.currentKpis;
+        const volCurr = curr.incidentesTotal || 0;
+        const mttrCurrMin = parseDataStoryTime(curr.mttrTotal);
+
+        // --- PREPARAÇÃO DE DADOS (COMUM) ---
+        const group = CURRENT_FILTERS.evolutionGrouping || 'monthly';
+        const currMetrics = ALL_DATA.evolutionData[group].metrics;
+        const currMttr = ALL_DATA.evolutionData[group].mttr;
+        
+        let prevMetrics = {};
+        let prevMttrMap = {};
+        let titleLabel = "";
+
+        if (group === 'monthly') {
+            prevMetrics = baselineData.monthlyMetrics;
+            prevMttrMap = baselineData.mttrPorMesEmHoras;
+            titleLabel = "Análise Mensal";
+        } else if (group === 'quarterly') {
+            prevMetrics = baselineData.quarterlyMetrics;
+            prevMttrMap = baselineData.mttrTrimestralEmHoras;
+            titleLabel = "Análise Trimestral";
+        } else {
+            prevMetrics = baselineData.weeklyMetrics;
+            prevMttrMap = baselineData.mttrSemanalEmHoras;
+            titleLabel = "Análise Semanal";
+        }
+
+        // --- AGREGACAO PARA COMPARACAO JUSTA (PERIODO VS PERIODO) ---
+        // Descobrir quais chaves (meses/semanas) tem dados em 2026
+        const activeKeys = Object.keys(currMetrics).filter(k => currMetrics[k].count > 0);
+        
+        let volPrev = 0;
+        let fairTotalDurationMinPrev = 0;
+
+        activeKeys.forEach(k => {
+            if (prevMetrics[k]) {
+                volPrev += prevMetrics[k].count;
+                fairTotalDurationMinPrev += prevMetrics[k].durationMin;
+            }
+        });
+
+        const mttrPrevMin = volPrev > 0 ? (fairTotalDurationMinPrev / volPrev) : 0;
+        const formatMttr = (totalMin) => {
+            const h = Math.floor(totalMin / 60);
+            const m = Math.round(totalMin % 60);
+            return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        };
+        const mttrPrevFormatted = formatMttr(mttrPrevMin);
+        
+        let volDiff = volCurr - volPrev;
+        let volDiffPct = volPrev > 0 ? (volDiff / volPrev) * 100 : (volCurr > 0 ? 100 : 0);
+        
+        let mttrDiff = mttrCurrMin - mttrPrevMin;
+        let mttrDiffPct = mttrPrevMin > 0 ? (mttrDiff / mttrPrevMin) * 100 : (mttrCurrMin > 0 ? 100 : 0);
+        
+        // Define situation
+        let isBetter = (volCurr <= volPrev && mttrCurrMin < mttrPrevMin) || (volCurr < volPrev && mttrCurrMin <= mttrPrevMin);
+        let isWorse = (volCurr > volPrev && volDiffPct > 10) || (mttrCurrMin > mttrPrevMin && mttrDiffPct > 10);
+        
+        let headline = "";
+        let alertClass = "";
+        let alertBg = "";
+        
+        if (isBetter) {
+            headline = "🎉 Excelente! Reduzimos o volume e o tempo de impacto em relação ao mesmo período de 2025.";
+            alertClass = "border-natura-green-cerrado";
+            alertBg = "bg-natura-green-capim/20";
+        } else if (isWorse) {
+            headline = "⚠️ Atenção: Há um aumento nos incidentes ou no tempo de resposta contra o mesmo período de 2025.";
+            alertClass = "border-natura-red-buriti";
+            alertBg = "bg-natura-red-buriti/10";
+        } else {
+            headline = "📊 Estabilidade: Os resultados atuais estão alinhados historicamente com o mesmo período de 2025.";
+            alertClass = "border-natura-blue-profundo";
+            alertBg = "bg-natura-blue-ceu/20";
+        }
+        
+        const box = document.getElementById('story-alert-box');
+        box.className = `border-l-4 p-4 rounded-r-xl shadow-sm transition-all mb-2 ${alertClass} ${alertBg}`;
+        document.getElementById('story-headline').textContent = headline;
+        
+        // Update DOM Elements
+        document.getElementById('story-vol-curr').textContent = volCurr;
+        document.getElementById('story-vol-prev').textContent = volPrev;
+        const volEl = document.getElementById('story-vol-diff');
+        
+        if (volDiff > 0) {
+            volEl.innerHTML = `<span class="text-natura-red-buriti">↑ +${volDiffPct.toFixed(1)}%</span>`;
+        } else if (volDiff < 0) {
+            volEl.innerHTML = `<span class="text-natura-green-cerrado">↓ ${Math.abs(volDiffPct).toFixed(1)}%</span>`;
+        } else {
+            volEl.innerHTML = `<span class="text-slate-400">= 0%</span>`;
+        }
+        
+        document.getElementById('story-mttr-curr').textContent = curr.mttrTotal;
+        document.getElementById('story-mttr-prev').textContent = mttrPrevFormatted;
+        const mttrEl = document.getElementById('story-mttr-diff');
+        
+        if (mttrDiff > 0) {
+            mttrEl.innerHTML = `<span class="text-natura-red-buriti">↑ +${mttrDiffPct.toFixed(1)}%</span>`;
+        } else if (mttrDiff < 0) {
+            mttrEl.innerHTML = `<span class="text-natura-green-cerrado">↓ ${Math.abs(mttrDiffPct).toFixed(1)}%</span>`;
+        } else {
+            mttrEl.innerHTML = `<span class="text-slate-400">= 0%</span>`;
+        }
+        
+        // Build summary paragraph
+        let summary = `Comparando exclusivamente os mesmos períodos do ano anterior, observamos que o volume de Major Incidentes `;
+        if (volDiffPct !== 0) {
+            summary += `${volDiff > 0 ? 'cresceu' : 'caiu'} em ${Math.abs(volDiffPct).toFixed(1)}%, passando de ${volPrev} para ${volCurr}. `;
+        } else {
+            summary += `manteve-se idêntico (${volCurr} incidentes). `;
+        }
+        
+        summary += `Enquanto isso, a velocidade de recuperação (MTTR) `;
+        if (mttrDiffPct !== 0) {
+            summary += `${mttrDiff > 0 ? 'piorou' : 'melhorou'} em ${Math.abs(mttrDiffPct).toFixed(1)}%, mudando de ${mttrPrevFormatted} para ${curr.mttrTotal}.`;
+        } else {
+            summary += `está rigorosamente igual (${curr.mttrTotal}).`;
+        }
+        
+        document.getElementById('story-summary').textContent = summary;
+        
+        // --- BREAKDOWN SECTION ---
+        // Ordenação das chaves já identificadas como ativas
+        if (group === 'monthly') {
+            const monthsOrder = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+            activeKeys.sort((a, b) => monthsOrder.indexOf(a) - monthsOrder.indexOf(b));
+        } else if (group === 'quarterly') {
+            activeKeys.sort();
+        } else {
+            activeKeys.sort((a, b) => parseInt(a.substring(1)) - parseInt(b.substring(1)));
+        }
+
+        let html = "";
+        if (activeKeys.length === 0) {
+            html = `<p class="text-[11px] text-slate-500 italic p-3 text-center border border-dashed border-slate-200 rounded-lg">Nenhum dado do período vigente encontrado para comparar.</p>`;
+        } else {
+            activeKeys.forEach(k => {
+                const cVol = currMetrics[k] ? currMetrics[k].count : 0;
+                const pVol = prevMetrics[k] ? prevMetrics[k].count : 0;
+                
+                const cMttr = currMttr[k] || 0;
+                const pMttr = prevMttrMap[k] || 0;
+                
+                const fmtMttr = (val) => {
+                    const h = Math.floor(val);
+                    const m = Math.round((val - h) * 60);
+                    return `${h}h ${m}m`;
+                };
+                
+                let volDiffLocal = cVol - pVol;
+                let mttrDiffLocal = cMttr - pMttr;
+                
+                let volDiffLocalPct = pVol > 0 ? (volDiffLocal / pVol) * 100 : (cVol > 0 ? 100 : 0);
+                let mttrDiffLocalPct = pMttr > 0 ? (mttrDiffLocal / pMttr) * 100 : (cMttr > 0 ? 100 : 0);
+                
+                let volBadge = volDiffLocal > 0 ? `<span class="text-natura-red-buriti font-bold">↑ +${volDiffLocal} (+${Math.abs(volDiffLocalPct).toFixed(1)}%)</span>` : (volDiffLocal < 0 ? `<span class="text-natura-green-cerrado font-bold">↓ ${Math.abs(volDiffLocal)} (-${Math.abs(volDiffLocalPct).toFixed(1)}%)</span>` : `<span class="text-slate-400">=</span>`);
+                let mttrBadge = mttrDiffLocal > 0 ? `<span class="text-natura-red-buriti font-bold">↑ +${fmtMttr(mttrDiffLocal)} (+${Math.abs(mttrDiffLocalPct).toFixed(1)}%)</span>` : (mttrDiffLocal < 0 ? `<span class="text-natura-green-cerrado font-bold">↓ ${fmtMttr(Math.abs(mttrDiffLocal))} (-${Math.abs(mttrDiffLocalPct).toFixed(1)}%)</span>` : `<span class="text-slate-400">=</span>`);
+
+                const displayLabel = k.charAt(0).toUpperCase() + k.slice(1);
+                
+                html += `
+                <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[inset_0_2px_4px_rgba(0,0,0,0.01)] hover:bg-white transition-colors">
+                    <span class="font-bold text-slate-700 w-28 shrink-0 flex items-center gap-2"><div class="w-1.5 h-1.5 rounded-full bg-slate-300"></div>${displayLabel}</span>
+                    <div class="flex-1 grid grid-cols-2 gap-4 text-xs bg-white p-2 rounded shadow-sm border border-slate-100">
+                        <div class="flex items-center justify-between">
+                            <div>
+                               <span class="text-slate-400 uppercase tracking-widest text-[9px] block mb-0.5">Incidentes</span>
+                               <div class="flex items-baseline gap-1">
+                                    <span class="font-bold text-slate-800 text-[13px]">${cVol}</span>
+                                    <span class="text-slate-400 text-[9px]">vs ${pVol}</span>
+                               </div>
+                            </div>
+                            <div class="text-right text-[11px]">${volBadge}</div>
+                        </div>
+                        <div class="flex items-center justify-between pl-3 border-l border-slate-100">
+                            <div>
+                               <span class="text-slate-400 uppercase tracking-widest text-[9px] block mb-0.5">MTTR</span>
+                               <div class="flex items-baseline gap-1">
+                                    <span class="font-bold text-slate-800 text-[13px]">${fmtMttr(cMttr)}</span>
+                                    <span class="text-slate-400 text-[9px]">vs ${fmtMttr(pMttr)}</span>
+                               </div>
+                            </div>
+                            <div class="text-right text-[11px]">${mttrBadge}</div>
+                        </div>
+                    </div>
+                </div>
+                `;
+            });
+        }
+        document.getElementById('story-breakdown-title').textContent = `Comparação Exata por Período (${titleLabel})`;
+        document.getElementById('story-breakdown-list').innerHTML = html;
+    }
+
+    function handleError(e) { console.error(e); }
+
+    let RANKING_STATE = {
+        category: 'tech', 
+        type: 'vol',
+        context: 'vol',
+        searchQuery: ''
+    };
+
+    function openRankingModal(type) {
+        const parts = type.split('_');
+        RANKING_STATE.category = parts[0];
+        RANKING_STATE.type = parts[1];
+        RANKING_STATE.context = parts[1];
+        RANKING_STATE.searchQuery = '';
+        
+        // Reset Search Input
+        const searchInput = document.getElementById('ranking-search');
+        if (searchInput) searchInput.value = '';
+
+        const modal = document.getElementById('ranking-modal');
+        const toggleWrapper = document.getElementById('ranking-toggle-wrapper');
+        
+        if (toggleWrapper) {
+            if (RANKING_STATE.context === 'mttr') {
+                toggleWrapper.classList.remove('hidden');
+                toggleWrapper.classList.add('flex');
+            } else {
+                toggleWrapper.classList.add('hidden');
+                toggleWrapper.classList.remove('flex');
+            }
+        }
+
+        modal.classList.remove('hidden');
+        setTimeout(() => {
+            modal.classList.add('opacity-100');
+            modal.classList.remove('opacity-0');
+        }, 10);
+
+        renderRanking();
+    }
+
+    function switchRanking(newType) {
+        if (RANKING_STATE.type === newType) return;
+        RANKING_STATE.type = newType;
+        renderRanking();
+    }
+
+    function renderRanking() {
+        const { category, type, context, searchQuery } = RANKING_STATE;
+        const titleEl = document.getElementById('ranking-modal-title');
+        const listEl = document.getElementById('ranking-list');
+        const btnVol = document.getElementById('btn-ranking-vol');
+        const btnMttr = document.getElementById('btn-ranking-mttr');
+
+        if (btnVol && btnMttr) {
+            [btnVol, btnMttr].forEach(btn => {
+                btn.classList.remove('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'text-slate-500');
+            });
+
+            if (type === 'vol') {
+                btnVol.classList.add('bg-white', 'text-natura-green-cerrado', 'shadow-sm');
+                btnMttr.classList.add('text-slate-500');
+            } else {
+                btnMttr.classList.add('bg-white', 'text-natura-green-cerrado', 'shadow-sm');
+                btnVol.classList.add('text-slate-500');
+            }
+        }
+
+        listEl.innerHTML = '';
+        
+        let dataObj = category === 'tech' ? ALL_DATA.techMetrics : ALL_DATA.offenderMetrics;
+        if (!dataObj) return;
+
+        titleEl.textContent = `Ranking: ${category === 'tech' ? 'Tecnologia' : 'Ofensor'}`;
+        
+        let sortFn;
+        if (type === 'vol') {
+            sortFn = (a, b) => dataObj[b].count - dataObj[a].count;
+        } else {
+            sortFn = (a, b) => {
+                const valA = dataObj[a].count ? (dataObj[a].durationMin / dataObj[a].count) : 0;
+                const valB = dataObj[b].count ? (dataObj[b].durationMin / dataObj[b].count) : 0;
+                return valB - valA;
+            };
+        }
+        
+        let sortedKeys = Object.keys(dataObj).sort(sortFn);
+        
+        // Filter by Search Query
+        if (searchQuery) {
+            sortedKeys = sortedKeys.filter(k => k.toLowerCase().includes(searchQuery));
+        }
+
+        const totalIncidents = (ALL_DATA.currentKpis && ALL_DATA.currentKpis.incidentesTotal) || 1;
+        
+        if (sortedKeys.length === 0) {
+            listEl.innerHTML = `<div class="col-span-full text-center py-10 text-slate-400 italic">Nenhum resultado encontrado para "${searchQuery}"</div>`;
+            return;
+        }
+
+        sortedKeys.forEach((key, index) => {
+            const count = dataObj[key].count;
+            const pct = ((count / totalIncidents) * 100).toFixed(1);
+            
+            let mainValue = '';
+            let subValue = '';
+
+            if (context === 'mttr') {
+                const avgMin = count ? (dataObj[key].durationMin / count) : 0;
+                mainValue = formatMinutesToHHMM(avgMin);
+                subValue = `${count} Inc. | ${pct}%`;
+            } else {
+                mainValue = `${count}`;
+                subValue = `${pct}% do total`;
+            }
+            
+            const itemHtml = `
+                <div class="flex justify-between items-center py-2 px-3 border border-slate-100 hover:border-natura-orange/30 hover:bg-white rounded-lg transition-all bg-white/50 shadow-sm">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <div class="flex-none w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 text-[10px] font-bold border border-slate-200">
+                            ${index + 1}
+                        </div>
+                        <div class="flex flex-col min-w-0">
+                            <span class="font-bold text-slate-700 text-xs truncate uppercase leading-tight" title="${key}">${key}</span>
+                            <span class="text-[9px] text-slate-400 font-bold uppercase tracking-tight">${subValue}</span>
+                        </div>
+                    </div>
+                    <span class="flex-none font-black text-natura-orange whitespace-nowrap text-sm ml-2">
+                        ${mainValue}
+                    </span>
+                </div>
+            `;
+            listEl.innerHTML += itemHtml;
+        });
+    }
+
+    function closeRankingModal() {
+        const modal = document.getElementById('ranking-modal');
+        modal.classList.remove('opacity-100');
+        modal.classList.add('opacity-0');
+        setTimeout(() => {
+            modal.classList.add('hidden');
+        }, 300);
+    }
+
+    const FLAG_MAP = {
+        'BR': 'br', 'CO': 'co', 'AR': 'ar', 'CL': 'cl', 'EQ': 'ec',
+        'PE': 'pe', 'MX': 'mx', 'GT': 'gt', 'HN': 'hn', 'NI': 'ni',
+        'PA': 'pa', 'DO': 'do', 'SV': 'sv', 'UR': 'uy'
+    };
+
+    function renderFlags(abrangenciaStr) {
+        if (!abrangenciaStr || abrangenciaStr === 'N/A') return 'N/A';
+        const countries = abrangenciaStr.split(',').map(s => s.trim().toUpperCase());
+        return `<div class="flex flex-wrap gap-2 mt-1">` + countries.map(c => {
+            const iso = FLAG_MAP[c];
+            if (iso) {
+                return `<span title="${c}" class="inline-flex items-center gap-2 bg-white border border-slate-200 px-2 py-1 rounded shadow-sm">
+                            <img src="https://flagcdn.com/w40/${iso}.png" width="18" height="12" alt="${c}" class="rounded-xs shadow-xs object-cover">
+                            <span class="font-bold text-slate-700 text-[11px]">${c}</span>
+                        </span>`;
+            }
+            return `<span class="bg-white border border-slate-200 px-2 py-1 rounded text-slate-700 font-bold text-[11px] shadow-sm">${c}</span>`;
+        }).join('') + `</div>`;
+    }
+
+    const JORNADA_MAP = {
+        'O&L': { label: 'Operação & Logística', color: 'bg-blue-50 text-blue-800 border-blue-200', icon: '📦' },
+        'JCB': { label: 'Jornada da Consultora de Beleza', color: 'bg-pink-50 text-pink-800 border-pink-200', icon: '💄' },
+        'JCF': { label: 'Jornada do Consumidor Final', color: 'bg-purple-50 text-purple-800 border-purple-200', icon: '🛒' },
+        'Varejo': { label: 'Varejo', color: 'bg-emerald-50 text-emerald-800 border-emerald-200', icon: '🏪' },
+        'Planejamento Logístico': { label: 'Planejamento Logístico', color: 'bg-amber-50 text-amber-800 border-amber-200', icon: '📋' },
+        'Corporativo/BackOffice': { label: 'Corporativo/BackOffice', color: 'bg-slate-100 text-slate-800 border-slate-300', icon: '🏢' }
+    };
+
+    function renderJornadas(jornadaStr) {
+        if (!jornadaStr || jornadaStr === 'N/A') return '-';
+        const jornadas = jornadaStr.split(',').map(s => s.trim());
+        return `<div class="flex flex-wrap gap-2 mt-1">` + jornadas.map(j => {
+            let keyMatch = Object.keys(JORNADA_MAP).find(k => k.toLowerCase() === j.toLowerCase());
+            let mapped = keyMatch ? JORNADA_MAP[keyMatch] : { label: j, color: 'bg-slate-50 text-slate-700 border-slate-200', icon: '🔹' };
+            
+            return `<span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-bold border shadow-sm ${mapped.color}">
+                        <span>${mapped.icon}</span>
+                        <span>${mapped.label}</span>
+                    </span>`;
+        }).join('') + `</div>`;
+    }
+
+    function openIncidentsModal(contextType, contextLabel) {
+        if (contextType === 'offender' && contextLabel === 'Mudança') {
+            openMudancaModal();
+            return;
+        }
+
+        const modal = document.getElementById('incidents-details-modal');
+        const titleEl = document.getElementById('incidents-modal-title');
+        const listEl = document.getElementById('incidents-list');
+
+        if (!modal || !ALL_DATA.rawIncidents) return;
+
+        let filtered = [];
+        let displayTitle = `Incidentes`;
+
+        if (contextType === 'monthly') {
+            filtered = ALL_DATA.rawIncidents.filter(inc => inc.mes === contextLabel.toLowerCase());
+            displayTitle = `Incidentes - ${contextLabel}`;
+        } else if (contextType === 'weekly') {
+            filtered = ALL_DATA.rawIncidents.filter(inc => inc.weekLabel.toLowerCase() === contextLabel.toLowerCase());
+            displayTitle = `Incidentes - ${contextLabel}`;
+        } else if (contextType === 'quarterly') {
+            filtered = ALL_DATA.rawIncidents.filter(inc => inc.quarterLabel.toLowerCase() === contextLabel.toLowerCase());
+            displayTitle = `Incidentes - ${contextLabel}`;
+        } else if (contextType === 'tech') {
+            filtered = ALL_DATA.rawIncidents.filter(inc => inc.tech === contextLabel);
+            displayTitle = `Incidentes - Tecnologia: ${contextLabel}`;
+        } else if (contextType === 'offender') {
+            filtered = ALL_DATA.rawIncidents.filter(inc => inc.offender === contextLabel);
+            displayTitle = `Incidentes - Ofensor: ${contextLabel}`;
+        } else if (contextType === 'concessao') {
+            filtered = ALL_DATA.rawIncidents.filter(inc => inc.id === contextLabel);
+            displayTitle = `Detalhes do Incidente Anistiado`;
+        }
+
+        titleEl.textContent = displayTitle;
+        listEl.innerHTML = '';
+
+        filtered.sort((a, b) => b.dataAberturaTimestamp - a.dataAberturaTimestamp);
+
+        if (filtered.length === 0) {
+            listEl.innerHTML = `<div class="text-sm text-slate-500 italic p-4 text-center">Nenhum incidente encontrado para este filtro.</div>`;
+        } else {
+            const cardsHtml = filtered.map(inc => `
+                <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+                    <div class="flex flex-col sm:flex-row justify-between items-start mb-4 gap-2">
+                        <div class="flex items-center gap-3">
+                            <h3 class="text-lg font-bold text-slate-800">${inc.id}</h3>
+                            <span class="px-2 py-1 text-xs font-bold rounded-md ${inc.severidade.startsWith('0') ? 'bg-natura-red-buriti/10 text-natura-red-buriti' : 'bg-natura-orange/10 text-natura-orange'}">
+                                SEV ${inc.severidade}
+                            </span>
+                        </div>
+                        <div class="text-xs text-slate-500 sm:text-right flex flex-col gap-0.5">
+                            <p><span class="font-bold text-slate-600">Abertura:</span> ${inc.dataDefinicao}</p>
+                            <p><span class="font-bold text-slate-600">Encerramento:</span> ${inc.dataEncerramento}</p>
+                            <p class="text-natura-green-cerrado font-bold text-sm mt-1">TTR: ${inc.ttr}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mt-4 pt-4 border-t border-slate-100">
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Abrangência</p>
+                            <p class="text-slate-700 font-medium">${renderFlags(inc.abrangencia)}</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Jornada Impactada</p>
+                            ${renderJornadas(inc.jornada)}
+                        </div>
+                        <div class="md:col-span-2">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Descrição do Impacto</p>
+                            <p class="text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100 leading-relaxed text-xs">${inc.descImpacto}</p>
+                        </div>
+                        <div class="md:col-span-2">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Descrição do Ofensor</p>
+                            <div class="bg-slate-50 p-3 rounded-lg border border-slate-100 leading-relaxed text-xs">
+                                <span class="font-bold text-slate-800 text-sm block mb-1">${inc.offender}</span>
+                                <span class="text-slate-700">${inc.descOfensor}</span>
+                            </div>
+                        </div>
+                        <div class="md:col-span-2">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Solução Aplicada</p>
+                            <p class="text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100 leading-relaxed text-xs">${inc.solucao}</p>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            listEl.innerHTML = cardsHtml;
+        }
+
+        modal.classList.remove('hidden');
+        setTimeout(() => modal.classList.remove('opacity-0'), 10);
+    }
+
+    function closeIncidentsModal() {
+        const modal = document.getElementById('incidents-details-modal');
+        if (modal) {
+            modal.classList.add('opacity-0');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+    }
+
+    // --- MUDANÇA ANALYTICS LOGIC ---
+    let GLOBAL_MUDANCA_DATA = null;
+    let MUDANCA_CHART = null;
+    let MUDANCA_EVOLUTION_GROUPING = 'monthly';
+    let MUDANCA_ACTIVE_TAB = 'geral';
+
+    function openMudancaModal() {
+        const loader = document.getElementById('loader-container');
+        if (loader) {
+            loader.classList.remove('hidden');
+            loader.style.opacity = "1";
+        }
+
+        // Fetch data from backend with a tiny delay to ensure loader is painted
+        setTimeout(() => {
+            google.script.run
+                .withSuccessHandler(data => {
+                if (loader) loader.classList.add('hidden');
+                if (data.error) {
+                    alert("Erro ao carregar dados de Mudança: " + data.error);
+                    return;
+                }
+                GLOBAL_MUDANCA_DATA = data;
+                
+                const modal = document.getElementById('mudanca-details-modal');
+                modal.classList.remove('hidden');
+                setTimeout(() => modal.classList.remove('opacity-0'), 10);
+
+                // Default to first tab
+                switchMudancaTab('detalhes');
+            })
+            .withFailureHandler(e => {
+                if (loader) loader.classList.add('hidden');
+                alert("Falha na comunicação: " + e.message);
+            })
+            .getMudancaAnalytics(CURRENT_FILTERS.year, CURRENT_FILTERS.periodKey, CURRENT_FILTERS.startDate, CURRENT_FILTERS.endDate);
+        }, 50);
+    }
+
+    function closeMudancaModal() {
+        const modal = document.getElementById('mudanca-details-modal');
+        if (modal) {
+            modal.classList.add('opacity-0');
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+    }
+
+    function switchMudancaTab(tabName) {
+        if (tabName !== 'detalhes') MUDANCA_ACTIVE_TAB = tabName;
+        // Update Buttons
+        const tabs = ['detalhes', 'geral', 'deploys', 'tradicionais', 'normais', 'urgente', 'emergencial'];
+        tabs.forEach(t => {
+            const btn = document.getElementById(`tab-btn-mudanca-${t}`);
+            if (!btn) return;
+            if (t === tabName) {
+                btn.className = "px-4 py-2 text-sm font-bold border-b-2 border-natura-orange text-natura-orange transition-colors";
+            } else {
+                btn.className = "px-4 py-2 text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-colors";
+            }
+        });
+
+        // Hide contents
+        document.getElementById('tab-content-mudanca-detalhes').classList.add('hidden');
+        document.getElementById('tab-content-mudanca-detalhes').classList.remove('block');
+        document.getElementById('tab-content-mudanca-analytics').classList.add('hidden');
+        document.getElementById('tab-content-mudanca-analytics').classList.remove('block');
+
+        if (tabName === 'detalhes') {
+            document.getElementById('tab-content-mudanca-detalhes').classList.add('block');
+            document.getElementById('tab-content-mudanca-detalhes').classList.remove('hidden');
+            renderMudancaDetalhes();
+        } else {
+            document.getElementById('tab-content-mudanca-analytics').classList.add('block');
+            document.getElementById('tab-content-mudanca-analytics').classList.remove('hidden');
+            renderMudancaAnalytics(tabName);
+        }
+    }
+
+    function switchMudancaEvolution(group) {
+        MUDANCA_EVOLUTION_GROUPING = group;
+        const btns = ['weekly', 'monthly', 'quarterly'];
+        btns.forEach(b => {
+            const btn = document.getElementById(`mudanca-btn-${b}`);
+            if (!btn) return;
+            if (b === group) {
+                btn.className = "px-3 py-1 text-[10px] font-bold rounded-md bg-white shadow-sm text-natura-orange transition-colors";
+            } else {
+                btn.className = "px-3 py-1 text-[10px] font-bold rounded-md text-slate-500 transition-colors";
+            }
+        });
+        renderMudancaAnalytics(MUDANCA_ACTIVE_TAB);
+    }
+
+
+    function renderMudancaDetalhes() {
+        const listEl = document.getElementById('mudanca-incidents-list');
+        if (!listEl || !ALL_DATA.rawIncidents) return;
+
+        // Get selected SM Types
+        const checkboxes = document.querySelectorAll('#mudanca-filter-sm-types input[type="checkbox"]');
+        const selectedTypes = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+
+        let filtered = ALL_DATA.rawIncidents.filter(inc => {
+            if (inc.offender !== 'Mudança') return false;
+            // If nothing selected, show nothing
+            if (selectedTypes.length === 0) return false;
+            
+            const incType = String(inc.tipoSm || "").toUpperCase();
+            // Match against selected types
+            return selectedTypes.some(t => incType.includes(t));
+        });
+        
+        filtered.sort((a, b) => b.dataAberturaTimestamp - a.dataAberturaTimestamp);
+
+        if (filtered.length === 0) {
+            listEl.innerHTML = `<div class="col-span-full text-sm text-slate-500 italic p-4 text-center">Nenhum incidente de mudança encontrado.</div>`;
+            return;
+        }
+
+        const cardsHtml = filtered.map(inc => `
+            <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+                <div class="flex flex-col sm:flex-row justify-between items-start mb-4 gap-2">
+                    <div class="flex items-center gap-3">
+                        <h3 class="text-lg font-bold text-slate-800">${inc.id}</h3>
+                        <span class="px-2 py-1 text-xs font-bold rounded-md ${inc.severidade.startsWith('0') ? 'bg-natura-red-buriti/10 text-natura-red-buriti' : 'bg-natura-orange/10 text-natura-orange'}">
+                            SEV ${inc.severidade}
+                        </span>
+                    </div>
+                    <div class="text-xs text-slate-500 sm:text-right flex flex-col gap-0.5">
+                        <p><span class="font-bold text-slate-600">Abertura:</span> ${inc.dataDefinicao}</p>
+                        <p><span class="font-bold text-slate-600">Encerramento:</span> ${inc.dataEncerramento}</p>
+                        <p class="text-natura-green-cerrado font-bold text-sm mt-1">TTR: ${inc.ttr}</p>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mt-4 pt-4 border-t border-slate-100">
+                    <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Abrangência</p>
+                        <p class="text-slate-700 font-medium">${renderFlags(inc.abrangencia)}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Jornada Impactada</p>
+                        ${renderJornadas(inc.jornada)}
+                    </div>
+                    <div class="md:col-span-2">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Descrição do Impacto</p>
+                        <p class="text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100 leading-relaxed text-xs">${inc.descImpacto}</p>
+                    </div>
+                    <div class="md:col-span-2">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Descrição do Ofensor</p>
+                        <div class="bg-slate-50 p-3 rounded-lg border border-slate-100 leading-relaxed text-xs">
+                            <span class="font-bold text-slate-800 text-sm block mb-1">${inc.offender}</span>
+                            <span class="text-slate-700">${inc.descOfensor}</span>
+                        </div>
+                    </div>
+                    <div class="md:col-span-2">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Solução Aplicada</p>
+                        <p class="text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100 leading-relaxed text-xs">${inc.solucao}</p>
+                    </div>
+                    
+                    <!-- NOVOS CAMPOS DE MUDANÇA -->
+                    <div class="md:col-span-2 grid grid-cols-2 gap-4 mt-2 border-t border-slate-100 pt-4">
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tipo de SM</p>
+                            <p class="text-slate-700 font-bold bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 inline-block">${inc.tipoSm}</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Número da SM</p>
+                            <p class="text-slate-700 font-bold bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 inline-block">${inc.numSm}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        
+        listEl.innerHTML = cardsHtml;
+    }
+
+    function renderMudancaAnalytics(categoryKey) {
+        if (!GLOBAL_MUDANCA_DATA) return;
+        
+        const data26 = GLOBAL_MUDANCA_DATA.year26[categoryKey];
+        if (!data26) return;
+
+        // 1. Render KPIs
+        document.getElementById('mudanca-kpi-total').textContent = data26.kpis.incidentesTotal;
+        document.getElementById('mudanca-kpi-mttr-total').textContent = data26.kpis.mttrTotal;
+        
+        document.getElementById('mudanca-kpi-sev0').textContent = data26.kpis.incidentesSev0;
+        document.getElementById('mudanca-kpi-mttr-sev0').textContent = data26.kpis.mttrSev0;
+        
+        document.getElementById('mudanca-kpi-sev1').textContent = data26.kpis.incidentesSev1;
+        document.getElementById('mudanca-kpi-mttr-sev1').textContent = data26.kpis.mttrSev1;
+
+        // 2. Render Evolution Chart
+        const group = MUDANCA_EVOLUTION_GROUPING;
+        let metrics, mttr, title;
+        let prevMetricsHist = null;
+        if (group === 'monthly') {
+            metrics = data26.monthlyMetrics;
+            mttr = data26.mttrPorMesEmHoras;
+            title = "Evolução Mensal";
+            if (GLOBAL_MUDANCA_DATA.year25) prevMetricsHist = GLOBAL_MUDANCA_DATA.year25.ytd[categoryKey].monthlyMetrics;
+        } else if (group === 'weekly') {
+            metrics = data26.weeklyMetrics;
+            mttr = data26.mttrSemanalEmHoras;
+            title = "Evolução Semanal";
+            if (GLOBAL_MUDANCA_DATA.year25) prevMetricsHist = GLOBAL_MUDANCA_DATA.year25.ytd[categoryKey].weeklyMetrics;
+        } else {
+            metrics = data26.quarterlyMetrics;
+            mttr = data26.mttrTrimestralEmHoras;
+            title = "Evolução Trimestral";
+            if (GLOBAL_MUDANCA_DATA.year25) prevMetricsHist = GLOBAL_MUDANCA_DATA.year25.ytd[categoryKey].quarterlyMetrics;
+        }
+
+        document.getElementById('mudanca-chart-title').textContent = title;
+
+        const ctx = document.getElementById('mudanca-chart-evolution');
+        if (MUDANCA_CHART) MUDANCA_CHART.destroy();
+
+        // Sort labels chronologically
+        const labels = Object.keys(metrics).sort((a, b) => {
+            if (group === 'monthly') {
+                const monthOrder = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+                return monthOrder.indexOf(a.toLowerCase()) - monthOrder.indexOf(b.toLowerCase());
+            } else if (group === 'weekly') {
+                const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+                const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+                return numA - numB;
+            } else if (group === 'quarterly') {
+                return a.localeCompare(b);
+            }
+            return 0;
+        });
+
+        const displayLabels = labels.map(l => l.charAt(0).toUpperCase() + l.slice(1));
+        const volumeData = labels.map(l => metrics[l].count);
+        const mttrData = labels.map(l => mttr[l]);
+
+        if (labels.length === 0) {
+            ctx.parentNode.innerHTML = `<div class="absolute inset-0 flex items-center justify-center text-slate-400 italic text-sm">Sem dados para evolução.</div><canvas id="mudanca-chart-evolution" class="hidden"></canvas>`;
+            document.getElementById('mudanca-history-container').innerHTML = `<div class="text-sm text-slate-400 italic text-center">Indisponível.</div>`;
+            return;
+        } else {
+            // Restore canvas if it was replaced
+            const parent = ctx.parentNode;
+            if (parent.querySelector('div')) {
+                parent.innerHTML = `<canvas id="mudanca-chart-evolution"></canvas>`;
+            }
+        }
+
+        const newCtx = document.getElementById('mudanca-chart-evolution').getContext('2d');
+        MUDANCA_CHART = new Chart(newCtx, {
+            type: 'bar',
+            data: {
+                labels: displayLabels,
+                datasets: [
+                    {
+                        type: 'line',
+                        label: 'MTTR (h)',
+                        data: mttrData,
+                        borderColor: '#FF7B00',
+                        backgroundColor: '#FF7B00',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        yAxisID: 'y1',
+                        datalabels: {
+                            display: true,
+                            align: 'top',
+                            color: '#FF7B00',
+                            font: { weight: 'bold', size: 10 },
+                            formatter: (value) => {
+                                const totalMin = Math.round(value * 60);
+                                const h = Math.floor(totalMin / 60);
+                                const m = totalMin % 60;
+                                return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                            }
+                        }
+                    },
+                    {
+                        type: 'bar',
+                        label: 'Volume',
+                        data: volumeData,
+                        backgroundColor: '#F2D399',
+                        borderRadius: 4,
+                        yAxisID: 'y',
+                        datalabels: {
+                            display: true,
+                            anchor: 'end',
+                            align: 'top',
+                            color: '#888',
+                            font: { size: 10 }
+                        }
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { 
+                    legend: { position: 'bottom' },
+                    datalabels: {
+                        display: false // Disable by default, enable per dataset
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.dataset.yAxisID === 'y1') {
+                                    const decimalHours = context.parsed.y;
+                                    const totalMin = Math.round(decimalHours * 60);
+                                    const h = Math.floor(totalMin / 60);
+                                    const m = totalMin % 60;
+                                    label += `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                                } else {
+                                    label += context.parsed.y;
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, position: 'left', title: { display: true, text: 'Volume' } },
+                    y1: { 
+                        beginAtZero: true, 
+                        position: 'right', 
+                        grid: { drawOnChartArea: false }, 
+                        title: { display: true, text: 'MTTR' },
+                        ticks: {
+                            callback: function(value) {
+                                return value + 'h';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // 3. Render Historical Data (If 2026)
+        const histContainer = document.getElementById('mudanca-history-container');
+        if (CURRENT_FILTERS.year == "2026" && GLOBAL_MUDANCA_DATA.year25) {
+            const hist25 = GLOBAL_MUDANCA_DATA.year25;
+            
+            const formatMttrStr = (totalMin) => {
+                if (isNaN(totalMin) || totalMin === 0) return "00:00";
+                const h = Math.floor(totalMin / 60);
+                const m = Math.round(totalMin % 60);
+                return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+            };
+            // Frontend helper for parsing backend HH:MM strings to minutes
+            const parseMttrToMin = (str) => {
+                if (!str || typeof str !== 'string') return 0;
+                const parts = str.split(':').map(p => parseInt(p, 10) || 0);
+                if (parts.length === 4) return (parts[0] * 1440) + (parts[1] * 60) + parts[2];
+                if (parts.length >= 2) return (parts[0] * 60) + parts[1];
+                return parts[0] || 0;
+            };
+            
+            const renderHistBlock = (title, curVal, baseVal) => {
+                const diff = curVal - baseVal;
+                let pct = baseVal > 0 ? (diff / baseVal) * 100 : (curVal > 0 ? 100 : 0);
+                
+                let color = "text-slate-500";
+                let icon = "";
+                let symbol = "";
+                if (diff > 0) { color = "text-natura-red-buriti"; icon = "↑"; symbol = "+"; }
+                else if (diff < 0) { color = "text-natura-green-cerrado"; icon = "↓"; }
+                else { icon = "="; }
+
+                return `
+                    <div class="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                        <span class="text-xs font-bold text-slate-600 uppercase w-1/2">${title}</span>
+                        <div class="flex items-center justify-end gap-3 w-1/2">
+                            <span class="text-[10px] text-slate-400 line-through">${baseVal}</span>
+                            <span class="text-xs font-black text-slate-800">${curVal}</span>
+                            <span class="text-[10px] font-bold ${color} bg-white px-1.5 py-0.5 rounded border border-current w-14 text-center" title="${symbol}${pct.toFixed(1)}%">${icon} ${symbol}${Math.abs(pct).toFixed(0)}%</span>
+                        </div>
+                    </div>
+                `;
+            };
+            
+            const renderMttrBlock = (title, curMttrStr, curMttrMin, baseMttrStr, baseMttrMin) => {
+                const diff = curMttrMin - baseMttrMin;
+                let pct = baseMttrMin > 0 ? (diff / baseMttrMin) * 100 : (curMttrMin > 0 ? 100 : 0);
+                
+                let color = "text-slate-500";
+                let icon = "";
+                let symbol = "";
+                if (diff > 0) { color = "text-natura-red-buriti"; icon = "↑"; symbol = "+"; }
+                else if (diff < 0) { color = "text-natura-green-cerrado"; icon = "↓"; }
+                else { icon = "="; }
+
+                return `
+                    <div class="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                        <span class="text-xs font-bold text-slate-600 uppercase w-1/2">${title}</span>
+                        <div class="flex items-center justify-end gap-2 w-1/2">
+                            <span class="text-[10px] text-slate-400 line-through">${baseMttrStr}</span>
+                            <span class="text-xs font-black text-slate-800">${curMttrStr}</span>
+                            <span class="text-[10px] font-bold ${color} bg-white px-1 py-0.5 rounded border border-current w-14 text-center" title="${symbol}${pct.toFixed(1)}%">${icon} ${symbol}${Math.abs(pct).toFixed(0)}%</span>
+                        </div>
+                    </div>
+                `;
+            };
+
+            let html = `
+                <div>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 border-b border-slate-200 pb-1">Agregado YTD 2026 vs 2025</p>
+                    <div class="grid grid-cols-2 gap-2 mb-4">
+                        ${renderHistBlock('Vol Total', data26.kpis.incidentesTotal, hist25.ytd[categoryKey].kpis.incidentesTotal)}
+                        ${renderMttrBlock('MTTR', data26.kpis.mttrTotal, parseMttrToMin(data26.kpis.mttrTotal), hist25.ytd[categoryKey].kpis.mttrTotal, parseMttrToMin(hist25.ytd[categoryKey].kpis.mttrTotal))}
+                        
+                        ${renderHistBlock('Sev 0', data26.kpis.incidentesSev0, hist25.ytd[categoryKey].kpis.incidentesSev0)}
+                        ${renderMttrBlock('MTTR Sev 0', data26.kpis.mttrSev0, parseMttrToMin(data26.kpis.mttrSev0), hist25.ytd[categoryKey].kpis.mttrSev0, parseMttrToMin(hist25.ytd[categoryKey].kpis.mttrSev0))}
+                        
+                        ${renderHistBlock('Sev 1', data26.kpis.incidentesSev1, hist25.ytd[categoryKey].kpis.incidentesSev1)}
+                        ${renderMttrBlock('MTTR Sev 1', data26.kpis.mttrSev1, parseMttrToMin(data26.kpis.mttrSev1), hist25.ytd[categoryKey].kpis.mttrSev1, parseMttrToMin(hist25.ytd[categoryKey].kpis.mttrSev1))}
+                    </div>
+                </div>
+            `;
+
+            // Comparação Exata Baseada na Evolução
+            const activeKeys = Object.keys(metrics).filter(k => metrics[k].count > 0);
+            
+            // ORDENAÇÃO CRONOLÓGICA
+            const monthOrder = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+            activeKeys.sort((a, b) => {
+                if (group === 'monthly') {
+                    return monthOrder.indexOf(a.toLowerCase()) - monthOrder.indexOf(b.toLowerCase());
+                } else if (group === 'weekly') {
+                    const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+                    const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+                    return numA - numB;
+                } else if (group === 'quarterly') {
+                    return a.localeCompare(b);
+                }
+                return 0;
+            });
+            
+            let volPrev = 0;
+            let durPrevMin = 0;
+            
+            if (prevMetricsHist) {
+                activeKeys.forEach(k => {
+                    if (prevMetricsHist[k]) {
+                        volPrev += prevMetricsHist[k].count;
+                        durPrevMin += prevMetricsHist[k].durationMin;
+                    }
+                });
+            }
+            
+            let volCur = 0;
+            let durCurMin = 0;
+            activeKeys.forEach(k => {
+                volCur += metrics[k].count;
+                durCurMin += metrics[k].durationMin;
+            });
+            
+            const mttrPrevMin = volPrev > 0 ? (durPrevMin / volPrev) : 0;
+            const mttrCurMin = volCur > 0 ? (durCurMin / volCur) : 0;
+
+            const groupLabelMap = { 'weekly': 'Semana', 'monthly': 'Mês', 'quarterly': 'Trimestre' };
+            const groupName = groupLabelMap[group] || 'Período';
+            
+            // Build the string representation of active keys for the title (e.g. "Janeiro, Fevereiro")
+            let keysTitle = activeKeys.length > 2 ? activeKeys.slice(0, 2).join(', ') + '...' : activeKeys.join(', ');
+            if (!keysTitle) keysTitle = "Período Vazio";
+
+            // Nova função para renderizar uma linha combinada (Vol + MTTR) para a comparação por período
+            const renderComparisonRow = (label, curVol, baseVol, curMttrMin, baseMttrMin) => {
+                const volDiff = curVol - baseVol;
+                const volPct = baseVol > 0 ? (volDiff / baseVol) * 100 : (curVol > 0 ? 100 : 0);
+                const mttrDiff = curMttrMin - baseMttrMin;
+                const mttrPct = baseMttrMin > 0 ? (mttrDiff / baseMttrMin) * 100 : (curMttrMin > 0 ? 100 : 0);
+
+                const getVarStyle = (diff, isMttr) => {
+                    if (diff > 0) return { color: "text-natura-red-buriti", icon: "↑", symbol: "+" };
+                    if (diff < 0) return { color: "text-natura-green-cerrado", icon: "↓", symbol: "" };
+                    return { color: "text-slate-500", icon: "=", symbol: "" };
+                };
+
+                const volVar = getVarStyle(volDiff);
+                const mttrVar = getVarStyle(mttrDiff);
+
+                return `
+                    <div class="bg-slate-50 p-2 rounded-lg border border-slate-100 mb-2">
+                        <div class="text-[9px] font-bold text-slate-400 uppercase mb-1 border-b border-slate-200/50 pb-0.5">${label}</div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <!-- Volume -->
+                            <div class="flex items-center justify-between">
+                                <span class="text-[10px] text-slate-500 uppercase">Vol:</span>
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-[9px] text-slate-300 line-through">${baseVol}</span>
+                                    <span class="text-xs font-bold text-slate-800">${curVol}</span>
+                                    <span class="text-[9px] font-bold ${volVar.color} bg-white px-1 py-0.5 rounded border border-current min-w-[32px] text-center">${volVar.icon}${Math.abs(volPct).toFixed(0)}%</span>
+                                </div>
+                            </div>
+                            <!-- MTTR -->
+                            <div class="flex items-center justify-between border-l border-slate-200 pl-4">
+                                <span class="text-[10px] text-slate-500 uppercase">MTTR:</span>
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-[9px] text-slate-300 line-through">${formatMttrStr(baseMttrMin)}</span>
+                                    <span class="text-xs font-bold text-slate-800">${formatMttrStr(curMttrMin)}</span>
+                                    <span class="text-[9px] font-bold ${mttrVar.color} bg-white px-1 py-0.5 rounded border border-current min-w-[32px] text-center">${mttrVar.icon}${Math.abs(mttrPct).toFixed(0)}%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            };
+
+            html += `
+                <div class="mt-2">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 border-b border-slate-200 pb-1">Comparação Exata por ${groupName}</p>
+                    <div class="max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+            `;
+
+            activeKeys.forEach(k => {
+                const cur = metrics[k];
+                const prev = (prevMetricsHist && prevMetricsHist[k]) ? prevMetricsHist[k] : { count: 0, durationMin: 0 };
+                const curMttrMin = cur.count > 0 ? (cur.durationMin / cur.count) : 0;
+                const prevMttrMin = prev.count > 0 ? (prev.durationMin / prev.count) : 0;
+                
+                html += renderComparisonRow(k, cur.count, prev.count, curMttrMin, prevMttrMin);
+            });
+
+            html += `
+                    </div>
+                </div>
+            `;
+            
+            histContainer.innerHTML = html;
+        } else {
+            histContainer.innerHTML = `<div class="text-sm text-slate-400 italic text-center p-6">Análise histórica disponível apenas para o ano de 2026.</div>`;
+        }
+    }
+
+    function renderConcessaoTimeline() {
+        const timelineEl = document.getElementById('concessao-timeline-content');
+        if (!timelineEl || !ALL_DATA.rawIncidents) return;
+
+        // Define periods (using timestamp for easy comparison)
+        // Month is 0-indexed in JS Date: April = 3, May = 4, June = 5
+        const p1Start = new Date(2026, 3, 12).getTime(); 
+        const p1End = new Date(2026, 3, 24, 23, 59, 59).getTime();
+
+        const p2Start = new Date(2026, 4, 31).getTime();
+        const p2End = new Date(2026, 6, 10, 23, 59, 59).getTime();
+
+        // Filter and sort incidents that are marked as "Concessão" AND fall into the defined periods
+        const concessaoIncidents = ALL_DATA.rawIncidents.filter(inc => {
+            if (!inc.isConcessao) return false;
+            const ts = inc.dataAberturaTimestamp;
+            return (ts >= p1Start && ts <= p1End) || (ts >= p2Start && ts <= p2End);
+        }).sort((a, b) => a.dataAberturaTimestamp - b.dataAberturaTimestamp);
+
+        if (concessaoIncidents.length === 0) {
+            timelineEl.innerHTML = `<div class="text-sm text-slate-500 italic text-center py-6 bg-slate-50 rounded-lg border border-slate-100">Nenhum incidente "Anistiado" foi encontrado nas datas de concessão informadas.</div>`;
+            return;
+        }
+
+        // Build a horizontal timeline layout with flex wrap
+        let html = `<div class="relative flex flex-col md:flex-row flex-wrap gap-6 items-stretch">`;
+        
+        // Horizontal dashed line connecting dots (only visible on md+ screens)
+        html += `<div class="hidden md:block absolute top-[22px] left-8 right-8 h-px border-t-2 border-dashed border-slate-200 z-0"></div>`;
+
+        concessaoIncidents.forEach((inc) => {
+            const ts = inc.dataAberturaTimestamp;
+            const periodLabel = (ts >= p1Start && ts <= p1End) ? "1º Período" : "2º Período";
+            const isSev0 = inc.severidade.startsWith('0');
+            const colorClass = isSev0 ? 'bg-natura-red-buriti' : 'bg-natura-orange';
+            const shadowClass = isSev0 ? 'shadow-natura-red-buriti/40' : 'shadow-natura-orange/40';
+
+            html += `
+                <div class="relative z-10 flex-1 min-w-[220px] max-w-[300px] cursor-pointer group" onclick="openIncidentsModal('concessao', '${inc.id}')">
+                    <!-- The Dot -->
+                    <div class="hidden md:flex mx-auto w-4 h-4 rounded-full ${colorClass} shadow-md ${shadowClass} mb-4 ring-4 ring-white transition-transform group-hover:scale-125"></div>
+                    
+                    <!-- The Card -->
+                    <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm group-hover:shadow-lg transition-all group-hover:-translate-y-1 group-hover:border-natura-green-capim/50 relative">
+                        <div class="md:hidden absolute -left-3 top-6 w-4 h-4 rounded-full ${colorClass} shadow-md ${shadowClass} ring-4 ring-white"></div>
+                        <div class="flex justify-between items-start mb-3">
+                            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">${periodLabel}</span>
+                            <span class="inline-block px-2 py-0.5 text-[10px] font-bold rounded-md ${isSev0 ? 'bg-natura-red-buriti/10 text-natura-red-buriti' : 'bg-natura-orange/10 text-natura-orange'}">
+                                SEV ${inc.severidade}
+                            </span>
+                        </div>
+                        <h5 class="text-lg font-black text-slate-800 mb-1 leading-none">${inc.id}</h5>
+                        <p class="text-xs text-slate-500 font-medium mb-3">${inc.dataDefinicao}</p>
+                        <p class="text-xs text-slate-600 line-clamp-2 leading-relaxed bg-slate-50 p-2 rounded border border-slate-100">${inc.descImpacto}</p>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += `</div>`;
+        timelineEl.innerHTML = html;
+    }
+
+    function exportData(e) {
+        if(e) e.stopPropagation();
+        
+        if (!ALL_DATA.rawIncidents || ALL_DATA.rawIncidents.length === 0) {
+            alert("Nenhum dado disponível para exportar.");
+            return;
+        }
+
+        const exportDataList = ALL_DATA.rawIncidents.map(inc => ({
+            "Número do Incidente": inc.id,
+            "Problemas": inc.problem || "",
+            "Data Abertura": inc.dataDefinicao,
+            "Data Encerramento": inc.dataEncerramento,
+            "TTR": inc.ttr,
+            "Severidade": inc.severidade,
+            "Abrangência": inc.abrangencia,
+            "Jornada Impactada": inc.jornada,
+            "Descrição do Impacto": inc.descImpacto,
+            "Ofensor": inc.offender,
+            "Descrição Ofensor": inc.descOfensor,
+            "Tecnologia Impactada": inc.tech,
+            "Solução aplicada": inc.solucao
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(exportDataList);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Incidentes");
+        XLSX.writeFile(wb, "Incidentes.xlsx");
+    }
+
+    function openSubjectiveDecisionsModal() {
+        const modal = document.getElementById('subjective-decisions-modal');
+        const list = document.getElementById('subjective-decisions-list');
+        
+        if (!modal || !list) return;
+
+        list.innerHTML = '';
+        
+        const filteredIncidents = (ALL_DATA.rawIncidents || []).filter(inc => inc.consideracoes && inc.consideracoes.trim() !== "");
+
+        if (filteredIncidents.length === 0) {
+            list.innerHTML = `<div class="text-sm text-slate-500 italic text-center p-6">Nenhum incidente com decisões subjetivas registrado.</div>`;
+        } else {
+            let html = '';
+            filteredIncidents.forEach(inc => {
+                html += `
+                <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+                    <div class="flex flex-col sm:flex-row justify-between items-start mb-4 gap-2">
+                        <div class="flex items-center gap-3">
+                            <h3 class="text-lg font-bold text-slate-800">${inc.id}</h3>
+                            <span class="px-2 py-1 text-xs font-bold rounded-md ${inc.severidade.startsWith('0') ? 'bg-natura-red-buriti/10 text-natura-red-buriti' : 'bg-natura-orange/10 text-natura-orange'}">
+                                SEV ${inc.severidade}
+                            </span>
+                        </div>
+                        <div class="text-xs text-slate-500 sm:text-right flex flex-col gap-0.5">
+                            <p><span class="font-bold text-slate-600">Abertura:</span> ${inc.dataDefinicao}</p>
+                            <p><span class="font-bold text-slate-600">Encerramento:</span> ${inc.dataEncerramento}</p>
+                            <p class="text-natura-green-cerrado font-bold text-sm mt-1">TTR: ${inc.ttr}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mt-4 pt-4 border-t border-slate-100">
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Abrangência</p>
+                            <p class="text-slate-700 font-medium">${renderFlags(inc.abrangencia)}</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Jornada Impactada</p>
+                            ${renderJornadas(inc.jornada)}
+                        </div>
+                        <div class="md:col-span-2">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Descrição do Impacto</p>
+                            <p class="text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100 leading-relaxed text-xs">${inc.descImpacto}</p>
+                        </div>
+                        <div class="md:col-span-2">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Descrição do Ofensor</p>
+                            <div class="bg-slate-50 p-3 rounded-lg border border-slate-100 leading-relaxed text-xs">
+                                <span class="font-bold text-slate-800 text-sm block mb-1">${inc.offender}</span>
+                                <span class="text-slate-700">${inc.descOfensor}</span>
+                            </div>
+                        </div>
+                        <div class="md:col-span-2">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Solução Aplicada</p>
+                            <p class="text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100 leading-relaxed text-xs">${inc.solucao}</p>
+                        </div>
+                    </div>
+
+                    <!-- Ênfase nas Considerações e Decisões -->
+                    <div class="mt-6 pt-5 border-t-2 border-natura-green-capim/50">
+                        <p class="text-sm font-black text-natura-green-cerrado uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                            </svg>
+                            Considerações e Decisões
+                        </p>
+                        <div class="text-sm text-slate-800 bg-natura-green-capim/10 p-5 rounded-xl border border-natura-green-capim/40 whitespace-pre-wrap font-medium shadow-inner">${inc.consideracoes}</div>
+                    </div>
+                </div>
+                `;
+            });
+            list.innerHTML = html;
+        }
+
+        modal.classList.remove('hidden');
+    }
+</script>
