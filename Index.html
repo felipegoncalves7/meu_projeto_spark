@@ -571,6 +571,91 @@
                     </div>
                 </div>
 
+                <!-- Qualidade de RCA, Plano de Ação e Governança de Testes (Manual_Info) -->
+                <div class="pt-2">
+                    <div class="flex items-center gap-2 mb-3">
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Qualidade de RCA & Governança
+                            de Testes em Mudanças</h2>
+                        <span class="info-tooltip" tabindex="0">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span class="tooltip-bubble">Dados de avaliação manual feita pela equipe (aba
+                                Manual_Info), consolidados para todos os registros disponíveis (não filtrados por
+                                Ano/Período). "—" indica Problema ainda em aberto ou análise não concluída, e é
+                                excluído do cálculo do percentual.</span>
+                        </span>
+                    </div>
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 overflow-x-auto">
+                        <table class="w-full text-sm min-w-[560px]">
+                            <thead>
+                                <tr class="border-b border-slate-100">
+                                    <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3">
+                                        Indicador</th>
+                                    <th class="text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3">
+                                        Geral</th>
+                                    <th class="text-center text-[10px] font-bold text-natura-orange uppercase tracking-widest pb-3">
+                                        Deploy</th>
+                                    <th class="text-center text-[10px] font-bold text-natura-blue-profundo uppercase tracking-widest pb-3">
+                                        Tradicional</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-50">
+                                <tr>
+                                    <td class="py-3 text-slate-600 font-medium">Qualidade do RCA (% Boa)</td>
+                                    <td id="qm-geral-rca" class="py-3 text-center font-bold text-slate-800">—</td>
+                                    <td id="qm-deploy-rca" class="py-3 text-center font-bold text-slate-800">—</td>
+                                    <td id="qm-trad-rca" class="py-3 text-center font-bold text-slate-800">—</td>
+                                </tr>
+                                <tr>
+                                    <td class="py-3 text-slate-600 font-medium">Qualidade do Plano de Ação (% Boa)</td>
+                                    <td id="qm-geral-plano" class="py-3 text-center font-bold text-slate-800">—</td>
+                                    <td id="qm-deploy-plano" class="py-3 text-center font-bold text-slate-800">—</td>
+                                    <td id="qm-trad-plano" class="py-3 text-center font-bold text-slate-800">—</td>
+                                </tr>
+                                <tr>
+                                    <td class="py-3 text-slate-600 font-medium">Ambiente PRD/Não-PRD Adequado (% Sim)</td>
+                                    <td class="py-3 text-center text-slate-300">N/A</td>
+                                    <td id="qm-deploy-ambiente" class="py-3 text-center font-bold text-slate-800">—</td>
+                                    <td id="qm-trad-ambiente" class="py-3 text-center font-bold text-slate-800">—</td>
+                                </tr>
+                                <tr>
+                                    <td class="py-3 text-slate-600 font-medium">Estratégia de Testes Abrangente (% Sim)</td>
+                                    <td class="py-3 text-center text-slate-300">N/A</td>
+                                    <td id="qm-deploy-estrategia" class="py-3 text-center font-bold text-slate-800">—</td>
+                                    <td id="qm-trad-estrategia" class="py-3 text-center font-bold text-slate-800">—</td>
+                                </tr>
+                                <tr>
+                                    <td class="py-3 text-slate-600 font-medium">Qualidade do Rollback (% Boa)</td>
+                                    <td class="py-3 text-center text-slate-300">N/A</td>
+                                    <td class="py-3 text-center text-slate-300">N/A</td>
+                                    <td id="qm-trad-rollback" class="py-3 text-center font-bold text-slate-800">—</td>
+                                </tr>
+                                <tr>
+                                    <td class="py-3 text-slate-600 font-medium">Qualidade do Plano de Testes (% Boa)</td>
+                                    <td class="py-3 text-center text-slate-300">N/A</td>
+                                    <td class="py-3 text-center text-slate-300">N/A</td>
+                                    <td id="qm-trad-planotestes" class="py-3 text-center font-bold text-slate-800">—</td>
+                                </tr>
+                                <tr>
+                                    <td class="py-3 text-slate-600 font-medium">Testado em Não-Prod (% Sim)</td>
+                                    <td class="py-3 text-center text-slate-300">N/A</td>
+                                    <td class="py-3 text-center text-slate-300">N/A</td>
+                                    <td id="qm-trad-naoprod" class="py-3 text-center font-bold text-slate-800">—</td>
+                                </tr>
+                                <tr>
+                                    <td class="py-3 text-slate-500 text-xs italic">Registros considerados (n)</td>
+                                    <td id="qm-geral-n" class="py-3 text-center text-xs text-slate-400">0</td>
+                                    <td id="qm-deploy-n" class="py-3 text-center text-xs text-slate-400">0</td>
+                                    <td id="qm-trad-n" class="py-3 text-center text-xs text-slate-400">0</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <!-- Evolution Chart -->
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col">
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">

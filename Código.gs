@@ -47,6 +47,109 @@ function buildChangeMap(ss) {
   return map;
 }
 
+// Mapeamento da aba Manual_Info (Range A1:AB) - 3 blocos lado a lado (Base 0)
+// Bloco Geral (demais Incidentes, não causados por Mudança Deploy/Tradicional)
+const MI_GERAL_ID = 0;                    // A
+const MI_GERAL_QUALIDADE_RCA = 4;         // E
+const MI_GERAL_QUALIDADE_PLANO_ACAO = 5;  // F
+// Bloco Deploys
+const MI_DEPLOY_ID = 6;                       // G
+const MI_DEPLOY_QUALIDADE_RCA = 12;           // M
+const MI_DEPLOY_QUALIDADE_PLANO_ACAO = 13;    // N
+const MI_DEPLOY_AMBIENTE_ADEQUADO = 14;       // O
+const MI_DEPLOY_ESTRATEGIA_TESTES = 15;       // P
+// Bloco Tradicionais
+const MI_TRAD_ID = 16;                     // Q
+const MI_TRAD_QUALIDADE_ROLLBACK = 19;     // T
+const MI_TRAD_QUALIDADE_PLANO_TESTES = 20; // U
+const MI_TRAD_TESTADO_NAO_PROD = 21;       // V
+const MI_TRAD_QUALIDADE_RCA = 24;          // Y
+const MI_TRAD_QUALIDADE_PLANO_ACAO = 25;   // Z
+const MI_TRAD_AMBIENTE_ADEQUADO = 26;      // AA
+const MI_TRAD_ESTRATEGIA_TESTES = 27;      // AB
+
+/**
+ * Calcula os indicadores de Qualidade de RCA, Plano de Ação e Governança de Testes
+ * a partir da aba Manual_Info (dados preenchidos manualmente pela equipe).
+ * Células vazias significam que o Problema segue em aberto ou a análise não foi concluída,
+ * e são excluídas do denominador de cada percentual (mesma lógica de Aderência OLA).
+ */
+function getQualidadeMudancaData() {
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName('Manual_Info');
+    if (!sheet) return { error: "Aba 'Manual_Info' não encontrada." };
+
+    const values = sheet.getDataRange().getValues();
+    const rows = values.slice(1);
+
+    const isFilled = (v) => v !== null && v !== undefined && String(v).trim() !== '';
+    const isBoa = (v) => isFilled(v) && String(v).trim().toLowerCase().startsWith('boa');
+    const isSim = (v) => isFilled(v) && String(v).trim().toLowerCase().startsWith('sim');
+
+    const geral = { total: 0, rcaFilled: 0, rcaBoa: 0, planoFilled: 0, planoBoa: 0 };
+    const deploy = {
+      total: 0, rcaFilled: 0, rcaBoa: 0, planoFilled: 0, planoBoa: 0,
+      ambienteFilled: 0, ambienteAdequado: 0, estrategiaFilled: 0, estrategiaAdequada: 0
+    };
+    const tradicional = {
+      total: 0, rcaFilled: 0, rcaBoa: 0, planoFilled: 0, planoBoa: 0,
+      ambienteFilled: 0, ambienteAdequado: 0, estrategiaFilled: 0, estrategiaAdequada: 0,
+      rollbackFilled: 0, rollbackBoa: 0, planoTestesFilled: 0, planoTestesBoa: 0,
+      naoProdFilled: 0, naoProdSim: 0
+    };
+
+    rows.forEach(row => {
+      if (isFilled(row[MI_GERAL_ID])) {
+        geral.total++;
+        if (isFilled(row[MI_GERAL_QUALIDADE_RCA])) { geral.rcaFilled++; if (isBoa(row[MI_GERAL_QUALIDADE_RCA])) geral.rcaBoa++; }
+        if (isFilled(row[MI_GERAL_QUALIDADE_PLANO_ACAO])) { geral.planoFilled++; if (isBoa(row[MI_GERAL_QUALIDADE_PLANO_ACAO])) geral.planoBoa++; }
+      }
+
+      if (isFilled(row[MI_DEPLOY_ID])) {
+        deploy.total++;
+        if (isFilled(row[MI_DEPLOY_QUALIDADE_RCA])) { deploy.rcaFilled++; if (isBoa(row[MI_DEPLOY_QUALIDADE_RCA])) deploy.rcaBoa++; }
+        if (isFilled(row[MI_DEPLOY_QUALIDADE_PLANO_ACAO])) { deploy.planoFilled++; if (isBoa(row[MI_DEPLOY_QUALIDADE_PLANO_ACAO])) deploy.planoBoa++; }
+        if (isFilled(row[MI_DEPLOY_AMBIENTE_ADEQUADO])) { deploy.ambienteFilled++; if (isSim(row[MI_DEPLOY_AMBIENTE_ADEQUADO])) deploy.ambienteAdequado++; }
+        if (isFilled(row[MI_DEPLOY_ESTRATEGIA_TESTES])) { deploy.estrategiaFilled++; if (isSim(row[MI_DEPLOY_ESTRATEGIA_TESTES])) deploy.estrategiaAdequada++; }
+      }
+
+      if (isFilled(row[MI_TRAD_ID])) {
+        tradicional.total++;
+        if (isFilled(row[MI_TRAD_QUALIDADE_ROLLBACK])) { tradicional.rollbackFilled++; if (isBoa(row[MI_TRAD_QUALIDADE_ROLLBACK])) tradicional.rollbackBoa++; }
+        if (isFilled(row[MI_TRAD_QUALIDADE_PLANO_TESTES])) { tradicional.planoTestesFilled++; if (isBoa(row[MI_TRAD_QUALIDADE_PLANO_TESTES])) tradicional.planoTestesBoa++; }
+        if (isFilled(row[MI_TRAD_TESTADO_NAO_PROD])) { tradicional.naoProdFilled++; if (isSim(row[MI_TRAD_TESTADO_NAO_PROD])) tradicional.naoProdSim++; }
+        if (isFilled(row[MI_TRAD_QUALIDADE_RCA])) { tradicional.rcaFilled++; if (isBoa(row[MI_TRAD_QUALIDADE_RCA])) tradicional.rcaBoa++; }
+        if (isFilled(row[MI_TRAD_QUALIDADE_PLANO_ACAO])) { tradicional.planoFilled++; if (isBoa(row[MI_TRAD_QUALIDADE_PLANO_ACAO])) tradicional.planoBoa++; }
+        if (isFilled(row[MI_TRAD_AMBIENTE_ADEQUADO])) { tradicional.ambienteFilled++; if (isSim(row[MI_TRAD_AMBIENTE_ADEQUADO])) tradicional.ambienteAdequado++; }
+        if (isFilled(row[MI_TRAD_ESTRATEGIA_TESTES])) { tradicional.estrategiaFilled++; if (isSim(row[MI_TRAD_ESTRATEGIA_TESTES])) tradicional.estrategiaAdequada++; }
+      }
+    });
+
+    const pct = (n, d) => d > 0 ? Math.round((n / d) * 1000) / 10 : null;
+
+    const formatBlock = (b) => {
+      const out = { total: b.total };
+      if ('rcaFilled' in b) { out.qualidadeRcaPct = pct(b.rcaBoa, b.rcaFilled); out.qualidadeRcaBase = b.rcaFilled; }
+      if ('planoFilled' in b) { out.qualidadePlanoAcaoPct = pct(b.planoBoa, b.planoFilled); out.qualidadePlanoAcaoBase = b.planoFilled; }
+      if ('ambienteFilled' in b) { out.ambienteAdequadoPct = pct(b.ambienteAdequado, b.ambienteFilled); out.ambienteAdequadoBase = b.ambienteFilled; }
+      if ('estrategiaFilled' in b) { out.estrategiaTestesPct = pct(b.estrategiaAdequada, b.estrategiaFilled); out.estrategiaTestesBase = b.estrategiaFilled; }
+      if ('rollbackFilled' in b) { out.qualidadeRollbackPct = pct(b.rollbackBoa, b.rollbackFilled); out.qualidadeRollbackBase = b.rollbackFilled; }
+      if ('planoTestesFilled' in b) { out.qualidadePlanoTestesPct = pct(b.planoTestesBoa, b.planoTestesFilled); out.qualidadePlanoTestesBase = b.planoTestesFilled; }
+      if ('naoProdFilled' in b) { out.testadoNaoProdPct = pct(b.naoProdSim, b.naoProdFilled); out.testadoNaoProdBase = b.naoProdFilled; }
+      return out;
+    };
+
+    return {
+      geral: formatBlock(geral),
+      deploy: formatBlock(deploy),
+      tradicional: formatBlock(tradicional)
+    };
+  } catch (e) {
+    return { error: e.toString() };
+  }
+}
+
 /**
  * Ponto de entrada
  */

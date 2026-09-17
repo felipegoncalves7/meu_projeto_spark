@@ -189,6 +189,7 @@
         setupSpecificFilters();
         setupComparisonFilter();
         setupEvolutionToggle();
+        loadQualidadeMudancaData();
 
         logDebug("Initial setup complete. Loading Tab 1 data...");
 
@@ -914,6 +915,56 @@
             container.textContent = 'Nenhum';
             container.className = "text-sm font-semibold text-slate-700"; // Reset to text style
         }
+    }
+
+    // Qualidade de RCA / Plano de Ação / Governança de Testes (Manual_Info): não depende dos filtros
+    // de Ano/Período, então é carregada uma única vez.
+    function loadQualidadeMudancaData() {
+        google.script.run
+            .withSuccessHandler(renderQualidadeMudancaData)
+            .withFailureHandler((e) => {
+                logDebug("getQualidadeMudancaData FAILED: " + e.message);
+            })
+            .getQualidadeMudancaData();
+    }
+
+    function renderQualidadeMudancaData(data) {
+        if (!data || data.error) {
+            logDebug("Qualidade Mudança Data Error: " + (data ? data.error : 'sem resposta'));
+            return;
+        }
+
+        const setPct = (id, pct) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = (pct === null || pct === undefined) ? '—' : `${pct}%`;
+        };
+        const setN = (id, n) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = n || 0;
+        };
+
+        const geral = data.geral || {};
+        const deploy = data.deploy || {};
+        const trad = data.tradicional || {};
+
+        setPct('qm-geral-rca', geral.qualidadeRcaPct);
+        setPct('qm-geral-plano', geral.qualidadePlanoAcaoPct);
+        setN('qm-geral-n', geral.total);
+
+        setPct('qm-deploy-rca', deploy.qualidadeRcaPct);
+        setPct('qm-deploy-plano', deploy.qualidadePlanoAcaoPct);
+        setPct('qm-deploy-ambiente', deploy.ambienteAdequadoPct);
+        setPct('qm-deploy-estrategia', deploy.estrategiaTestesPct);
+        setN('qm-deploy-n', deploy.total);
+
+        setPct('qm-trad-rca', trad.qualidadeRcaPct);
+        setPct('qm-trad-plano', trad.qualidadePlanoAcaoPct);
+        setPct('qm-trad-ambiente', trad.ambienteAdequadoPct);
+        setPct('qm-trad-estrategia', trad.estrategiaTestesPct);
+        setPct('qm-trad-rollback', trad.qualidadeRollbackPct);
+        setPct('qm-trad-planotestes', trad.qualidadePlanoTestesPct);
+        setPct('qm-trad-naoprod', trad.testadoNaoProdPct);
+        setN('qm-trad-n', trad.total);
     }
 
     // Deprecated but kept for compatibility if needed (redirects to new logic)
