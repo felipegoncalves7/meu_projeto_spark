@@ -73,6 +73,11 @@ const MI_TRAD_QUALIDADE_RCA = 24;          // Y
 const MI_TRAD_QUALIDADE_PLANO_ACAO = 25;   // Z
 const MI_TRAD_AMBIENTE_ADEQUADO = 26;      // AA
 const MI_TRAD_ESTRATEGIA_TESTES = 27;      // AB
+// Colunas de Problema (RCA), usadas para deduplicar Causa Raiz/Processo de Origem/Qualidade
+// quando mais de um Incidente está associado ao mesmo Problema
+const MI_GERAL_PROBLEMA = 1;   // B
+const MI_DEPLOY_PROBLEMA = 9;  // J
+const MI_TRAD_PROBLEMA = 18;   // S
 
 /**
  * Calcula os indicadores de Qualidade de RCA, Plano de Ação e Governança de Testes
@@ -87,70 +92,117 @@ function getQualidadeMudancaData() {
     if (!sheet) return { error: "Aba 'Manual_Info' não encontrada." };
 
     const values = sheet.getDataRange().getValues();
-    const rows = values.slice(1);
+    // Linhas 1 e 2 são títulos/subtítulos dos 3 blocos; os dados começam de fato na linha 3.
+    const rows = values.slice(2);
 
     const isFilled = (v) => v !== null && v !== undefined && String(v).trim() !== '';
     const isBoa = (v) => isFilled(v) && String(v).trim().toLowerCase().startsWith('boa');
     const isSim = (v) => isFilled(v) && String(v).trim().toLowerCase().startsWith('sim');
 
-    const geral = { total: 0, rcaFilled: 0, rcaBoa: 0, planoFilled: 0, planoBoa: 0 };
-    const deploy = {
-      total: 0, rcaFilled: 0, rcaBoa: 0, planoFilled: 0, planoBoa: 0,
-      ambienteFilled: 0, ambienteAdequado: 0, estrategiaFilled: 0, estrategiaAdequada: 0
+    /**
+     * Processa um dos 3 blocos (Geral/Deploy/Tradicional) da aba Manual_Info.
+     * Qualidade do RCA, Qualidade do Plano de Ação, Causa Raiz e Processo de Origem são análises
+     * feitas uma vez por Problema (não por Incidente) — se 2+ Incidentes apontam para o mesmo
+     * Problema, contam como 1 só nesses indicadores, mas todos os Incidentes entram na lista de
+     * IDs para o drill-down. As demais perguntas (ligadas à Mudança/Change específica que gerou
+     * cada Incidente) continuam contadas por Incidente/linha.
+     */
+    const processUniverso = (cols) => {
+      let total = 0;
+      const perRow = {
+        ambienteFilled: 0, ambienteAdequado: 0,
+        estrategiaFilled: 0, estrategiaAdequada: 0,
+        rollbackFilled: 0, rollbackBoa: 0,
+        planoTestesFilled: 0, planoTestesBoa: 0,
+        naoProdFilled: 0, naoProdSim: 0
+      };
+      const problemaGroups = {}; // chave: Problema (ou ID como fallback) -> dados agregados
+
+      rows.forEach(row => {
+        if (!isFilled(row[cols.id])) return;
+        const id = String(row[cols.id]).trim();
+        total++;
+
+        if (cols.ambienteAdequado !== undefined && isFilled(row[cols.ambienteAdequado])) {
+          perRow.ambienteFilled++; if (isSim(row[cols.ambienteAdequado])) perRow.ambienteAdequado++;
+        }
+        if (cols.estrategiaTestes !== undefined && isFilled(row[cols.estrategiaTestes])) {
+          perRow.estrategiaFilled++; if (isSim(row[cols.estrategiaTestes])) perRow.estrategiaAdequada++;
+        }
+        if (cols.rollback !== undefined && isFilled(row[cols.rollback])) {
+          perRow.rollbackFilled++; if (isBoa(row[cols.rollback])) perRow.rollbackBoa++;
+        }
+        if (cols.planoTestes !== undefined && isFilled(row[cols.planoTestes])) {
+          perRow.planoTestesFilled++; if (isBoa(row[cols.planoTestes])) perRow.planoTestesBoa++;
+        }
+        if (cols.naoProd !== undefined && isFilled(row[cols.naoProd])) {
+          perRow.naoProdFilled++; if (isSim(row[cols.naoProd])) perRow.naoProdSim++;
+        }
+
+        const problemaRaw = row[cols.problema];
+        const groupKey = isFilled(problemaRaw) ? ('P:' + String(problemaRaw).trim()) : ('I:' + id);
+        if (!problemaGroups[groupKey]) {
+          problemaGroups[groupKey] = { ids: [], causaRaiz: null, processoOrigem: null, qualidadeRca: null, qualidadePlanoAcao: null };
+        }
+        const g = problemaGroups[groupKey];
+        g.ids.push(id);
+        if (!g.causaRaiz && isFilled(row[cols.causaRaiz])) g.causaRaiz = String(row[cols.causaRaiz]).trim();
+        if (!g.processoOrigem && isFilled(row[cols.processoOrigem])) g.processoOrigem = String(row[cols.processoOrigem]).trim();
+        if (g.qualidadeRca === null && isFilled(row[cols.qualidadeRca])) g.qualidadeRca = row[cols.qualidadeRca];
+        if (g.qualidadePlanoAcao === null && isFilled(row[cols.qualidadePlanoAcao])) g.qualidadePlanoAcao = row[cols.qualidadePlanoAcao];
+      });
+
+      let rcaFilled = 0, rcaBoa = 0, planoFilled = 0, planoBoa = 0;
+      const causaRaizCounts = {};
+      const processoOrigemCounts = {};
+      const addCount = (map, label, ids) => {
+        if (!map[label]) map[label] = { count: 0, ids: [] };
+        map[label].count++;
+        map[label].ids.push(...ids);
+      };
+
+      Object.keys(problemaGroups).forEach(key => {
+        const g = problemaGroups[key];
+        if (g.qualidadeRca !== null) { rcaFilled++; if (isBoa(g.qualidadeRca)) rcaBoa++; }
+        if (g.qualidadePlanoAcao !== null) { planoFilled++; if (isBoa(g.qualidadePlanoAcao)) planoBoa++; }
+        if (g.causaRaiz) addCount(causaRaizCounts, g.causaRaiz, g.ids);
+        if (g.processoOrigem) addCount(processoOrigemCounts, g.processoOrigem, g.ids);
+      });
+
+      return {
+        total, rcaFilled, rcaBoa, planoFilled, planoBoa,
+        ambienteFilled: perRow.ambienteFilled, ambienteAdequado: perRow.ambienteAdequado,
+        estrategiaFilled: perRow.estrategiaFilled, estrategiaAdequada: perRow.estrategiaAdequada,
+        rollbackFilled: perRow.rollbackFilled, rollbackBoa: perRow.rollbackBoa,
+        planoTestesFilled: perRow.planoTestesFilled, planoTestesBoa: perRow.planoTestesBoa,
+        naoProdFilled: perRow.naoProdFilled, naoProdSim: perRow.naoProdSim,
+        causaRaizCounts, processoOrigemCounts,
+        // Flags indicando quais perguntas de Change se aplicam a este Universo
+        hasAmbiente: cols.ambienteAdequado !== undefined,
+        hasEstrategia: cols.estrategiaTestes !== undefined,
+        hasRollback: cols.rollback !== undefined,
+        hasPlanoTestes: cols.planoTestes !== undefined,
+        hasNaoProd: cols.naoProd !== undefined
+      };
     };
-    const tradicional = {
-      total: 0, rcaFilled: 0, rcaBoa: 0, planoFilled: 0, planoBoa: 0,
-      ambienteFilled: 0, ambienteAdequado: 0, estrategiaFilled: 0, estrategiaAdequada: 0,
-      rollbackFilled: 0, rollbackBoa: 0, planoTestesFilled: 0, planoTestesBoa: 0,
-      naoProdFilled: 0, naoProdSim: 0
-    };
 
-    // Distribuição por Tipo de Causa Raiz e Processo de Origem, segmentada por Universo (Geral/Deploy/Tradicional),
-    // guardando os IDs de cada incidente para permitir o drill-down (clique -> ver incidentes por trás do número).
-    const causaRaizByUniverso = { geral: {}, deploy: {}, tradicional: {} };
-    const processoOrigemByUniverso = { geral: {}, deploy: {}, tradicional: {} };
-    const addCount = (map, rawValue, id) => {
-      if (!isFilled(rawValue)) return;
-      const label = String(rawValue).trim();
-      if (!map[label]) map[label] = { count: 0, ids: [] };
-      map[label].count++;
-      map[label].ids.push(id);
-    };
-
-    rows.forEach(row => {
-      if (isFilled(row[MI_GERAL_ID])) {
-        const id = String(row[MI_GERAL_ID]).trim();
-        geral.total++;
-        if (isFilled(row[MI_GERAL_QUALIDADE_RCA])) { geral.rcaFilled++; if (isBoa(row[MI_GERAL_QUALIDADE_RCA])) geral.rcaBoa++; }
-        if (isFilled(row[MI_GERAL_QUALIDADE_PLANO_ACAO])) { geral.planoFilled++; if (isBoa(row[MI_GERAL_QUALIDADE_PLANO_ACAO])) geral.planoBoa++; }
-        addCount(causaRaizByUniverso.geral, row[MI_GERAL_TIPO_CAUSA_RAIZ], id);
-        addCount(processoOrigemByUniverso.geral, row[MI_GERAL_PROCESSO_ORIGEM], id);
-      }
-
-      if (isFilled(row[MI_DEPLOY_ID])) {
-        const id = String(row[MI_DEPLOY_ID]).trim();
-        deploy.total++;
-        if (isFilled(row[MI_DEPLOY_QUALIDADE_RCA])) { deploy.rcaFilled++; if (isBoa(row[MI_DEPLOY_QUALIDADE_RCA])) deploy.rcaBoa++; }
-        if (isFilled(row[MI_DEPLOY_QUALIDADE_PLANO_ACAO])) { deploy.planoFilled++; if (isBoa(row[MI_DEPLOY_QUALIDADE_PLANO_ACAO])) deploy.planoBoa++; }
-        if (isFilled(row[MI_DEPLOY_AMBIENTE_ADEQUADO])) { deploy.ambienteFilled++; if (isSim(row[MI_DEPLOY_AMBIENTE_ADEQUADO])) deploy.ambienteAdequado++; }
-        if (isFilled(row[MI_DEPLOY_ESTRATEGIA_TESTES])) { deploy.estrategiaFilled++; if (isSim(row[MI_DEPLOY_ESTRATEGIA_TESTES])) deploy.estrategiaAdequada++; }
-        addCount(causaRaizByUniverso.deploy, row[MI_DEPLOY_TIPO_CAUSA_RAIZ], id);
-        addCount(processoOrigemByUniverso.deploy, row[MI_DEPLOY_PROCESSO_ORIGEM], id);
-      }
-
-      if (isFilled(row[MI_TRAD_ID])) {
-        const id = String(row[MI_TRAD_ID]).trim();
-        tradicional.total++;
-        if (isFilled(row[MI_TRAD_QUALIDADE_ROLLBACK])) { tradicional.rollbackFilled++; if (isBoa(row[MI_TRAD_QUALIDADE_ROLLBACK])) tradicional.rollbackBoa++; }
-        if (isFilled(row[MI_TRAD_QUALIDADE_PLANO_TESTES])) { tradicional.planoTestesFilled++; if (isBoa(row[MI_TRAD_QUALIDADE_PLANO_TESTES])) tradicional.planoTestesBoa++; }
-        if (isFilled(row[MI_TRAD_TESTADO_NAO_PROD])) { tradicional.naoProdFilled++; if (isSim(row[MI_TRAD_TESTADO_NAO_PROD])) tradicional.naoProdSim++; }
-        if (isFilled(row[MI_TRAD_QUALIDADE_RCA])) { tradicional.rcaFilled++; if (isBoa(row[MI_TRAD_QUALIDADE_RCA])) tradicional.rcaBoa++; }
-        if (isFilled(row[MI_TRAD_QUALIDADE_PLANO_ACAO])) { tradicional.planoFilled++; if (isBoa(row[MI_TRAD_QUALIDADE_PLANO_ACAO])) tradicional.planoBoa++; }
-        if (isFilled(row[MI_TRAD_AMBIENTE_ADEQUADO])) { tradicional.ambienteFilled++; if (isSim(row[MI_TRAD_AMBIENTE_ADEQUADO])) tradicional.ambienteAdequado++; }
-        if (isFilled(row[MI_TRAD_ESTRATEGIA_TESTES])) { tradicional.estrategiaFilled++; if (isSim(row[MI_TRAD_ESTRATEGIA_TESTES])) tradicional.estrategiaAdequada++; }
-        addCount(causaRaizByUniverso.tradicional, row[MI_TRAD_TIPO_CAUSA_RAIZ], id);
-        addCount(processoOrigemByUniverso.tradicional, row[MI_TRAD_PROCESSO_ORIGEM], id);
-      }
+    const geral = processUniverso({
+      id: MI_GERAL_ID, problema: MI_GERAL_PROBLEMA,
+      causaRaiz: MI_GERAL_TIPO_CAUSA_RAIZ, processoOrigem: MI_GERAL_PROCESSO_ORIGEM,
+      qualidadeRca: MI_GERAL_QUALIDADE_RCA, qualidadePlanoAcao: MI_GERAL_QUALIDADE_PLANO_ACAO
+    });
+    const deploy = processUniverso({
+      id: MI_DEPLOY_ID, problema: MI_DEPLOY_PROBLEMA,
+      causaRaiz: MI_DEPLOY_TIPO_CAUSA_RAIZ, processoOrigem: MI_DEPLOY_PROCESSO_ORIGEM,
+      qualidadeRca: MI_DEPLOY_QUALIDADE_RCA, qualidadePlanoAcao: MI_DEPLOY_QUALIDADE_PLANO_ACAO,
+      ambienteAdequado: MI_DEPLOY_AMBIENTE_ADEQUADO, estrategiaTestes: MI_DEPLOY_ESTRATEGIA_TESTES
+    });
+    const tradicional = processUniverso({
+      id: MI_TRAD_ID, problema: MI_TRAD_PROBLEMA,
+      causaRaiz: MI_TRAD_TIPO_CAUSA_RAIZ, processoOrigem: MI_TRAD_PROCESSO_ORIGEM,
+      qualidadeRca: MI_TRAD_QUALIDADE_RCA, qualidadePlanoAcao: MI_TRAD_QUALIDADE_PLANO_ACAO,
+      ambienteAdequado: MI_TRAD_AMBIENTE_ADEQUADO, estrategiaTestes: MI_TRAD_ESTRATEGIA_TESTES,
+      rollback: MI_TRAD_QUALIDADE_ROLLBACK, planoTestes: MI_TRAD_QUALIDADE_PLANO_TESTES, naoProd: MI_TRAD_TESTADO_NAO_PROD
     });
 
     const toSortedList = (map) => Object.keys(map)
@@ -159,24 +211,24 @@ function getQualidadeMudancaData() {
 
     const pct = (n, d) => d > 0 ? Math.round((n / d) * 1000) / 10 : null;
 
-    const formatBlock = (b, universoKey) => {
+    const formatBlock = (b) => {
       const out = { total: b.total };
-      if ('rcaFilled' in b) { out.qualidadeRcaPct = pct(b.rcaBoa, b.rcaFilled); out.qualidadeRcaBase = b.rcaFilled; }
-      if ('planoFilled' in b) { out.qualidadePlanoAcaoPct = pct(b.planoBoa, b.planoFilled); out.qualidadePlanoAcaoBase = b.planoFilled; }
-      if ('ambienteFilled' in b) { out.ambienteAdequadoPct = pct(b.ambienteAdequado, b.ambienteFilled); out.ambienteAdequadoBase = b.ambienteFilled; }
-      if ('estrategiaFilled' in b) { out.estrategiaTestesPct = pct(b.estrategiaAdequada, b.estrategiaFilled); out.estrategiaTestesBase = b.estrategiaFilled; }
-      if ('rollbackFilled' in b) { out.qualidadeRollbackPct = pct(b.rollbackBoa, b.rollbackFilled); out.qualidadeRollbackBase = b.rollbackFilled; }
-      if ('planoTestesFilled' in b) { out.qualidadePlanoTestesPct = pct(b.planoTestesBoa, b.planoTestesFilled); out.qualidadePlanoTestesBase = b.planoTestesFilled; }
-      if ('naoProdFilled' in b) { out.testadoNaoProdPct = pct(b.naoProdSim, b.naoProdFilled); out.testadoNaoProdBase = b.naoProdFilled; }
-      out.causaRaiz = toSortedList(causaRaizByUniverso[universoKey]);
-      out.processoOrigem = toSortedList(processoOrigemByUniverso[universoKey]);
+      out.qualidadeRcaPct = pct(b.rcaBoa, b.rcaFilled); out.qualidadeRcaBase = b.rcaFilled;
+      out.qualidadePlanoAcaoPct = pct(b.planoBoa, b.planoFilled); out.qualidadePlanoAcaoBase = b.planoFilled;
+      if (b.hasAmbiente) { out.ambienteAdequadoPct = pct(b.ambienteAdequado, b.ambienteFilled); out.ambienteAdequadoBase = b.ambienteFilled; }
+      if (b.hasEstrategia) { out.estrategiaTestesPct = pct(b.estrategiaAdequada, b.estrategiaFilled); out.estrategiaTestesBase = b.estrategiaFilled; }
+      if (b.hasRollback) { out.qualidadeRollbackPct = pct(b.rollbackBoa, b.rollbackFilled); out.qualidadeRollbackBase = b.rollbackFilled; }
+      if (b.hasPlanoTestes) { out.qualidadePlanoTestesPct = pct(b.planoTestesBoa, b.planoTestesFilled); out.qualidadePlanoTestesBase = b.planoTestesFilled; }
+      if (b.hasNaoProd) { out.testadoNaoProdPct = pct(b.naoProdSim, b.naoProdFilled); out.testadoNaoProdBase = b.naoProdFilled; }
+      out.causaRaiz = toSortedList(b.causaRaizCounts);
+      out.processoOrigem = toSortedList(b.processoOrigemCounts);
       return out;
     };
 
     return {
-      geral: formatBlock(geral, 'geral'),
-      deploy: formatBlock(deploy, 'deploy'),
-      tradicional: formatBlock(tradicional, 'tradicional')
+      geral: formatBlock(geral),
+      deploy: formatBlock(deploy),
+      tradicional: formatBlock(tradicional)
     };
   } catch (e) {
     return { error: e.toString() };
