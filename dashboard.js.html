@@ -7,6 +7,7 @@
         endDate: null,
         year: null,
         evolutionGrouping: 'monthly',
+        evolutionDimension: 'default', // 'default' | 'severidade' | 'deteccao' | 'jornada' | 'pais'
         comparisonMode: 'none', // 'none' | 'previous'
         techFilter: [],
         ofensorFilter: []
@@ -215,6 +216,7 @@
         setupComparisonFilter();
         setupTechOfensorFilterDropdowns();
         setupEvolutionToggle();
+        setupEvolutionDimensionSelect();
         loadQualidadeMudancaData();
 
         logDebug("Initial setup complete. Loading Tab 1 data...");
@@ -552,6 +554,7 @@
         renderKpiCards(data.kpis);
         renderDivergenciasSevPrio(data.divergenciasSevPrio);
         renderGruposResponsaveis(data.gruposResponsaveis);
+        renderSankeyMudanca(data.sankeyMudanca);
         renderOrigemDeteccao(data.origemDeteccao);
         renderMttdVsMttrChart(data.mttdVsMttrDispersao);
         renderJornadaCards(data.jornadaMetrics, data.kpis.incidentesTotal);
@@ -567,10 +570,13 @@
             weekly: { metrics: data.weeklyMetrics, mttr: data.mttrSemanalEmHoras, title: "Evolução Semanal" },
             quarterly: { metrics: data.quarterlyMetrics, mttr: data.mttrTrimestralEmHoras, title: "Evolução Trimestral" }
         };
+        ALL_DATA.monthlyBySeveridade = data.monthlyBySeveridade || {};
+        ALL_DATA.monthlyByOrigem = data.monthlyByOrigem || {};
+        ALL_DATA.monthlyByJornada = data.monthlyByJornada || {};
+        ALL_DATA.monthlyByPais = data.monthlyByPais || {};
 
-        const group = CURRENT_FILTERS.evolutionGrouping || 'monthly';
-        const groupData = ALL_DATA.evolutionData[group];
-        drawEvolutionChart(groupData.metrics, groupData.mttr, groupData.title);
+        updateEvolutionSideStats(data.kpis);
+        renderEvolutionByCurrentDimension();
 
         // Render Technology & Offender charts in the same flow
         if (data.techMetrics) {
@@ -629,7 +635,7 @@
             let displayLabel = LABEL_MAP[filter.key] || filter.key;
 
             if (filter.key === 'T4Industria') {
-                btn.innerHTML = `${displayLabel} <img src="https://flagcdn.com/w20/br.png" class="inline-block ml-1 mb-0.5" width="16" height="11">`;
+                btn.innerHTML = `${displayLabel} <span class="ml-1">${countryCodeToFlagEmoji('BR')}</span>`;
             } else {
                 btn.textContent = displayLabel;
             }
@@ -911,12 +917,35 @@
             clearBtn.addEventListener('click', () => {
                 CURRENT_FILTERS.techFilter = [];
                 CURRENT_FILTERS.ofensorFilter = [];
-                document.querySelectorAll('#tech-filter-dropdown input[type=checkbox], #ofensor-filter-dropdown input[type=checkbox]')
+                document.querySelectorAll('#tech-filter-options input[type=checkbox], #ofensor-filter-options input[type=checkbox]')
                     .forEach(cb => { cb.checked = false; });
+                const techSearch = document.getElementById('tech-filter-search');
+                const ofensorSearch = document.getElementById('ofensor-filter-search');
+                if (techSearch) techSearch.value = '';
+                if (ofensorSearch) ofensorSearch.value = '';
+                document.querySelectorAll('#tech-filter-options label, #ofensor-filter-options label')
+                    .forEach(l => l.classList.remove('hidden'));
                 updateTechOfensorFilterButtons();
                 loadFilteredData();
             });
         }
+
+        // Busca em texto livre dentro dos dropdowns (evita rolar a lista toda para achar um item)
+        const wireSearch = (searchId, optionsId) => {
+            const search = document.getElementById(searchId);
+            const options = document.getElementById(optionsId);
+            if (!search || !options || search.dataset.wired) return;
+            search.dataset.wired = 'true';
+            search.addEventListener('input', () => {
+                const term = search.value.trim().toLowerCase();
+                options.querySelectorAll('label').forEach(label => {
+                    const text = (label.textContent || '').toLowerCase();
+                    label.classList.toggle('hidden', term.length > 0 && text.indexOf(term) === -1);
+                });
+            });
+        };
+        wireSearch('tech-filter-search', 'tech-filter-options');
+        wireSearch('ofensor-filter-search', 'ofensor-filter-options');
     }
 
     // Popula os checkboxes de Tecnologia/Ofensor apenas na primeira carga (evita a lista "encolher" a cada filtro de período)
@@ -944,8 +973,8 @@
             });
         };
 
-        buildCheckboxList('tech-filter-dropdown', filterOptions.tecnologias, 'techFilter');
-        buildCheckboxList('ofensor-filter-dropdown', filterOptions.ofensores, 'ofensorFilter');
+        buildCheckboxList('tech-filter-options', filterOptions.tecnologias, 'techFilter');
+        buildCheckboxList('ofensor-filter-options', filterOptions.ofensores, 'ofensorFilter');
     }
 
     // Atualiza o contador visual (badge) dos botões de filtro Tecnologia/Ofensor
@@ -1501,25 +1530,168 @@
         }
     }
 
+    // Diagrama de Sankey: Top Grupos/Serviços Responsáveis por Incidentes de Mudança
+    function renderSankeyMudanca(sankeyData) {
+        const s = sankeyData || { deploy: [], tradicional: [] };
+        renderSimpleSankey('sankeyTradicionalChart', s.tradicional, 'Nenhum Incidente de Mudança Tradicional no período filtrado.');
+        renderSimpleSankey('sankeyDeployChart', s.deploy, 'Nenhum Incidente de Deploy no período filtrado.');
+    }
+
+    function sankeyHashCode(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) { hash = ((hash << 5) - hash) + str.charCodeAt(i); hash |= 0; }
+        return hash;
+    }
+
+    function escapeXml(str) {
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Diagrama de Sankey leve, desenhado em SVG puro (sem depender de nenhuma biblioteca externa de gráficos,
+    // já que CDNs de terceiros podem estar bloqueados na rede do usuário — mesmo problema das bandeiras).
+    // Detecta os estágios automaticamente pelo caminho mais longo a partir de nós sem entrada (topológico),
+    // o que funciona tanto para o fluxo de 2 estágios (Deploy: Service Offering -> Tecnologia) quanto para o
+    // de 3 estágios (Tradicional: Grupo -> CHG Service -> Tecnologia), sem precisar tratar cada caso à parte.
+    function renderSimpleSankey(containerId, links, emptyMsg) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        if (!links || !links.length) {
+            container.innerHTML = `<p class="text-xs text-slate-300 italic text-center pt-16">${emptyMsg}</p>`;
+            return;
+        }
+
+        const nodeNames = [];
+        const nodeSeen = {};
+        const addNode = (n) => { if (!nodeSeen[n]) { nodeSeen[n] = true; nodeNames.push(n); } };
+        links.forEach(l => { addNode(l.from); addNode(l.to); });
+
+        const incoming = {}, outgoing = {};
+        nodeNames.forEach(n => { incoming[n] = []; outgoing[n] = []; });
+        links.forEach(l => { outgoing[l.from].push(l); incoming[l.to].push(l); });
+
+        const stageCache = {};
+        const computeStage = (n, guard) => {
+            if (stageCache[n] !== undefined) return stageCache[n];
+            guard = guard || {};
+            if (guard[n]) { stageCache[n] = 0; return 0; } // proteção contra ciclo (não deve ocorrer nestes dados)
+            guard[n] = true;
+            if (!incoming[n].length) { stageCache[n] = 0; return 0; }
+            let maxParent = 0;
+            incoming[n].forEach(l => { maxParent = Math.max(maxParent, computeStage(l.from, guard)); });
+            stageCache[n] = maxParent + 1;
+            return stageCache[n];
+        };
+        nodeNames.forEach(n => computeStage(n));
+
+        const maxStage = Math.max.apply(null, nodeNames.map(n => stageCache[n]));
+        const stages = [];
+        for (let i = 0; i <= maxStage; i++) stages.push([]);
+        nodeNames.forEach(n => stages[stageCache[n]].push(n));
+
+        const nodeValue = {};
+        nodeNames.forEach(n => {
+            const totalIn = incoming[n].reduce((sum, l) => sum + l.flow, 0);
+            const totalOut = outgoing[n].reduce((sum, l) => sum + l.flow, 0);
+            nodeValue[n] = Math.max(totalIn, totalOut) || 1;
+        });
+        stages.forEach(stageNodes => stageNodes.sort((a, b) => nodeValue[b] - nodeValue[a]));
+
+        const width = Math.max(container.clientWidth || 480, 320);
+        const height = 250;
+        const nodeWidth = 12;
+        const vGap = 8;
+        const stageGap = maxStage > 0 ? (width - nodeWidth) / maxStage : 0;
+
+        const pos = {};
+        stages.forEach((stageNodes, stageIdx) => {
+            const totalValue = stageNodes.reduce((sum, n) => sum + nodeValue[n], 0) || 1;
+            const gapsTotal = vGap * Math.max(stageNodes.length - 1, 0);
+            const availH = Math.max(height - gapsTotal, 10);
+            let y = 0;
+            stageNodes.forEach(n => {
+                const h = Math.max((nodeValue[n] / totalValue) * availH, 6);
+                pos[n] = { x: stageIdx * stageGap, y: y, h: h };
+                y += h + vGap;
+            });
+        });
+
+        const palette = ['#1B472A', '#FF6600', '#045473', '#930E44', '#E29627', '#6A803E', '#e94839'];
+        const colorOf = (n) => palette[Math.abs(sankeyHashCode(n)) % palette.length];
+
+        const outCursor = {}, inCursor = {};
+        nodeNames.forEach(n => { outCursor[n] = 0; inCursor[n] = 0; });
+
+        let linksSvg = '';
+        links.forEach(l => {
+            const src = pos[l.from], tgt = pos[l.to];
+            if (!src || !tgt) return;
+            const srcTotal = outgoing[l.from].reduce((sum, x) => sum + x.flow, 0) || 1;
+            const tgtTotal = incoming[l.to].reduce((sum, x) => sum + x.flow, 0) || 1;
+            const thickSrc = (l.flow / srcTotal) * src.h;
+            const thickTgt = (l.flow / tgtTotal) * tgt.h;
+            const thick = Math.max(Math.min(thickSrc, thickTgt), 1.5);
+
+            const y1 = src.y + outCursor[l.from] + thickSrc / 2;
+            const y2 = tgt.y + inCursor[l.to] + thickTgt / 2;
+            outCursor[l.from] += thickSrc;
+            inCursor[l.to] += thickTgt;
+
+            const x1 = src.x + nodeWidth;
+            const x2 = tgt.x;
+            const xMid = (x1 + x2) / 2;
+
+            linksSvg += `<path d="M${x1},${y1} C${xMid},${y1} ${xMid},${y2} ${x2},${y2}" fill="none" stroke="${colorOf(l.from)}" stroke-opacity="0.35" stroke-width="${thick.toFixed(1)}"><title>${escapeXml(l.from)} → ${escapeXml(l.to)}: ${l.flow} incidente(s)</title></path>`;
+        });
+
+        let nodesSvg = '';
+        nodeNames.forEach(n => {
+            const p = pos[n];
+            const isLast = stageCache[n] === maxStage;
+            const textX = isLast ? p.x - 4 : p.x + nodeWidth + 4;
+            const anchor = isLast ? 'end' : 'start';
+            const label = n.length > 20 ? n.substring(0, 18) + '…' : n;
+            nodesSvg += `<rect x="${p.x}" y="${p.y}" width="${nodeWidth}" height="${p.h.toFixed(1)}" fill="${colorOf(n)}" rx="2"><title>${escapeXml(n)}: ${nodeValue[n]} incidente(s)</title></rect>`;
+            nodesSvg += `<text x="${textX}" y="${p.y + p.h / 2}" dy="0.32em" font-size="9" fill="#374151" text-anchor="${anchor}">${escapeXml(label)}<title>${escapeXml(n)}</title></text>`;
+        });
+
+        container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" class="w-full h-full" preserveAspectRatio="xMidYMid meet">${linksSvg}${nodesSvg}</svg>`;
+    }
+
+    // Botões "Ver ranking detalhado" que expandem/colapsam as listas por trás dos Sankeys
+    document.addEventListener('DOMContentLoaded', () => {
+        const wireToggle = (btnId, listId) => {
+            const btn = document.getElementById(btnId);
+            const list = document.getElementById(listId);
+            if (!btn || !list) return;
+            btn.addEventListener('click', () => list.classList.toggle('hidden'));
+        };
+        wireToggle('btn-toggle-grupos-tradicional', 'grupos-tradicional-list');
+        wireToggle('btn-toggle-grupos-deploy', 'grupos-deploy-list');
+    });
+
     // Origem da Detecção do Incidente (Caller do ServiceNow)
     function renderOrigemDeteccao(origem) {
         const listEl = document.getElementById('origem-deteccao-list');
         if (!listEl) return;
-        const o = origem || { 'End-users': 0, 'Monitoração': 0, 'Experiências': 0, base: 0 };
+        const empty = { count: 0, mttr: '00:00' };
+        const o = origem || { 'End-users': empty, 'Monitoração': empty, 'Experiências': empty, base: 0 };
         const base = o.base || 0;
         const items = [
-            { label: 'End-users', value: o['End-users'] || 0, icon: '👤', color: 'text-natura-blue-profundo' },
-            { label: 'Monitoração', value: o['Monitoração'] || 0, icon: '🖥️', color: 'text-natura-green-cerrado' },
-            { label: 'Experiências', value: o['Experiências'] || 0, icon: '✨', color: 'text-natura-orange' }
+            { label: 'End-users', data: o['End-users'] || empty, icon: '👤', color: 'text-natura-blue-profundo' },
+            { label: 'Monitoração', data: o['Monitoração'] || empty, icon: '🖥️', color: 'text-natura-green-cerrado' },
+            { label: 'Experiências', data: o['Experiências'] || empty, icon: '✨', color: 'text-natura-orange' }
         ];
         listEl.innerHTML = items.map(it => {
-            const pct = base > 0 ? Math.round((it.value / base) * 1000) / 10 : 0;
+            const count = it.data.count || 0;
+            const pct = base > 0 ? Math.round((count / base) * 1000) / 10 : 0;
             return `
                 <div class="flex items-center justify-between py-2 px-3 border border-slate-100 rounded-lg bg-slate-50/50">
                     <span class="flex items-center gap-2 text-xs font-bold text-slate-700"><span>${it.icon}</span>${it.label}</span>
                     <span class="text-right">
-                        <span class="font-black text-sm ${it.color}">${it.value}</span>
+                        <span class="font-black text-sm ${it.color}">${count}</span>
                         <span class="text-[10px] text-slate-400 ml-1">(${pct}%)</span>
+                        <span class="block text-[9px] text-slate-400 font-semibold">MTTR: ${it.data.mttr || '00:00'}</span>
                     </span>
                 </div>
             `;
@@ -1612,10 +1784,9 @@
         gridEl.innerHTML = keys.map(code => {
             const item = metrics[code];
             const pct = totalIncidentes > 0 ? Math.round((item.count / totalIncidentes) * 1000) / 10 : 0;
-            const iso = FLAG_CODE_OVERRIDES[code] || code.toLowerCase();
             return `
                 <div class="kpi-card rounded-2xl p-3 border border-slate-200 bg-white flex flex-col items-center text-center gap-1">
-                    <img src="https://flagcdn.com/w40/${iso}.png" width="28" height="18" alt="${code}" class="rounded-sm shadow-sm object-cover" onerror="this.style.visibility='hidden'">
+                    <span class="text-2xl leading-none">${countryCodeToFlagEmoji(code)}</span>
                     <p class="text-[10px] font-bold text-slate-600">${code}</p>
                     <p class="text-lg font-extrabold text-natura-green-cerrado leading-none">${item.count}</p>
                     <p class="text-[9px] text-slate-400">${pct}%</p>
@@ -1869,12 +2040,158 @@
                 btn.classList.remove('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
                 btn.classList.add('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
 
-                // Redraw
-                const data = ALL_DATA.evolutionData[group];
-                if (data) {
-                    drawEvolutionChart(data.metrics, data.mttr, data.title);
+                // As dimensões extras (Severidade/Detecção/Jornada/País) só têm breakdown Mensal
+                if (group !== 'monthly') {
+                    CURRENT_FILTERS.evolutionDimension = 'default';
+                    const dimSelect = document.getElementById('evolution-dimension-select');
+                    if (dimSelect) dimSelect.value = 'default';
                 }
+                updateEvolutionDimensionAvailability();
+
+                renderEvolutionByCurrentDimension();
             });
+        });
+    }
+
+    // Habilita/desabilita o seletor de dimensão da Evolução conforme o agrupamento (só disponível no Mensal)
+    function updateEvolutionDimensionAvailability() {
+        const dimSelect = document.getElementById('evolution-dimension-select');
+        const note = document.getElementById('evolution-dimension-note');
+        const isMonthly = (CURRENT_FILTERS.evolutionGrouping || 'monthly') === 'monthly';
+        if (dimSelect) dimSelect.disabled = !isMonthly;
+        if (note) note.classList.toggle('hidden', isMonthly);
+    }
+
+    // Seletor "Ver por": redesenha a Evolução Mensal por Severidade / Origem da Detecção / Jornada / País
+    function setupEvolutionDimensionSelect() {
+        const select = document.getElementById('evolution-dimension-select');
+        if (!select || select.dataset.wired) return;
+        select.dataset.wired = 'true';
+        updateEvolutionDimensionAvailability();
+        select.addEventListener('change', () => {
+            CURRENT_FILTERS.evolutionDimension = select.value;
+            if (select.value !== 'default') {
+                // Força o agrupamento para Mensal, já que só há breakdown por mês para essas dimensões
+                CURRENT_FILTERS.evolutionGrouping = 'monthly';
+                const monthlyBtn = document.getElementById('btn-ev-monthly');
+                if (monthlyBtn) monthlyBtn.click();
+                return; // btn.click() já dispara renderEvolutionByCurrentDimension()
+            }
+            renderEvolutionByCurrentDimension();
+        });
+    }
+
+    // Atualiza o painel lateral com Volumetria Total e MTTR Médio do período filtrado atual
+    function updateEvolutionSideStats(kpis) {
+        const volEl = document.getElementById('evolution-side-volume');
+        const mttrEl = document.getElementById('evolution-side-mttr');
+        if (volEl) volEl.textContent = kpis ? (kpis.incidentesTotal || 0) : 0;
+        if (mttrEl) mttrEl.textContent = kpis ? (kpis.mttrTotal || '00:00') : '00:00';
+    }
+
+    // Decide qual desenho fazer no gráfico de Evolução: combo Volumetria+MTTR (default) ou barras agrupadas por dimensão
+    function renderEvolutionByCurrentDimension() {
+        const dimension = CURRENT_FILTERS.evolutionDimension || 'default';
+        const group = CURRENT_FILTERS.evolutionGrouping || 'monthly';
+
+        if (dimension === 'default') {
+            const data = ALL_DATA.evolutionData ? ALL_DATA.evolutionData[group] : null;
+            if (data) drawEvolutionChart(data.metrics, data.mttr, data.title);
+            return;
+        }
+
+        const DIMENSION_CONFIG = {
+            severidade: {
+                title: 'Evolução Mensal por Severidade',
+                data: ALL_DATA.monthlyBySeveridade,
+                series: [
+                    { key: 'sev0', label: 'Sev0', color: '#e94839' },
+                    { key: 'sev1', label: 'Sev1', color: '#FF6600' }
+                ]
+            },
+            deteccao: {
+                title: 'Evolução Mensal por Origem da Detecção',
+                data: ALL_DATA.monthlyByOrigem,
+                series: [
+                    { key: 'End-users', label: 'End-users', color: '#045473' },
+                    { key: 'Monitoração', label: 'Monitoração', color: '#1B472A' },
+                    { key: 'Experiências', label: 'Experiências', color: '#FF6600' }
+                ]
+            },
+            jornada: {
+                title: 'Evolução Mensal por Jornada Impactada',
+                data: ALL_DATA.monthlyByJornada,
+                series: null // dinâmico: descoberto a partir dos dados
+            },
+            pais: {
+                title: 'Evolução Mensal por País Impactado',
+                data: ALL_DATA.monthlyByPais,
+                series: null // dinâmico, limitado ao Top 6 + Outros
+            }
+        };
+
+        const config = DIMENSION_CONFIG[dimension];
+        if (!config) return;
+        drawEvolutionGroupedChart(config.data || {}, config.series, config.title);
+    }
+
+    // Desenha um gráfico de barras agrupadas: 1 grupo por mês, 1 série (barra) por categoria da dimensão escolhida
+    function drawEvolutionGroupedChart(breakdownByMonth, seriesConfig, title) {
+        const titleEl = document.getElementById('evolution-chart-title');
+        if (titleEl) titleEl.textContent = title;
+
+        const monthsOrder = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+        const labels = monthsOrder.filter(m => breakdownByMonth[m] !== undefined);
+        const displayLabels = labels.map(l => l.charAt(0).toUpperCase() + l.slice(1));
+
+        let series = seriesConfig;
+        if (!series) {
+            // Dimensões dinâmicas (Jornada/País): descobre categorias a partir dos dados, limitando a Top 6 + "Outros"
+            const totals = {};
+            labels.forEach(m => {
+                Object.keys(breakdownByMonth[m] || {}).forEach(cat => {
+                    totals[cat] = (totals[cat] || 0) + breakdownByMonth[m][cat];
+                });
+            });
+            const topCats = Object.keys(totals).sort((a, b) => totals[b] - totals[a]).slice(0, 6);
+            const palette = ['#1B472A', '#FF6600', '#045473', '#930E44', '#E29627', '#6A803E', '#94a3b8'];
+            series = topCats.map((cat, idx) => ({ key: cat, label: cat, color: palette[idx % palette.length] }));
+            if (Object.keys(totals).length > topCats.length) {
+                series.push({ key: '__outros__', label: 'Outros', color: '#94a3b8' });
+            }
+        }
+
+        const datasets = series.map(s => ({
+            label: s.label,
+            backgroundColor: s.color,
+            data: labels.map(m => {
+                const monthData = breakdownByMonth[m] || {};
+                if (s.key === '__outros__') {
+                    const known = series.filter(x => x.key !== '__outros__').map(x => x.key);
+                    return Object.keys(monthData).reduce((sum, k) => sum + (known.indexOf(k) === -1 ? monthData[k] : 0), 0);
+                }
+                return monthData[s.key] || 0;
+            }),
+            datalabels: { display: false }
+        }));
+
+        const ctx = document.getElementById('monthlyIncidentsChart').getContext('2d');
+        if (window.monthlyChartInstance) window.monthlyChartInstance.destroy();
+        window.monthlyChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: displayLabels, datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { stacked: false },
+                    y: { beginAtZero: true, stacked: false }
+                },
+                plugins: {
+                    legend: { display: true, position: 'bottom', labels: { boxWidth: 12, padding: 15, font: { size: 11 } } },
+                    tooltip: { mode: 'index', intersect: false }
+                }
+            }
         });
     }
 
@@ -2406,17 +2723,25 @@
     }
 
     // A maioria dos códigos usados na planilha já é ISO-3166 alpha-2 válido (BR, AR, CO, CL, PE, MX...);
-    // aqui só ficam os poucos códigos internos que divergem do padrão ISO usado pela flagcdn.
-    const FLAG_CODE_OVERRIDES = { 'EQ': 'ec', 'UR': 'uy' };
+    // aqui só ficam os poucos códigos internos que divergem do padrão ISO usado para gerar a bandeira.
+    const FLAG_CODE_OVERRIDES = { 'EQ': 'EC', 'UR': 'UY' };
+
+    // Bandeiras como emoji Unicode (2 Regional Indicator Symbols), sem depender de imagem externa/CDN —
+    // evita o problema de bandeira "quebrada" quando o carregamento de imagens de terceiros é bloqueado.
+    function countryCodeToFlagEmoji(code) {
+        const iso = (FLAG_CODE_OVERRIDES[code] || code).toUpperCase();
+        if (iso.length !== 2 || !/^[A-Z]{2}$/.test(iso)) return '🏳️';
+        const points = iso.split('').map(ch => 127397 + ch.charCodeAt(0));
+        return String.fromCodePoint(points[0], points[1]);
+    }
 
     function renderFlags(abrangenciaStr) {
         if (!abrangenciaStr || abrangenciaStr === 'N/A') return 'N/A';
         const countries = abrangenciaStr.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
         if (!countries.length) return 'N/A';
         return `<div class="flex flex-wrap gap-2 mt-1">` + countries.map(c => {
-            const iso = FLAG_CODE_OVERRIDES[c] || c.toLowerCase();
-            return `<span title="${c}" class="inline-flex items-center gap-2 bg-white border border-slate-200 px-2 py-1 rounded shadow-sm">
-                        <img src="https://flagcdn.com/w40/${iso}.png" width="18" height="12" alt="${c}" class="rounded-xs shadow-xs object-cover" onerror="this.style.display='none'">
+            return `<span title="${c}" class="inline-flex items-center gap-1.5 bg-white border border-slate-200 px-2 py-1 rounded shadow-sm">
+                        <span class="text-base leading-none">${countryCodeToFlagEmoji(c)}</span>
                         <span class="font-bold text-slate-700 text-[11px]">${c}</span>
                     </span>`;
         }).join('') + `</div>`;

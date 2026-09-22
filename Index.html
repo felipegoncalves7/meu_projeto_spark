@@ -274,8 +274,12 @@
                                 </svg>
                             </button>
                             <div id="tech-filter-dropdown"
-                                class="hidden absolute left-0 mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-lg z-20 p-3 flex flex-col gap-2 max-h-80 overflow-y-auto">
-                                <!-- Checkboxes injetados via JS -->
+                                class="hidden absolute left-0 mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-lg z-20 p-3 flex flex-col gap-2">
+                                <input type="text" id="tech-filter-search" placeholder="Digite para buscar..."
+                                    class="text-xs font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-natura-orange focus:border-natura-orange outline-none w-full">
+                                <div id="tech-filter-options" class="flex flex-col gap-1 max-h-64 overflow-y-auto">
+                                    <!-- Checkboxes injetados via JS -->
+                                </div>
                             </div>
                         </div>
                         <!-- Dropdown: Ofensor -->
@@ -291,8 +295,12 @@
                                 </svg>
                             </button>
                             <div id="ofensor-filter-dropdown"
-                                class="hidden absolute left-0 mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-lg z-20 p-3 flex flex-col gap-2 max-h-80 overflow-y-auto">
-                                <!-- Checkboxes injetados via JS -->
+                                class="hidden absolute left-0 mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-lg z-20 p-3 flex flex-col gap-2">
+                                <input type="text" id="ofensor-filter-search" placeholder="Digite para buscar..."
+                                    class="text-xs font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-natura-orange focus:border-natura-orange outline-none w-full">
+                                <div id="ofensor-filter-options" class="flex flex-col gap-1 max-h-64 overflow-y-auto">
+                                    <!-- Checkboxes injetados via JS -->
+                                </div>
                             </div>
                         </div>
                         <button type="button" id="btn-clear-tech-ofensor-filter"
@@ -757,17 +765,37 @@
                         </span>
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <!-- Tradicionais: Grupo > CHG Service > Qtd > Tecnologias -->
+                        <!-- Tradicionais: Sankey Grupo -> CHG Service -> Tecnologia -->
                         <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
                             <p class="text-xs text-slate-500 uppercase tracking-wider font-bold mb-3">Tradicionais —
-                                Grupo &gt; Serviço</p>
-                            <div id="grupos-tradicional-list" class="space-y-2"></div>
+                                Grupo &gt; Serviço &gt; Tecnologia</p>
+                            <div class="h-72" id="sankeyTradicionalChart"></div>
+                            <button type="button" id="btn-toggle-grupos-tradicional"
+                                class="text-[10px] font-bold text-natura-orange mt-3 flex items-center gap-1">Ver
+                                ranking detalhado
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            <div id="grupos-tradicional-list" class="hidden space-y-2 mt-3"></div>
                         </div>
-                        <!-- Deploys: Service Offering > Qtd > Tecnologias -->
+                        <!-- Deploys: Sankey Service Offering -> Tecnologia -->
                         <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
                             <p class="text-xs text-slate-500 uppercase tracking-wider font-bold mb-3">Deploys — Service
-                                Offering</p>
-                            <div id="grupos-deploy-list" class="space-y-2"></div>
+                                Offering &gt; Tecnologia</p>
+                            <div class="h-72" id="sankeyDeployChart"></div>
+                            <button type="button" id="btn-toggle-grupos-deploy"
+                                class="text-[10px] font-bold text-natura-orange mt-3 flex items-center gap-1">Ver
+                                ranking detalhado
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            <div id="grupos-deploy-list" class="hidden space-y-2 mt-3"></div>
                         </div>
                     </div>
                 </div>
@@ -964,7 +992,7 @@
 
                 <!-- Evolution Chart -->
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col">
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                         <h2 id="evolution-chart-title" class="text-lg font-bold text-slate-800">Evolução Mensal</h2>
                         <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100"
                             id="evolution-toggle-container">
@@ -979,7 +1007,37 @@
                                 data-group="quarterly">Trimestral</button>
                         </div>
                     </div>
-                    <div class="relative w-full h-80 sm:h-96"><canvas id="monthlyIncidentsChart"></canvas></div>
+                    <div class="flex items-center gap-2 mb-6">
+                        <label for="evolution-dimension-select"
+                            class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ver por:</label>
+                        <select id="evolution-dimension-select"
+                            class="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-natura-orange focus:border-natura-orange outline-none cursor-pointer hover:bg-slate-100">
+                            <option value="default">Volumetria &amp; MTTR</option>
+                            <option value="severidade">Severidade (Sev0 x Sev1)</option>
+                            <option value="deteccao">Origem da Detecção</option>
+                            <option value="jornada">Jornadas Impactadas</option>
+                            <option value="pais">Países Impactados</option>
+                        </select>
+                        <span id="evolution-dimension-note" class="hidden text-[10px] text-slate-400 italic">Disponível
+                            apenas na visão Mensal.</span>
+                    </div>
+                    <div class="flex flex-col lg:flex-row gap-6">
+                        <div class="relative w-full h-80 sm:h-96 flex-1"><canvas id="monthlyIncidentsChart"></canvas>
+                        </div>
+                        <div id="evolution-side-stats"
+                            class="flex flex-row lg:flex-col gap-3 lg:w-40 flex-none justify-center">
+                            <div class="kpi-card rounded-xl p-3 border border-slate-200 bg-slate-50/50 flex-1 lg:flex-none">
+                                <p class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Volumetria
+                                    Total</p>
+                                <p id="evolution-side-volume" class="text-xl font-extrabold text-natura-green-cerrado">
+                                    0</p>
+                            </div>
+                            <div class="kpi-card rounded-xl p-3 border border-slate-200 bg-slate-50/50 flex-1 lg:flex-none">
+                                <p class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">MTTR Médio</p>
+                                <p id="evolution-side-mttr" class="text-xl font-extrabold text-natura-orange">00:00</p>
+                            </div>
+                        </div>
+                    </div>
 
                     <!-- Botão Data Story -->
                     <div class="mt-4 flex justify-end">

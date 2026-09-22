@@ -710,10 +710,20 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
            offenderMetrics: {},
            jornadaMetrics: {},
            paisMetrics: {},
-           origemDeteccao: { 'End-users': 0, 'Monitoração': 0, 'Experiências': 0, base: 0 },
+           origemDeteccao: {
+             'End-users': { count: 0, mttr: "00:00" },
+             'Monitoração': { count: 0, mttr: "00:00" },
+             'Experiências': { count: 0, mttr: "00:00" },
+             base: 0
+           },
            gruposResponsaveis: { deploy: [], tradicional: [] },
+           sankeyMudanca: { deploy: [], tradicional: [] },
            mttdVsMttrDispersao: [],
-           filterOptions: { tecnologias: [], ofensores: [] }
+           filterOptions: { tecnologias: [], ofensores: [] },
+           monthlyBySeveridade: {},
+           monthlyByOrigem: {},
+           monthlyByJornada: {},
+           monthlyByPais: {}
         };
     }
 
@@ -755,14 +765,23 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         sev1PrioBase: 0, sev1PrioAderente: 0,
         divergenciasSevPrio: [],
         // Origem da Detecção (Caller do ServiceNow)
-        origemDeteccao: { 'End-users': 0, 'Monitoração': 0, 'Experiências': 0 },
+        origemDeteccao: {
+            'End-users': { count: 0, durationMin: 0 },
+            'Monitoração': { count: 0, durationMin: 0 },
+            'Experiências': { count: 0, durationMin: 0 }
+        },
         origemDeteccaoBase: 0,
-        // Top Grupos/Serviços Responsáveis por Incidentes causados por Mudança
-        gruposDeploy: {},       // key: serviceOffering -> { count, tecnologias: Set }
-        gruposTradicional: {},  // key: grupo + '||' + chgService -> { grupo, chgService, count, tecnologias: Set }
+        // Top Grupos/Serviços Responsáveis por Incidentes causados por Mudança (com detalhe por Tecnologia, p/ Sankey)
+        gruposDeploy: {},       // key: serviceOffering -> { count, tecnologias: {tech: count} }
+        gruposTradicional: {},  // key: grupo + '||' + chgService -> { grupo, chgService, count, tecnologias: {tech: count} }
         // Filtros disponíveis (para popular os selects de Tecnologia/Ofensor)
         tecnologiasDisponiveis: new Set(),
-        ofensoresDisponiveis: new Set()
+        ofensoresDisponiveis: new Set(),
+        // Evolução Mensal por Dimensão (Severidade / Origem da Detecção / Jornada / País)
+        monthlyBySeveridade: {}, // mes -> { sev0, sev1 }
+        monthlyByOrigem: {},     // mes -> { 'End-users', 'Monitoração', 'Experiências' }
+        monthlyByJornada: {},    // mes -> { jornada: count }
+        monthlyByPais: {}        // mes -> { pais: count }
     };
 
     dataRows.forEach((row, i) => {
@@ -825,14 +844,17 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
           metrics.quarterlyMetrics[quarterLabel].durationMin += durMin;
         }
 
+        if (!metrics.monthlyBySeveridade[mes]) metrics.monthlyBySeveridade[mes] = { sev0: 0, sev1: 0 };
         if (isSev0) {
         metrics.sev0Incidentes++;
         metrics.sev0DuracaoMinutos += durMin;
         if (durMin <= OLA_TARGET_SEV0_MIN) metrics.sev0DentroOLA++;
+        metrics.monthlyBySeveridade[mes].sev0++;
         } else if (isSev1) {
         metrics.sev1Incidentes++;
         metrics.sev1DuracaoMinutos += durMin;
         if (durMin <= OLA_TARGET_SEV1_MIN) metrics.sev1DentroOLA++;
+        metrics.monthlyBySeveridade[mes].sev1++;
         }
 
         // Governança: Aderência Sev x Prioridade (Sev0/Sev1 são aderentes se Priority = P1-Critical ou P2-High)
@@ -868,8 +890,12 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             const caller = ticketIdCaller ? callerMap[ticketIdCaller] : undefined;
             const origem = classifyCaller(caller);
             if (origem) {
-                metrics.origemDeteccao[origem]++;
+                metrics.origemDeteccao[origem].count++;
+                metrics.origemDeteccao[origem].durationMin += durMin;
                 metrics.origemDeteccaoBase++;
+
+                if (!metrics.monthlyByOrigem[mes]) metrics.monthlyByOrigem[mes] = { 'End-users': 0, 'Monitoração': 0, 'Experiências': 0 };
+                metrics.monthlyByOrigem[mes][origem]++;
             }
         }
 
@@ -880,6 +906,9 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
                 if (!metrics.jornadaMetrics[jornada]) metrics.jornadaMetrics[jornada] = { count: 0, durationMin: 0 };
                 metrics.jornadaMetrics[jornada].count++;
                 metrics.jornadaMetrics[jornada].durationMin += durMin;
+
+                if (!metrics.monthlyByJornada[mes]) metrics.monthlyByJornada[mes] = {};
+                metrics.monthlyByJornada[mes][jornada] = (metrics.monthlyByJornada[mes][jornada] || 0) + 1;
             });
         }
 
@@ -890,6 +919,9 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
                 if (!metrics.paisMetrics[pais]) metrics.paisMetrics[pais] = { count: 0, durationMin: 0 };
                 metrics.paisMetrics[pais].count++;
                 metrics.paisMetrics[pais].durationMin += durMin;
+
+                if (!metrics.monthlyByPais[mes]) metrics.monthlyByPais[mes] = {};
+                metrics.monthlyByPais[mes][pais] = (metrics.monthlyByPais[mes][pais] || 0) + 1;
             });
         }
 
@@ -905,20 +937,20 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             const numSm = String(row[COL_SM_NUMBER]).trim();
             const chg = numSm ? changeMap[numSm] : null;
 
-            // Top Grupos/Serviços Responsáveis
+            // Top Grupos/Serviços Responsáveis (contagem por Tecnologia, usada no ranking e no Diagrama de Sankey)
             if (chg) {
                 if (isDeploy) {
                     const key = chg.serviceOffering || 'N/A';
-                    if (!metrics.gruposDeploy[key]) metrics.gruposDeploy[key] = { count: 0, tecnologias: new Set() };
+                    if (!metrics.gruposDeploy[key]) metrics.gruposDeploy[key] = { count: 0, tecnologias: {} };
                     metrics.gruposDeploy[key].count++;
-                    metrics.gruposDeploy[key].tecnologias.add(techImpactada);
+                    metrics.gruposDeploy[key].tecnologias[techImpactada] = (metrics.gruposDeploy[key].tecnologias[techImpactada] || 0) + 1;
                 } else {
                     const key = chg.assignmentGroup + '||' + chg.service;
                     if (!metrics.gruposTradicional[key]) {
-                        metrics.gruposTradicional[key] = { grupo: chg.assignmentGroup, chgService: chg.service, count: 0, tecnologias: new Set() };
+                        metrics.gruposTradicional[key] = { grupo: chg.assignmentGroup, chgService: chg.service, count: 0, tecnologias: {} };
                     }
                     metrics.gruposTradicional[key].count++;
-                    metrics.gruposTradicional[key].tecnologias.add(techImpactada);
+                    metrics.gruposTradicional[key].tecnologias[techImpactada] = (metrics.gruposTradicional[key].tecnologias[techImpactada] || 0) + 1;
                 }
             }
 
@@ -1058,11 +1090,11 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
     const aderenciaSevPrioSev0 = metrics.sev0PrioBase > 0 ? (metrics.sev0PrioAderente / metrics.sev0PrioBase) * 100 : null;
     const aderenciaSevPrioSev1 = metrics.sev1PrioBase > 0 ? (metrics.sev1PrioAderente / metrics.sev1PrioBase) * 100 : null;
 
-    // Top Grupos Responsáveis: converte Sets em arrays e ordena por Quantidade de Incidentes (desc)
+    // Top Grupos Responsáveis: converte contagens por Tecnologia em arrays e ordena por Quantidade (desc)
     const gruposDeployList = Object.keys(metrics.gruposDeploy).map(key => ({
         serviceOffering: key,
         count: metrics.gruposDeploy[key].count,
-        tecnologias: Array.from(metrics.gruposDeploy[key].tecnologias)
+        tecnologias: Object.keys(metrics.gruposDeploy[key].tecnologias)
     })).sort((a, b) => b.count - a.count);
 
     const gruposTradicionalList = Object.keys(metrics.gruposTradicional).map(key => {
@@ -1071,9 +1103,46 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             grupo: g.grupo,
             chgService: g.chgService,
             count: g.count,
-            tecnologias: Array.from(g.tecnologias)
+            tecnologias: Object.keys(g.tecnologias)
         };
     }).sort((a, b) => b.count - a.count);
+
+    // Diagrama de Sankey: Deploy é 2 estágios (Service Offering -> Tecnologia).
+    const sankeyDeploy = [];
+    Object.keys(metrics.gruposDeploy).forEach(key => {
+        const techs = metrics.gruposDeploy[key].tecnologias;
+        Object.keys(techs).forEach(tech => {
+            sankeyDeploy.push({ from: key, to: tech, flow: techs[tech] });
+        });
+    });
+
+    // Tradicional é 3 estágios (Grupo -> CHG Service -> Tecnologia), agregando por par em cada estágio.
+    const grupoServiceCounts = {};
+    const serviceTechCounts = {};
+    Object.keys(metrics.gruposTradicional).forEach(key => {
+        const g = metrics.gruposTradicional[key];
+        const stage1Key = g.grupo + '||' + g.chgService;
+        if (!grupoServiceCounts[stage1Key]) grupoServiceCounts[stage1Key] = { from: g.grupo, to: g.chgService, flow: 0 };
+        grupoServiceCounts[stage1Key].flow += g.count;
+
+        Object.keys(g.tecnologias).forEach(tech => {
+            const stage2Key = g.chgService + '||' + tech;
+            if (!serviceTechCounts[stage2Key]) serviceTechCounts[stage2Key] = { from: g.chgService, to: tech, flow: 0 };
+            serviceTechCounts[stage2Key].flow += g.tecnologias[tech];
+        });
+    });
+    const sankeyTradicional = Object.keys(grupoServiceCounts).map(k => grupoServiceCounts[k])
+        .concat(Object.keys(serviceTechCounts).map(k => serviceTechCounts[k]));
+
+    // Origem da Detecção: formata contagem + MTTR por origem
+    const origemDeteccaoFormatted = {};
+    ['End-users', 'Monitoração', 'Experiências'].forEach(k => {
+        const item = metrics.origemDeteccao[k];
+        origemDeteccaoFormatted[k] = {
+            count: item.count,
+            mttr: calculateMTTR(item.durationMin, item.count)
+        };
+    });
 
     return {
         kpis: {
@@ -1119,20 +1188,28 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         jornadaMetrics: metrics.jornadaMetrics,
         paisMetrics: metrics.paisMetrics,
         origemDeteccao: {
-            'End-users': metrics.origemDeteccao['End-users'],
-            'Monitoração': metrics.origemDeteccao['Monitoração'],
-            'Experiências': metrics.origemDeteccao['Experiências'],
+            'End-users': origemDeteccaoFormatted['End-users'],
+            'Monitoração': origemDeteccaoFormatted['Monitoração'],
+            'Experiências': origemDeteccaoFormatted['Experiências'],
             base: metrics.origemDeteccaoBase
         },
         gruposResponsaveis: {
             deploy: gruposDeployList,
             tradicional: gruposTradicionalList
         },
+        sankeyMudanca: {
+            deploy: sankeyDeploy,
+            tradicional: sankeyTradicional
+        },
         mttdVsMttrDispersao: metrics.mttdVsMttrDispersao,
         filterOptions: {
             tecnologias: Array.from(metrics.tecnologiasDisponiveis).sort(),
             ofensores: Array.from(metrics.ofensoresDisponiveis).sort()
         },
+        monthlyBySeveridade: metrics.monthlyBySeveridade,
+        monthlyByOrigem: metrics.monthlyByOrigem,
+        monthlyByJornada: metrics.monthlyByJornada,
+        monthlyByPais: metrics.monthlyByPais,
         rawIncidents: metrics.rawIncidents
     };
   } catch (e) {
