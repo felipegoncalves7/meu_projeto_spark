@@ -47,70 +47,49 @@
     <?!= include('dashboard.css'); ?>
 </head>
 
-<body class="bg-slate-50 text-slate-800 h-screen flex flex-col overflow-hidden">
-    <!-- Header (Dark Green) -->
-    <header class="bg-natura-green-cerrado shadow-md z-20 flex-none">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <div class="flex flex-col md:flex-row md:items-start justify-between gap-4">
-
-                <!-- Left Side: Title & Info -->
-                <div class="flex flex-col gap-1">
-                    <h1 class="text-3xl font-bold text-white tracking-tight leading-none">
-                        Gestão de Incidentes e Problemas ITSM
-                    </h1>
-                    <div class="flex items-center gap-3 text-natura-gray-light text-sm mt-1">
-                        <span class="opacity-90">Boa Tarde TD</span>
+<body class="bg-slate-50 text-slate-800">
+    <!-- Header: fixo no topo, com logo, navegação por seção (scroll-spy) e seletor de Ano -->
+    <header id="app-header" class="sticky top-0 z-30 bg-natura-green-cerrado shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between gap-4 py-3 border-b border-white/10">
+                <!-- Logo + Título -->
+                <div class="flex items-center gap-3 min-w-0">
+                    <!-- Placeholder do logo da marca: substituir por asset oficial do Brandbook -->
+                    <div id="brand-logo" class="flex-none h-9 w-9 rounded-lg bg-natura-orange flex items-center justify-center font-black text-white text-sm">
+                        N
                     </div>
-
-                    <!-- Year Selector Row -->
-                    <div class="mt-4 flex items-center gap-2">
-                        <label for="year-select"
-                            class="text-xs font-bold text-natura-gray-medium uppercase tracking-wide">Ano de
-                            Referência:</label>
-                        <select id="year-select"
-                            class="text-sm font-semibold text-white bg-natura-green-amazonia/50 border border-natura-green-murumuru rounded px-3 py-1 focus:ring-1 focus:ring-natura-orange focus:border-natura-orange outline-none transition-shadow cursor-pointer hover:bg-natura-green-amazonia">
-                            <option value="2025" selected>2025</option>
-                        </select>
+                    <div class="min-w-0">
+                        <h1 class="text-sm sm:text-base font-bold text-white leading-tight truncate">Gestão de
+                            Incidentes e Problemas ITSM</h1>
+                        <span class="hidden sm:block text-[11px] text-natura-gray-light/80 truncate">Visão Executiva
+                            &mdash; Major Incidents &amp; Major Problems</span>
                     </div>
                 </div>
+                <!-- Seletor de Ano -->
+                <div class="flex-none flex items-center gap-2">
+                    <label for="year-select"
+                        class="hidden md:block text-[11px] font-bold text-natura-gray-medium uppercase tracking-wide">Ano:</label>
+                    <select id="year-select"
+                        class="text-sm font-semibold text-white bg-natura-green-amazonia/50 border border-natura-green-murumuru rounded px-3 py-1.5 focus:ring-1 focus:ring-natura-orange focus:border-natura-orange outline-none transition-shadow cursor-pointer hover:bg-natura-green-amazonia">
+                        <option value="2025" selected>2025</option>
+                    </select>
+                </div>
             </div>
+            <!-- Navegação por Seção (scroll-spy): a aba ativa acompanha a seção visível na rolagem -->
+            <nav id="section-nav" class="flex gap-1 overflow-x-auto no-scrollbar -mb-px">
+                <a href="#sec-visao-geral" data-section="sec-visao-geral" class="section-nav-link">Visão Geral</a>
+                <a href="#sec-mudancas" data-section="sec-mudancas" class="section-nav-link">Mudanças</a>
+                <a href="#sec-jornadas-paises" data-section="sec-jornadas-paises" class="section-nav-link">Jornadas &amp;
+                    Países</a>
+                <a href="#sec-qualidade" data-section="sec-qualidade" class="section-nav-link">Qualidade RCA</a>
+                <a href="#sec-evolucao" data-section="sec-evolucao" class="section-nav-link">Evolução &amp; Tecnologia</a>
+                <a href="#sec-problemas" data-section="sec-problemas" class="section-nav-link">Problemas</a>
+            </nav>
         </div>
     </header>
 
-    <!-- Tabs Bar (White) -->
-    <div class="bg-white border-b border-slate-200 shadow-sm z-10 flex-none">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex gap-8">
-                <button
-                    class="tab-btn active-tab border-b-2 border-natura-orange text-natura-orange px-1 py-4 text-sm font-bold transition-colors focus:outline-none hover:text-natura-orange"
-                    data-target="tab-major">
-                    <span class="flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                        </svg>
-                        Major Incidentes
-                    </span>
-                </button>
-                <button
-                    class="tab-btn border-b-2 border-transparent text-slate-500 hover:text-natura-green-cerrado hover:border-natura-green-murumuru/30 px-1 py-4 text-sm font-medium transition-colors focus:outline-none"
-                    data-target="tab-problems">
-                    <span class="flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                        Major Problems
-                    </span>
-                </button>
-            </div>
-        </div>
-    </div>
-
     <!-- Content -->
-    <main class="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-8 relative">
+    <main class="bg-slate-50 p-4 sm:p-8 relative">
         <div class="max-w-7xl mx-auto">
             <!-- Loader consolidated at the end of the file -->
 
@@ -129,8 +108,7 @@
                 </div>
             </div>
 
-            <!-- Tab 1 -->
-            <div id="tab-major" class="tab-content space-y-6 transition-opacity duration-300 hidden">
+            <div id="tab-major" class="space-y-10">
 
                 <!-- Filter Section (White Card, expansível) -->
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
@@ -307,6 +285,14 @@
                             class="text-xs font-semibold text-slate-400 hover:text-slate-600 transition-colors">Limpar</button>
                     </div>
                     </div>
+                </div>
+
+                <!-- ============ SEÇÃO: VISÃO GERAL (todos os KPIs em Cards) ============ -->
+                <section id="sec-visao-geral" class="space-y-10 scroll-mt-28">
+                <div class="flex items-center gap-2">
+                    <h2 class="text-xl font-black text-natura-green-amazonia">Visão Geral</h2>
+                    <span class="text-xs text-slate-400 font-medium">Todos os KPIs de Incidentes, Mudanças e
+                        Problemas, consolidados</span>
                 </div>
 
                 <!-- KPI Grid -->
@@ -748,6 +734,131 @@
                     </div>
                 </div>
 
+                <!-- Major Problems: KPI Grid (6 cards) -->
+                <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <!-- 1. Total Incidentes -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Total de Incidentes
+                        </p>
+                        <div class="flex items-center justify-between">
+                            <p id="mp-total-incidencts" class="text-3xl font-extrabold text-slate-900">0</p>
+                            <div class="p-2 bg-slate-100 rounded-lg text-slate-500"><svg
+                                    xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg></div>
+                        </div>
+                    </div>
+                    <!-- 2. Total Problemas -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Total de Problemas</p>
+                        <div class="flex items-center justify-between">
+                            <p id="mp-total-problems" class="text-3xl font-extrabold text-natura-orange">0</p>
+                            <div class="p-2 bg-natura-orange/10 rounded-lg text-natura-orange"><svg
+                                    xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                                </svg></div>
+                        </div>
+                    </div>
+                    <!-- 3. Problemas Abertos -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Problemas Abertos</p>
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span id="mp-open-problems"
+                                    class="text-3xl font-extrabold text-natura-red-buriti">0</span>
+                                <span id="mp-open-problems-pct"
+                                    class="text-xs font-semibold text-slate-400 ml-1">0%</span>
+                            </div>
+                            <div class="w-3 h-3 rounded-full bg-natura-red-buriti animate-pulse"></div>
+                        </div>
+                    </div>
+                    <!-- 4. Problemas Resolvidos -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Problemas Resolvidos
+                        </p>
+                        <div>
+                            <span id="mp-resolved-problems"
+                                class="text-3xl font-extrabold text-natura-green-cerrado">0</span>
+                            <span id="mp-resolved-problems-pct"
+                                class="text-xs font-semibold text-slate-400 ml-1">0%</span>
+                        </div>
+                    </div>
+                    <!-- 5. Problemas em Implementação -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Em Implementação</p>
+                        <div>
+                            <span id="mp-impl-problems"
+                                class="text-3xl font-extrabold text-natura-yellow-tucuma">0</span>
+                            <span id="mp-impl-problems-pct" class="text-xs font-semibold text-slate-400 ml-1">0%</span>
+                        </div>
+                    </div>
+                    <!-- 6. RCAs Pendentes -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Na fase de RCA</p>
+                        <div>
+                            <span id="mp-rca-pending" class="text-3xl font-extrabold text-natura-blue-profundo">0</span>
+                            <span id="mp-rca-pending-pct" class="text-xs font-semibold text-slate-400 ml-1">0%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Major Problems: Secondary KPI Grid (Aging & MTTRC) -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-slate-100">
+                    <!-- 7. Aging AVG Resolvidos -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Aging AVG Resolvidos
+                            (Dias)</p>
+                        <p id="mp-avg-aging-resolved" class="text-3xl font-extrabold text-natura-green-cerrado">0</p>
+                        <!-- Legend -->
+                        <div class="mt-3 pt-3 border-t border-slate-50 space-y-1">
+                            <div class="text-[10px] flex justify-between items-center">
+                                <span class="text-slate-400">Mínimo:</span>
+                                <span class="font-bold text-slate-500">31d - 40d</span>
+                            </div>
+                            <div class="text-[10px] flex justify-between items-center">
+                                <span class="text-natura-green-cerrado opacity-70">Meta:</span>
+                                <span class="font-bold text-natura-green-cerrado">30d - 25d</span>
+                            </div>
+                            <div class="text-[10px] flex justify-between items-center">
+                                <span class="text-natura-blue-profundo opacity-70">Desafio:</span>
+                                <span class="font-bold text-natura-blue-profundo">&lt;= 24d</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 8. MTTRC -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">MTTRC (Horas)</p>
+                        <p id="mp-avg-mttrc" class="text-3xl font-extrabold text-[#E29627]">0</p>
+                        <p class="text-[10px] text-slate-400 mt-1 leading-tight">
+                            Tempo médio em horas para identificar e documentar as Causas Raízes.
+                        </p>
+                    </div>
+                    <!-- 9. Aging AVG Backlog -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Aging AVG Backlog
+                            (Dias)</p>
+                        <p id="mp-avg-aging-backlog" class="text-3xl font-extrabold text-natura-blue-profundo">0</p>
+                        <p class="text-[10px] text-slate-400 mt-1 leading-tight">
+                            Backlog = Soma dos estados RCA e Implementação.
+                        </p>
+                    </div>
+                </div>
+
+                </section>
+                <!-- ============ FIM SEÇÃO: VISÃO GERAL ============ -->
+
+                <!-- ============ SEÇÃO: MUDANÇAS (detalhe de Incidentes causados por Mudança) ============ -->
+                <section id="sec-mudancas" class="space-y-10 scroll-mt-28 pt-4">
+                <div class="flex items-center gap-2">
+                    <h2 class="text-xl font-black text-natura-green-amazonia">Mudanças</h2>
+                    <span class="text-xs text-slate-400 font-medium">Grupos responsáveis, origem da detecção e
+                        dispersão MTTD x MTTR</span>
+                </div>
+
                 <!-- Top Grupos/Serviços Responsáveis por Incidentes causados por Mudança -->
                 <div class="pt-2">
                     <div class="flex items-center gap-2 mb-3">
@@ -869,6 +980,15 @@
                         </div>
                     </div>
                 </div>
+                </section>
+                <!-- ============ FIM SEÇÃO: MUDANÇAS ============ -->
+
+                <!-- ============ SEÇÃO: JORNADAS & PAÍSES ============ -->
+                <section id="sec-jornadas-paises" class="space-y-10 scroll-mt-28 pt-4">
+                <div class="flex items-center gap-2">
+                    <h2 class="text-xl font-black text-natura-green-amazonia">Jornadas &amp; Países</h2>
+                    <span class="text-xs text-slate-400 font-medium">Impacto por Jornada de negócio e por País</span>
+                </div>
 
                 <!-- Jornadas Impactadas -->
                 <div class="pt-2">
@@ -905,6 +1025,16 @@
                         </span>
                     </div>
                     <div id="pais-cards-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></div>
+                </div>
+                </section>
+                <!-- ============ FIM SEÇÃO: JORNADAS & PAÍSES ============ -->
+
+                <!-- ============ SEÇÃO: QUALIDADE RCA ============ -->
+                <section id="sec-qualidade" class="space-y-10 scroll-mt-28 pt-4">
+                <div class="flex items-center gap-2">
+                    <h2 class="text-xl font-black text-natura-green-amazonia">Qualidade RCA</h2>
+                    <span class="text-xs text-slate-400 font-medium">Qualidade de RCA, Plano de Ação e Governança de
+                        Testes</span>
                 </div>
 
                 <!-- Qualidade de RCA, Plano de Ação e Governança de Testes (Manual_Info), por Universo -->
@@ -1012,6 +1142,16 @@
                             </div>
                         </div>
                     </div>
+                </div>
+                </section>
+                <!-- ============ FIM SEÇÃO: QUALIDADE RCA ============ -->
+
+                <!-- ============ SEÇÃO: EVOLUÇÃO & TECNOLOGIA ============ -->
+                <section id="sec-evolucao" class="space-y-10 scroll-mt-28 pt-4">
+                <div class="flex items-center gap-2">
+                    <h2 class="text-xl font-black text-natura-green-amazonia">Evolução &amp; Tecnologia</h2>
+                    <span class="text-xs text-slate-400 font-medium">Tendências temporais, Tecnologia Impactada e
+                        Ofensores</span>
                 </div>
 
                 <!-- Evolution Chart -->
@@ -1197,82 +1337,17 @@
                     </div>
                     <div class="relative w-full h-72"><canvas id="drilldownChart"></canvas></div>
                 </div>
+                </section>
+                <!-- ============ FIM SEÇÃO: EVOLUÇÃO & TECNOLOGIA ============ -->
             </div>
 
-            <!-- Tab 2: Major Problems -->
-            <div id="tab-problems" class="tab-content transition-opacity duration-300 opacity-0 hidden space-y-6">
-                <!-- KPI Grid (6 cards) -->
-                <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                    <!-- 1. Total Incidentes -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Total de Incidentes
-                        </p>
-                        <div class="flex items-center justify-between">
-                            <p id="mp-total-incidencts" class="text-3xl font-extrabold text-slate-900">0</p>
-                            <div class="p-2 bg-slate-100 rounded-lg text-slate-500"><svg
-                                    xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                </svg></div>
-                        </div>
-                    </div>
-                    <!-- 2. Total Problemas -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Total de Problemas</p>
-                        <div class="flex items-center justify-between">
-                            <p id="mp-total-problems" class="text-3xl font-extrabold text-natura-orange">0</p>
-                            <div class="p-2 bg-natura-orange/10 rounded-lg text-natura-orange"><svg
-                                    xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                                </svg></div>
-                        </div>
-                    </div>
-                    <!-- 3. Problemas Abertos -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Problemas Abertos</p>
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <span id="mp-open-problems"
-                                    class="text-3xl font-extrabold text-natura-red-buriti">0</span>
-                                <span id="mp-open-problems-pct"
-                                    class="text-xs font-semibold text-slate-400 ml-1">0%</span>
-                            </div>
-                            <div class="w-3 h-3 rounded-full bg-natura-red-buriti animate-pulse"></div>
-                        </div>
-                    </div>
-                    <!-- 4. Problemas Resolvidos -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Problemas Resolvidos
-                        </p>
-                        <div>
-                            <span id="mp-resolved-problems"
-                                class="text-3xl font-extrabold text-natura-green-cerrado">0</span>
-                            <span id="mp-resolved-problems-pct"
-                                class="text-xs font-semibold text-slate-400 ml-1">0%</span>
-                        </div>
-                    </div>
-                    <!-- 5. Problemas em Implementação -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Em Implementação</p>
-                        <div>
-                            <span id="mp-impl-problems"
-                                class="text-3xl font-extrabold text-natura-yellow-tucuma">0</span>
-                            <span id="mp-impl-problems-pct" class="text-xs font-semibold text-slate-400 ml-1">0%</span>
-                        </div>
-                    </div>
-                    <!-- 6. RCAs Pendentes -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Na fase de RCA</p>
-                        <div>
-                            <span id="mp-rca-pending" class="text-3xl font-extrabold text-natura-blue-profundo">0</span>
-                            <span id="mp-rca-pending-pct" class="text-xs font-semibold text-slate-400 ml-1">0%</span>
-                        </div>
-                    </div>
+            <!-- ============ SEÇÃO: PROBLEMAS (Major Problems, detalhe) ============ -->
+            <section id="sec-problemas" class="space-y-8 scroll-mt-28">
+                <div class="flex items-center gap-2">
+                    <h2 class="text-xl font-black text-natura-green-amazonia">Problemas</h2>
+                    <span class="text-xs text-slate-400 font-medium">Detalhe de Major Problems &mdash; os KPIs
+                        principais estão na Visão Geral</span>
                 </div>
-
                 <!-- Mixed Chart & Explanatory Box -->
                 <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-stretch">
                     <!-- Chart Column -->
@@ -1348,48 +1423,6 @@
                     </div>
                 </div>
 
-                <!-- Secondary KPI Grid (Aging & MTTRC) -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-slate-100">
-                    <!-- 7. Aging AVG Resolvidos -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Aging AVG Resolvidos
-                            (Dias)</p>
-                        <p id="mp-avg-aging-resolved" class="text-3xl font-extrabold text-natura-green-cerrado">0</p>
-                        <!-- Legend -->
-                        <div class="mt-3 pt-3 border-t border-slate-50 space-y-1">
-                            <div class="text-[10px] flex justify-between items-center">
-                                <span class="text-slate-400">Mínimo:</span>
-                                <span class="font-bold text-slate-500">31d - 40d</span>
-                            </div>
-                            <div class="text-[10px] flex justify-between items-center">
-                                <span class="text-natura-green-cerrado opacity-70">Meta:</span>
-                                <span class="font-bold text-natura-green-cerrado">30d - 25d</span>
-                            </div>
-                            <div class="text-[10px] flex justify-between items-center">
-                                <span class="text-natura-blue-profundo opacity-70">Desafio:</span>
-                                <span class="font-bold text-natura-blue-profundo">&lt;= 24d</span>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- 8. MTTRC -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">MTTRC (Horas)</p>
-                        <p id="mp-avg-mttrc" class="text-3xl font-extrabold text-[#E29627]">0</p>
-                        <p class="text-[10px] text-slate-400 mt-1 leading-tight">
-                            Tempo médio em horas para identificar e documentar as Causas Raízes.
-                        </p>
-                    </div>
-                    <!-- 9. Aging AVG Backlog -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Aging AVG Backlog
-                            (Dias)</p>
-                        <p id="mp-avg-aging-backlog" class="text-3xl font-extrabold text-natura-blue-profundo">0</p>
-                        <p class="text-[10px] text-slate-400 mt-1 leading-tight">
-                            Backlog = Soma dos estados RCA e Implementação.
-                        </p>
-                    </div>
-                </div>
-
                 <!-- New Charts Section -->
                 <div class="flex flex-col gap-8 mt-8">
                     <!-- Monthly YTD Aging -->
@@ -1451,7 +1484,24 @@
                         </div>
                     </div>
                 </div>
-            </div>
+            </section>
+            <!-- ============ FIM SEÇÃO: PROBLEMAS ============ -->
+
+            <!-- Botão de Metodologia (footer) -->
+            <footer class="mt-4 pt-8 pb-4 border-t border-slate-200 flex flex-col items-center gap-3 text-center">
+                <button type="button" id="btn-open-metodologia"
+                    class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-natura-green-cerrado text-white text-sm font-bold shadow-sm hover:bg-natura-green-amazonia transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    Metodologia dos Indicadores
+                </button>
+                <p class="text-[11px] text-slate-400 max-w-lg">Fórmula de cálculo e fonte de dados de cada indicador
+                    exibido neste site.</p>
+                <p class="text-[10px] text-slate-300">Gestão de Incidentes e Problemas ITSM</p>
+            </footer>
 
             <!-- Debug Log Container -->
             <div id="debug-log-container"
@@ -1567,6 +1617,196 @@
                     </div>
                 </div>
             </div>
+            <!-- Metodologia dos Indicadores (Pop-up) -->
+            <div id="metodologia-modal"
+                class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+                <div
+                    class="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+                    <!-- Header -->
+                    <div class="bg-natura-green-cerrado p-5 flex justify-between items-center text-white flex-none">
+                        <div>
+                            <h2 class="text-xl font-bold leading-none">Metodologia dos Indicadores</h2>
+                            <p class="text-xs text-natura-gray-light/80 mt-1">Fórmula de cálculo e fonte de dados de
+                                cada KPI exibido neste site</p>
+                        </div>
+                        <button id="btn-close-metodologia"
+                            class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="overflow-y-auto p-6 space-y-8 text-sm">
+
+                        <div>
+                            <h3 class="text-xs font-bold text-natura-orange uppercase tracking-widest mb-3">Visão
+                                Geral &mdash; Incidentes</h3>
+                            <dl class="space-y-3">
+                                <div>
+                                    <dt class="font-bold text-slate-700">Total Geral / Sev0 / Sev1</dt>
+                                    <dd class="text-slate-500">Contagem de Major Incidents com Tecnologia = "Sim" na
+                                        aba MajorIncidentes{ano}, segmentados por Severidade (coluna I). MTTR = tempo
+                                        médio entre Abertura e Encerramento (coluna E), no formato HH:MM.</dd>
+                                </div>
+                                <div>
+                                    <dt class="font-bold text-slate-700">Aderência OLA (Geral / Sev0 / Sev1)</dt>
+                                    <dd class="text-slate-500">% de incidentes restaurados dentro da meta de tempo:
+                                        Sev0 ≤ 2h e Sev1 ≤ 6h (enquanto a aba Task_SLA não é alimentada). Fórmula:
+                                        (Dentro da meta) / (Total Sev0+Sev1) × 100.</dd>
+                                </div>
+                                <div>
+                                    <dt class="font-bold text-slate-700">Governança Sev x Prioridade</dt>
+                                    <dd class="text-slate-500">% de Sev0/Sev1 cuja Priority no ServiceNow (aba
+                                        Major_ServiceNow) é "1 - Critical" ou "2 - High". Meta: ≥ 80%. Divergências
+                                        listam os tickets fora dessa regra.</dd>
+                                </div>
+                            </dl>
+                        </div>
+
+                        <div>
+                            <h3 class="text-xs font-bold text-natura-orange uppercase tracking-widest mb-3">Visão
+                                Geral &mdash; Mudanças</h3>
+                            <dl class="space-y-3">
+                                <div>
+                                    <dt class="font-bold text-slate-700">Incidentes por Mudança (Geral/Deploy/Tradicional)
+                                    </dt>
+                                    <dd class="text-slate-500">Volume de Major Incidents cujo Ofensor (coluna Q) é
+                                        "Mudança", segmentado por Type SM (coluna V): Deploy (CI/CD) ou Tradicional
+                                        (Normal/Urgente/Emergencial).</dd>
+                                </div>
+                                <div>
+                                    <dt class="font-bold text-slate-700">MTTD Início / Término</dt>
+                                    <dd class="text-slate-500">Tempo médio entre o início (ou término) planejado da
+                                        Mudança (aba Change_MI) e a abertura do Incidente que ela causou. Meta de
+                                        referência: Início ≤ 25h, Término (Deploy) ≤ 6h.</dd>
+                                </div>
+                            </dl>
+                        </div>
+
+                        <div>
+                            <h3 class="text-xs font-bold text-natura-orange uppercase tracking-widest mb-3">Visão
+                                Geral &mdash; Problemas</h3>
+                            <dl class="space-y-3">
+                                <div>
+                                    <dt class="font-bold text-slate-700">Total de Problemas / Status</dt>
+                                    <dd class="text-slate-500">Contagem de Problemas únicos (aba MajorProblems{ano}),
+                                        segmentados por Status: Abertos, Resolvidos, Em Implementação, Em RCA.</dd>
+                                </div>
+                                <div>
+                                    <dt class="font-bold text-slate-700">Aging AVG Resolvidos / Backlog</dt>
+                                    <dd class="text-slate-500">Aging Resolvidos = média de dias entre abertura e
+                                        fechamento dos Problemas resolvidos. Aging Backlog = média de dias em aberto
+                                        dos Problemas ainda em RCA/Implementação.</dd>
+                                </div>
+                                <div>
+                                    <dt class="font-bold text-slate-700">MTTRC</dt>
+                                    <dd class="text-slate-500">Tempo médio (em horas) para identificar e documentar a
+                                        Causa Raiz, calculado a partir da aba RCATask_List.</dd>
+                                </div>
+                            </dl>
+                        </div>
+
+                        <div>
+                            <h3 class="text-xs font-bold text-natura-orange uppercase tracking-widest mb-3">Mudanças
+                                &mdash; Detalhe</h3>
+                            <dl class="space-y-3">
+                                <div>
+                                    <dt class="font-bold text-slate-700">Top Grupos/Serviços Responsáveis</dt>
+                                    <dd class="text-slate-500">Tradicionais: agrupado por Assignment group + Service
+                                        da Mudança (Change_MI). Deploys: agrupado por Service Offering (representa o
+                                        repositório/esteira CI/CD).</dd>
+                                </div>
+                                <div>
+                                    <dt class="font-bold text-slate-700">Origem da Detecção</dt>
+                                    <dd class="text-slate-500">Classificação do campo Caller (Major_ServiceNow):
+                                        Monitoração = contém "Integração"; Experiências = contém "Experiência";
+                                        demais (nomes de pessoas) = End-users. MTTR calculado por categoria.</dd>
+                                </div>
+                                <div>
+                                    <dt class="font-bold text-slate-700">Dispersão MTTD x MTTR</dt>
+                                    <dd class="text-slate-500">Cada ponto é um Incidente causado por Mudança: eixo X =
+                                        MTTD (Início ou Término), eixo Y = MTTR, coloridos por tipo (Deploy/Tradicional)
+                                        para identificar outliers.</dd>
+                                </div>
+                            </dl>
+                        </div>
+
+                        <div>
+                            <h3 class="text-xs font-bold text-natura-orange uppercase tracking-widest mb-3">Jornadas
+                                &amp; Países</h3>
+                            <dl class="space-y-3">
+                                <div>
+                                    <dt class="font-bold text-slate-700">Incidentes por Jornada Impactada</dt>
+                                    <dd class="text-slate-500">Coluna F (Jornada) da aba MajorIncidentes{ano}; uma
+                                        célula pode ter mais de uma Jornada, separadas por vírgula. A soma pode
+                                        superar o total de Incidentes.</dd>
+                                </div>
+                                <div>
+                                    <dt class="font-bold text-slate-700">Incidentes por País Impactado</dt>
+                                    <dd class="text-slate-500">Coluna J (Abrangência), com os códigos de país
+                                        separados por vírgula quando mais de um país é impactado.</dd>
+                                </div>
+                            </dl>
+                        </div>
+
+                        <div>
+                            <h3 class="text-xs font-bold text-natura-orange uppercase tracking-widest mb-3">Qualidade
+                                RCA &amp; Governança de Testes</h3>
+                            <dl class="space-y-3">
+                                <div>
+                                    <dt class="font-bold text-slate-700">Qualidade RCA / Plano de Ação</dt>
+                                    <dd class="text-slate-500">Avaliação manual da equipe (aba Manual_Info),
+                                        deduplicada por Problema (um Problema pode ter mais de um Incidente
+                                        associado). "—" indica análise ainda não concluída, nunca contado como 0%.
+                                        Separado por Universo: Geral, Deploy e Tradicional.</dd>
+                                </div>
+                                <div>
+                                    <dt class="font-bold text-slate-700">Ambiente Adequado / Estratégia de Testes /
+                                        Rollback / Testado em Não-Prod</dt>
+                                    <dd class="text-slate-500">Perguntas de governança específicas por Universo
+                                        (Deploy e/ou Tradicional), preenchidas manualmente na aba Manual_Info.</dd>
+                                </div>
+                                <div>
+                                    <dt class="font-bold text-slate-700">Causa Raiz / Processo de Origem mais
+                                        Recorrentes</dt>
+                                    <dd class="text-slate-500">Ranking Top 5, deduplicado por Problema. Processo de
+                                        Origem vem do campo homônimo na Tarefa de RCA do ServiceNow; Tipo de Causa
+                                        Raiz é reclassificado pelo NotebookLM a partir do conteúdo do RCA.</dd>
+                                </div>
+                            </dl>
+                        </div>
+
+                        <div>
+                            <h3 class="text-xs font-bold text-natura-orange uppercase tracking-widest mb-3">Evolução
+                                &amp; Tecnologia</h3>
+                            <dl class="space-y-3">
+                                <div>
+                                    <dt class="font-bold text-slate-700">Evolução (Mensal/Semanal/Trimestral)</dt>
+                                    <dd class="text-slate-500">Volume e MTTR agrupados por período. O seletor "Ver
+                                        por" permite trocar a série por Severidade, Origem da Detecção, Jornada ou
+                                        País.</dd>
+                                </div>
+                                <div>
+                                    <dt class="font-bold text-slate-700">Incidentes/MTTR por Tecnologia e Ofensor</dt>
+                                    <dd class="text-slate-500">Agrupamento pela Tecnologia Impactada (coluna P) e pelo
+                                        Ofensor (coluna Q), com drill-down por clique mostrando o cruzamento entre
+                                        ambos.</dd>
+                                </div>
+                            </dl>
+                        </div>
+
+                        <p class="text-[11px] text-slate-400 border-t border-slate-100 pt-4">Todos os indicadores
+                            respeitam os filtros ativos (Período, Tecnologia Impactada e Ofensor) exceto os da seção
+                            Qualidade RCA, que consideram a base completa da aba Manual_Info, e os da seção
+                            Problemas, que seguem apenas o Ano de Referência.</p>
+                    </div>
+                </div>
+            </div>
+
             <!-- Ranking Modal (Pop-up) -->
             <div id="ranking-modal"
                 class="hidden opacity-0 fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-opacity duration-300">

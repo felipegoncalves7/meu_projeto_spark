@@ -15,6 +15,21 @@
     let COMPARISON_LABEL = '';
     let FILTER_OPTIONS_LOADED = false;
 
+    // Página única: Incidentes e Problemas carregam em paralelo, então o loader só some quando os dois terminam
+    let PENDING_LOADS = 0;
+    function showLoader() {
+        PENDING_LOADS++;
+        const loader = document.getElementById('loader-container');
+        if (loader) loader.classList.remove('hidden');
+    }
+    function hideLoader() {
+        PENDING_LOADS = Math.max(0, PENDING_LOADS - 1);
+        if (PENDING_LOADS === 0) {
+            const loader = document.getElementById('loader-container');
+            if (loader) loader.classList.add('hidden');
+        }
+    }
+
     // Globals for Chart Instances
     let charts = {};
 
@@ -45,9 +60,10 @@
 
         if (typeof ChartDataLabels !== 'undefined') Chart.register(ChartDataLabels);
 
-        setupTabs();
+        setupSectionNav();
         setupFiltersToggle();
         setupDivergenciasToggle();
+        setupMetodologiaModal();
         loadInitialConfig();
         const yearSelect = document.getElementById('year-select');
         yearSelect.addEventListener('change', function (e) {
@@ -61,18 +77,9 @@
             FILTER_OPTIONS_LOADED = false;
             updateTechOfensorFilterButtons();
 
-            // Reload the currently active tab
-            const activeTab = document.querySelector('.tab-btn.active-tab');
-            if (activeTab) {
-                const targetId = activeTab.dataset.target;
-                if (targetId === 'tab-major') {
-                    loadFilteredData();
-                } else if (targetId === 'tab-problems') {
-                    loadProblemsTab();
-                }
-            } else {
-                loadFilteredData(); // Default
-            }
+            // Página única: Incidentes e Problemas ficam visíveis ao mesmo tempo, então ambos recarregam
+            loadFilteredData();
+            loadProblemsTab();
         });
 
         // Ranking Search Handler
@@ -113,47 +120,62 @@
         });
     }
 
-    function setupTabs() {
-        const tabs = document.querySelectorAll('.tab-btn');
-        logDebug(`Found ${tabs.length} tab buttons.`);
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                if (tab.classList.contains('active-tab')) return;
-                tabs.forEach(t => {
-                    // Reset to default state
-                    t.classList.remove('active-tab', 'border-natura-orange', 'text-natura-orange');
-                    t.classList.add('border-transparent', 'text-slate-500');
-                    // Remove hover needed? It's CSS.
-                });
-                // Set active state
-                tab.classList.add('active-tab', 'border-natura-orange', 'text-natura-orange');
-                tab.classList.remove('border-transparent', 'text-slate-500');
+    // Navegação por seção (página única, scroll contínuo): clique rola suavemente até a seção,
+    // e o observer abaixo mantém a aba ativa sincronizada com a seção visível na tela.
+    function setupSectionNav() {
+        const links = document.querySelectorAll('.section-nav-link');
+        if (!links.length) return;
 
-                const targetId = tab.dataset.target;
-
-                // DATA LOADING TRIGGERS
-                if (targetId === 'tab-major' && !ALL_DATA.kpis) {
-                    // Usually already loaded by default, but good check
-                    loadFilteredData();
-                } else if (targetId === 'tab-problems') {
-                    loadProblemsTab();
-                }
-
-                document.querySelectorAll('.tab-content').forEach(content => {
-                    if (content.id === targetId) {
-                        content.classList.remove('hidden');
-                        setTimeout(() => {
-                            content.classList.remove('opacity-0');
-                            content.classList.add('opacity-100');
-                        }, 10);
-                    } else {
-                        content.classList.remove('opacity-100');
-                        content.classList.add('opacity-0');
-                        setTimeout(() => content.classList.add('hidden'), 300);
-                    }
-                });
+        links.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const target = document.getElementById(link.dataset.section);
+                if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
             });
         });
+
+        const sections = Array.from(document.querySelectorAll('section[id^="sec-"]'));
+        if (!sections.length || typeof IntersectionObserver === 'undefined') return;
+
+        const setActiveLink = (sectionId) => {
+            links.forEach(l => {
+                const isActive = l.dataset.section === sectionId;
+                l.classList.toggle('section-nav-link-active', isActive);
+            });
+        };
+
+        const headerEl = document.getElementById('app-header');
+        const headerHeight = headerEl ? headerEl.offsetHeight : 96;
+
+        const observer = new IntersectionObserver((entries) => {
+            // Escolhe a seção com maior proporção visível dentre as que estão intersectando
+            const visible = entries.filter(e => e.isIntersecting);
+            if (visible.length === 0) return;
+            visible.sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+            setActiveLink(visible[0].target.id);
+        }, {
+            root: null,
+            rootMargin: `-${headerHeight}px 0px -60% 0px`,
+            threshold: [0, 0.1, 0.25, 0.5, 0.75, 1]
+        });
+
+        sections.forEach(sec => observer.observe(sec));
+        setActiveLink(sections[0].id);
+    }
+
+    // Modal de Metodologia dos Indicadores (acessível pelo botão no rodapé)
+    function setupMetodologiaModal() {
+        const btn = document.getElementById('btn-open-metodologia');
+        const modal = document.getElementById('metodologia-modal');
+        const closeBtn = document.getElementById('btn-close-metodologia');
+        if (!btn || !modal) return;
+
+        const open = () => modal.classList.remove('hidden');
+        const close = () => modal.classList.add('hidden');
+
+        btn.addEventListener('click', open);
+        if (closeBtn) closeBtn.addEventListener('click', close);
+        modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
     }
 
     function loadInitialConfig() {
@@ -219,22 +241,16 @@
         setupEvolutionDimensionSelect();
         loadQualidadeMudancaData();
 
-        logDebug("Initial setup complete. Loading Tab 1 data...");
+        logDebug("Initial setup complete. Loading page data...");
 
-        // Force Tab 1 Visibility immediately
-        const tab1Content = document.getElementById('tab-major');
-        if (tab1Content) {
-            tab1Content.classList.remove('hidden', 'opacity-0');
-            tab1Content.classList.add('opacity-100');
-        }
-
+        // Página única: Incidentes e Problemas carregam juntos, já que ambos ficam visíveis na rolagem
         loadFilteredData();
+        loadProblemsTab();
     }
 
     function loadFilteredData() {
         logDebug("Loading Tab 1 Data...");
-        const loader = document.getElementById('loader-container');
-        if (loader) loader.classList.remove('hidden');
+        showLoader();
         google.script.run
             .withSuccessHandler(renderTab1Data)
             .withFailureHandler((e) => {
@@ -255,11 +271,7 @@
 
     function loadProblemsTab() {
         logDebug("Loading Major Problems Data...");
-        const loader = document.getElementById('loader-container');
-        // Show loader if tab is visible
-        if (loader && !document.getElementById('tab-problems').classList.contains('hidden')) {
-            loader.classList.remove('hidden');
-        }
+        showLoader();
 
         google.script.run
             .withSuccessHandler(renderProblemsData)
@@ -336,8 +348,7 @@
         renderRank('mp-top-backlog-list', data.topBacklogTeams);
         renderRank('mp-top-resolved-list', data.topResolvedTeams);
 
-        const loader = document.getElementById('loader-container');
-        if (loader) loader.classList.add('hidden');
+        hideLoader();
     }
 
     function drawMonthlyYTDChart(ytdData) {
@@ -590,8 +601,7 @@
             renderOffenderCharts(data.offenderMetrics, data.kpis.incidentesTotal);
         }
 
-        const loader = document.getElementById('loader-container');
-        if (loader) loader.classList.add('hidden');
+        hideLoader();
 
         if (CURRENT_FILTERS.periodKey === 'T4Industria') {
             const dataStoryBtn = document.getElementById('btn-data-story');
