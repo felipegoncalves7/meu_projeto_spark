@@ -729,7 +729,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
              monthly: { metrics: {}, mttr: {} },
              weekly: { metrics: {}, mttr: {} },
              quarterly: { metrics: {}, mttr: {} }
-           }
+           },
+           mudancaPorTipoEvolutionData: { monthly: {}, weekly: {}, quarterly: {} }
         };
     }
 
@@ -790,7 +791,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         monthlyByJornada: {}, weeklyByJornada: {}, quarterlyByJornada: {},
         monthlyByPais: {}, weeklyByPais: {}, quarterlyByPais: {},
         // Evolução (Volume + MTTR) restrita a Incidentes causados por Mudança
-        mudancaMonthlyMetrics: {}, mudancaWeeklyMetrics: {}, mudancaQuarterlyMetrics: {}
+        mudancaMonthlyMetrics: {}, mudancaWeeklyMetrics: {}, mudancaQuarterlyMetrics: {},
+        mudancaMonthlyPorTipo: {}, mudancaWeeklyPorTipo: {}, mudancaQuarterlyPorTipo: {}
     };
 
     dataRows.forEach((row, i) => {
@@ -975,6 +977,11 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             const isDeploy = tipoSm === 'DEPLOY';
             const tipoBucket = isDeploy ? 'deploy' : 'tradicional';
             metrics.mudancaPorTipo[tipoBucket].count++;
+
+            // Evolução por Tipo de Mudança (Deploy x Tradicional), nos 3 agrupamentos temporais
+            bumpBreakdown(metrics.mudancaMonthlyPorTipo, mes, tipoBucket);
+            bumpBreakdown(metrics.mudancaWeeklyPorTipo, weekLabel, tipoBucket);
+            bumpBreakdown(metrics.mudancaQuarterlyPorTipo, quarterLabel, tipoBucket);
 
             const numSm = String(row[COL_SM_NUMBER]).trim();
             const chg = numSm ? changeMap[numSm] : null;
@@ -1290,6 +1297,11 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             monthly: { metrics: metrics.mudancaMonthlyMetrics, mttr: mudancaMttrPorMesEmHoras },
             weekly: { metrics: metrics.mudancaWeeklyMetrics, mttr: mudancaMttrSemanalEmHoras },
             quarterly: { metrics: metrics.mudancaQuarterlyMetrics, mttr: mudancaMttrTrimestralEmHoras }
+        },
+        mudancaPorTipoEvolutionData: {
+            monthly: metrics.mudancaMonthlyPorTipo,
+            weekly: metrics.mudancaWeeklyPorTipo,
+            quarterly: metrics.mudancaQuarterlyPorTipo
         },
         rawIncidents: metrics.rawIncidents
     };

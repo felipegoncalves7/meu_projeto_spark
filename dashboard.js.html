@@ -239,9 +239,10 @@
         setupTechOfensorFilterDropdowns();
         setupEvolutionToggle();
         setupEvolutionDimensionSelect();
-        setupLocalEvolutionToggle('jornadas-paises', 'jp-evolution-toggle', 'jp-evolution-chart', 'jpChartInstance', 'jp-evolution-title', 'Volumetria & MTTR');
-        setupLocalEvolutionToggle('origem-deteccao', 'origem-evolution-toggle', 'origem-evolution-chart', 'origemChartInstance', 'origem-evolution-title', 'Volumetria & MTTR');
-        setupLocalEvolutionToggle('mudancas', 'mudanca-evolution-toggle', 'mudanca-evolution-chart', 'mudancaEvChartInstance', 'mudanca-evolution-title', 'Incidentes por Mudança —');
+        setupLocalEvolutionToggle('jornadas-paises', 'jp-evolution-toggle', 'jp-evolution-chart', 'jpChartInstance', 'jp-evolution-title', 'Incidentes');
+        setupJpDimensionToggle('jp-dimension-toggle', 'jp-evolution-chart', 'jpChartInstance', 'jp-evolution-title', 'Incidentes');
+        setupLocalEvolutionToggle('origem-deteccao', 'origem-evolution-toggle', 'origem-evolution-chart', 'origemChartInstance', 'origem-evolution-title', 'Incidentes por Origem');
+        setupLocalEvolutionToggle('mudancas', 'mudanca-evolution-toggle', 'mudanca-evolution-chart', 'mudancaEvChartInstance', 'mudanca-evolution-title', 'Incidentes por Mudança');
         loadQualidadeMudancaData();
 
         logDebug("Initial setup complete. Loading page data...");
@@ -592,13 +593,14 @@
             pais: { monthly: data.monthlyByPais || {}, weekly: data.weeklyByPais || {}, quarterly: data.quarterlyByPais || {} }
         };
         ALL_DATA.mudancaEvolutionData = data.mudancaEvolutionData || { monthly: {}, weekly: {}, quarterly: {} };
+        ALL_DATA.mudancaPorTipoEvolutionData = data.mudancaPorTipoEvolutionData || { monthly: {}, weekly: {}, quarterly: {} };
 
         renderEvolutionByCurrentDimension();
 
-        // Gráficos combo locais (Volume + MTTR) das seções Jornadas & Países, Origem da Detecção e Mudanças
-        renderLocalEvolutionChart('jornadas-paises', 'jp-evolution-chart', 'jpChartInstance', 'jp-evolution-title', 'Volumetria & MTTR');
-        renderLocalEvolutionChart('origem-deteccao', 'origem-evolution-chart', 'origemChartInstance', 'origem-evolution-title', 'Volumetria & MTTR');
-        renderLocalEvolutionChart('mudancas', 'mudanca-evolution-chart', 'mudancaEvChartInstance', 'mudanca-evolution-title', 'Incidentes por Mudança —');
+        // Gráficos de barras agrupadas + MTTR das seções Jornadas & Países, Origem da Detecção e Mudanças
+        renderLocalEvolutionChart('jornadas-paises', 'jp-evolution-chart', 'jpChartInstance', 'jp-evolution-title', 'Incidentes');
+        renderLocalEvolutionChart('origem-deteccao', 'origem-evolution-chart', 'origemChartInstance', 'origem-evolution-title', 'Incidentes por Origem');
+        renderLocalEvolutionChart('mudancas', 'mudanca-evolution-chart', 'mudancaEvChartInstance', 'mudanca-evolution-title', 'Incidentes por Mudança');
 
         // Render Technology & Offender charts in the same flow
         if (data.techMetrics) {
@@ -2172,8 +2174,30 @@
     // Desenha um gráfico de barras agrupadas: 1 grupo por período, 1 série (barra) por categoria da dimensão escolhida.
     // Mostra rótulos de dados (quantidade + %) em cada barra e atualiza o painel lateral com os totais por categoria.
     function drawEvolutionGroupedChart(breakdownByPeriod, seriesConfig, title, group) {
-        const titleEl = document.getElementById('evolution-chart-title');
-        if (titleEl) titleEl.textContent = title;
+        drawGenericGroupedChart({
+            canvasId: 'monthlyIncidentsChart',
+            chartKey: 'monthlyChartInstance',
+            titleElId: 'evolution-chart-title',
+            breakdownByPeriod: breakdownByPeriod,
+            seriesConfig: seriesConfig,
+            title: title,
+            group: group,
+            updateSideStats: true
+        });
+    }
+
+    // Gráfico de barras agrupadas por categoria (ex: Jornada, País, Origem, Deploy/Tradicional), com rótulos de
+    // quantidade + % em cada barra, e opcionalmente uma linha de MTTR geral do período sobreposta (eixo secundário).
+    // Reaproveitado pela Evolução geral e pelas seções locais (Jornadas & Países, Origem da Detecção, Mudanças).
+    function drawGenericGroupedChart(opts) {
+        const { canvasId, chartKey, titleElId, breakdownByPeriod, seriesConfig, title, group, mttrData, updateSideStats } = opts;
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+
+        if (titleElId) {
+            const titleEl = document.getElementById(titleElId);
+            if (titleEl) titleEl.textContent = title;
+        }
 
         const labels = getSortedPeriodLabels(breakdownByPeriod, group);
         const displayLabels = labels.map(l => l.charAt(0).toUpperCase() + l.slice(1));
@@ -2195,7 +2219,7 @@
             }
         }
 
-        // Totais por período (para calcular %) e por série (para o painel lateral)
+        // Totais por período (para calcular %) e por série (para o painel lateral, quando aplicável)
         const periodTotals = labels.map(p => {
             const periodData = breakdownByPeriod[p] || {};
             return Object.keys(periodData).reduce((sum, k) => sum + periodData[k], 0);
@@ -2205,6 +2229,7 @@
         const datasets = series.map((s, sIdx) => ({
             label: s.label,
             backgroundColor: s.color,
+            yAxisID: 'y',
             data: labels.map((p, pIdx) => {
                 const periodData = breakdownByPeriod[p] || {};
                 let value;
@@ -2230,21 +2255,31 @@
             }
         }));
 
-        updateEvolutionSideStats(null, seriesTotals);
+        const scales = {
+            x: { stacked: false },
+            y: { position: 'left', beginAtZero: true, stacked: false }
+        };
 
-        const ctx = document.getElementById('monthlyIncidentsChart').getContext('2d');
-        if (window.monthlyChartInstance) window.monthlyChartInstance.destroy();
-        window.monthlyChartInstance = new Chart(ctx, {
+        if (mttrData) {
+            datasets.push({
+                label: 'MTTR (h)', type: 'line', data: labels.map(p => { const v = mttrData[p]; return v !== undefined ? v.toFixed(2) : 0; }),
+                borderColor: '#e94839', backgroundColor: '#e94839', yAxisID: 'y-mttr', order: 0,
+                datalabels: { display: false }
+            });
+            scales['y-mttr'] = { position: 'right', beginAtZero: true, grid: { display: false } };
+        }
+
+        if (updateSideStats) updateEvolutionSideStats(null, seriesTotals);
+
+        if (window[chartKey]) window[chartKey].destroy();
+        window[chartKey] = new Chart(canvas.getContext('2d'), {
             type: 'bar',
             data: { labels: displayLabels, datasets: datasets },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 layout: { padding: { top: 24 } },
-                scales: {
-                    x: { stacked: false },
-                    y: { beginAtZero: true, stacked: false }
-                },
+                scales: scales,
                 plugins: {
                     legend: { display: true, position: 'bottom', labels: { boxWidth: 12, padding: 15, font: { size: 11 } } },
                     tooltip: { mode: 'index', intersect: false }
@@ -2372,12 +2407,27 @@
         });
     }
 
-    // ---- Gráficos combo locais (Volume + MTTR) para Jornadas & Países, Origem da Detecção e Mudanças ----
+    // ---- Gráficos de barras agrupadas por categoria + linha de MTTR, para Jornadas & Países,
+    // Origem da Detecção e Mudanças (Deploy x Tradicional) ----
     // Cada seção guarda seu próprio agrupamento (Mensal/Semanal/Trimestral) e desenha de forma independente.
     const LOCAL_EVOLUTION_STATE = {
-        'jornadas-paises': { grouping: 'monthly', dataKey: 'evolutionData' },
-        'origem-deteccao': { grouping: 'monthly', dataKey: 'evolutionData' },
-        'mudancas': { grouping: 'monthly', dataKey: 'mudancaEvolutionData' }
+        'jornadas-paises': { grouping: 'monthly', dimension: 'jornada' },
+        'origem-deteccao': { grouping: 'monthly', dimension: 'deteccao' },
+        'mudancas': { grouping: 'monthly', dimension: 'mudanca-tipo' }
+    };
+
+    // Séries fixas por dimensão (cores/labels definidos); Jornada e País ficam de fora de propósito —
+    // suas categorias são descobertas dinamicamente a partir dos dados (Top 6 + "Outros").
+    const LOCAL_DIMENSION_SERIES = {
+        deteccao: [
+            { key: 'End-users', label: 'End-users', color: '#045473' },
+            { key: 'Monitoração', label: 'Monitoração', color: '#1B472A' },
+            { key: 'Experiências', label: 'Experiências', color: '#FF6600' }
+        ],
+        'mudanca-tipo': [
+            { key: 'deploy', label: 'Deploy', color: '#045473' },
+            { key: 'tradicional', label: 'Tradicional', color: '#FF6600' }
+        ]
     };
 
     function setupLocalEvolutionToggle(sectionKey, containerId, canvasId, chartKey, titleElId, titlePrefix) {
@@ -2402,24 +2452,64 @@
         });
     }
 
+    // Seção "Jornadas & Países" tem 2 dimensões possíveis no mesmo gráfico: um pequeno seletor alterna entre elas.
+    function setupJpDimensionToggle(containerId, canvasId, chartKey, titleElId, titlePrefix) {
+        const container = document.getElementById(containerId);
+        if (!container || container.dataset.wired) return;
+        container.dataset.wired = 'true';
+
+        container.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                LOCAL_EVOLUTION_STATE['jornadas-paises'].dimension = btn.dataset.dimension;
+
+                container.querySelectorAll('button').forEach(b => {
+                    b.classList.remove('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
+                    b.classList.add('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
+                });
+                btn.classList.remove('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
+                btn.classList.add('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
+
+                renderLocalEvolutionChart('jornadas-paises', canvasId, chartKey, titleElId, titlePrefix);
+            });
+        });
+    }
+
     function renderLocalEvolutionChart(sectionKey, canvasId, chartKey, titleElId, titlePrefix) {
         const state = LOCAL_EVOLUTION_STATE[sectionKey];
-        const dataSource = ALL_DATA[state.dataKey];
-        if (!dataSource) return;
-        const groupData = dataSource[state.grouping];
-        if (!groupData) return;
-
         const GROUP_LABEL = { monthly: 'Mensal', weekly: 'Semanal', quarterly: 'Trimestral' };
-        const title = `${titlePrefix} ${GROUP_LABEL[state.grouping]}`;
+        const DIMENSION_LABEL = { jornada: 'por Jornada', pais: 'por País', deteccao: '', 'mudanca-tipo': '' };
+        const dimLabel = DIMENSION_LABEL[state.dimension] || '';
+        const title = `${titlePrefix}${dimLabel ? ' ' + dimLabel : ''} — ${GROUP_LABEL[state.grouping]}`;
 
-        drawGenericEvolutionChart({
+        let breakdownByPeriod = {};
+        let mttrData = {};
+
+        if (state.dimension === 'jornada' || state.dimension === 'pais') {
+            const breakdown = ALL_DATA.dimensionBreakdowns ? ALL_DATA.dimensionBreakdowns[state.dimension] : null;
+            breakdownByPeriod = (breakdown && breakdown[state.grouping]) || {};
+            const evo = ALL_DATA.evolutionData ? ALL_DATA.evolutionData[state.grouping] : null;
+            mttrData = (evo && evo.mttr) || {};
+        } else if (state.dimension === 'deteccao') {
+            const breakdown = ALL_DATA.dimensionBreakdowns ? ALL_DATA.dimensionBreakdowns.deteccao : null;
+            breakdownByPeriod = (breakdown && breakdown[state.grouping]) || {};
+            const evo = ALL_DATA.evolutionData ? ALL_DATA.evolutionData[state.grouping] : null;
+            mttrData = (evo && evo.mttr) || {};
+        } else if (state.dimension === 'mudanca-tipo') {
+            breakdownByPeriod = (ALL_DATA.mudancaPorTipoEvolutionData && ALL_DATA.mudancaPorTipoEvolutionData[state.grouping]) || {};
+            const evo = ALL_DATA.mudancaEvolutionData ? ALL_DATA.mudancaEvolutionData[state.grouping] : null;
+            mttrData = (evo && evo.mttr) || {};
+        }
+
+        drawGenericGroupedChart({
             canvasId: canvasId,
             chartKey: chartKey,
             titleElId: titleElId,
-            metrics: groupData.metrics || {},
-            mttrData: groupData.mttr || {},
+            breakdownByPeriod: breakdownByPeriod,
+            seriesConfig: LOCAL_DIMENSION_SERIES[state.dimension] || null,
             title: title,
-            onBarClick: null
+            group: state.grouping,
+            mttrData: mttrData,
+            updateSideStats: false
         });
     }
 
