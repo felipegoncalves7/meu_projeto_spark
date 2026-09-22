@@ -522,6 +522,7 @@
             return;
         }
         renderKpiCards(data.kpis);
+        renderDivergenciasSevPrio(data.divergenciasSevPrio);
 
         // Save these for switching views WITHOUT server reload
         ALL_DATA.currentKpis = data.kpis;
@@ -1239,6 +1240,32 @@
         setText('val-mttd-termino', formatHoras(kpis.mttdTerminoMedioHoras));
         setText('val-mttd-inicio-deploy', formatHoras(kpis.mttdInicioMedioHorasDeploy));
         setText('val-mttd-inicio-tradicional', formatHoras(kpis.mttdInicioMedioHorasTradicional));
+
+        // Governança: Aderência Sev x Prioridade
+        setText('val-aderencia-sevprio', kpis.aderenciaSevPrio != null ? `${kpis.aderenciaSevPrio}%` : '—');
+        setText('val-aderencia-sevprio-base', kpis.aderenciaSevPrioBase || 0);
+    }
+
+    // Lista de incidentes com divergência entre Severidade técnica e Priority do ServiceNow
+    function renderDivergenciasSevPrio(list) {
+        const countEl = document.getElementById('val-divergencias-count');
+        const listEl = document.getElementById('divergencias-sevprio-list');
+        if (!listEl) return;
+
+        const items = list || [];
+        if (countEl) countEl.textContent = items.length;
+
+        if (!items.length) {
+            listEl.innerHTML = `<p class="text-xs text-slate-300 italic py-2">Nenhuma divergência no período filtrado.</p>`;
+            return;
+        }
+
+        listEl.innerHTML = items.map(d => `
+            <div class="flex items-center justify-between text-xs bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                <span class="font-bold text-slate-700">${d.id}</span>
+                <span class="text-slate-500">Sev ${d.severidade} <span class="text-slate-300">·</span> Priority: <span class="font-semibold text-natura-red-buriti">${d.priority}</span></span>
+            </div>
+        `).join('');
     }
 
     // Clique no card de Visão Executiva "Incidentes por Mudança" -> abre a seção/análise detalhada

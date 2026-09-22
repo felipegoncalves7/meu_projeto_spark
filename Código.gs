@@ -47,6 +47,29 @@ function buildChangeMap(ss) {
   return map;
 }
 
+// Mapeamento da aba Major_ServiceNow (Range A1:AB)
+const MSN_COL_NUMBER = 1;    // B
+const MSN_COL_PRIORITY = 10; // K
+
+/**
+ * Monta um mapa Number -> Priority a partir da aba Major_ServiceNow, usado para calcular a
+ * Aderência Sev x Prioridade (Severidade técnica do incidente vs Priority cadastrada no ServiceNow).
+ */
+function buildPriorityMap(ss) {
+  const map = {};
+  const sheet = ss.getSheetByName('Major_ServiceNow');
+  if (!sheet) return map;
+
+  const values = sheet.getDataRange().getValues();
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const number = String(row[MSN_COL_NUMBER] || '').trim();
+    if (!number) continue;
+    map[number] = String(row[MSN_COL_PRIORITY] || '').trim();
+  }
+  return map;
+}
+
 // Mapeamento da aba Manual_Info (Range A1:AB) - 3 blocos lado a lado (Base 0)
 // Bloco Geral (demais Incidentes, não causados por Mudança Deploy/Tradicional)
 const MI_GERAL_ID = 0;                    // A
@@ -627,8 +650,10 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
              incidentesMudanca: 0, pctMudanca: 0,
              mttdInicioMedioHoras: null, mttdTerminoMedioHoras: null,
              incidentesMudancaDeploy: 0, incidentesMudancaTradicional: 0,
-             mttdInicioMedioHorasDeploy: null, mttdInicioMedioHorasTradicional: null
+             mttdInicioMedioHorasDeploy: null, mttdInicioMedioHorasTradicional: null,
+             aderenciaSevPrio: null, aderenciaSevPrioBase: 0, divergenciasSevPrioCount: 0
            },
+           divergenciasSevPrio: [],
            monthlyMetrics: {},
            mttrPorMesEmHoras: {},
            techMetrics: {},
@@ -643,6 +668,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
     if (end) end.setHours(23, 59, 59, 999);
 
     const changeMap = buildChangeMap(ss);
+    const priorityMap = buildPriorityMap(ss);
 
     let metrics = {
         incidentesTotal: 0, totalDuracaoMinutos: 0,
@@ -662,7 +688,10 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         mudancaPorTipo: {
             deploy: { count: 0, mttdInicioSoma: 0, mttdInicioCount: 0 },
             tradicional: { count: 0, mttdInicioSoma: 0, mttdInicioCount: 0 }
-        }
+        },
+        // Governança: Aderência Sev x Prioridade
+        sevPrioBase: 0, sevPrioAderente: 0,
+        divergenciasSevPrio: []
     };
 
     dataRows.forEach((row, i) => {
@@ -725,6 +754,27 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         metrics.sev1Incidentes++;
         metrics.sev1DuracaoMinutos += durMin;
         if (durMin <= OLA_TARGET_SEV1_MIN) metrics.sev1DentroOLA++;
+        }
+
+        // Governança: Aderência Sev x Prioridade (Severidade técnica vs Priority no ServiceNow)
+        if (isSev0 || isSev1) {
+            const ticketId = String(row[0] || '').trim();
+            const priority = ticketId ? priorityMap[ticketId] : undefined;
+            if (priority) {
+                metrics.sevPrioBase++;
+                const isPrioridade1 = priority.trim().startsWith('1');
+                const isPrioridade2 = priority.trim().startsWith('2');
+                const aderente = isSev0 ? isPrioridade1 : isPrioridade2;
+                if (aderente) {
+                    metrics.sevPrioAderente++;
+                } else {
+                    metrics.divergenciasSevPrio.push({
+                        id: ticketId,
+                        severidade: severidade,
+                        priority: priority
+                    });
+                }
+            }
         }
 
         // Visão Executiva: Incidentes causados por Mudança + MTTD (Início/Término), segmentado por tipo
@@ -859,6 +909,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
     const mttdInicioDeploy = deployBucket.mttdInicioCount > 0 ? deployBucket.mttdInicioSoma / deployBucket.mttdInicioCount : null;
     const mttdInicioTradicional = tradicionalBucket.mttdInicioCount > 0 ? tradicionalBucket.mttdInicioSoma / tradicionalBucket.mttdInicioCount : null;
 
+    const aderenciaSevPrio = metrics.sevPrioBase > 0 ? (metrics.sevPrioAderente / metrics.sevPrioBase) * 100 : null;
+
     return {
         kpis: {
         incidentesTotal: metrics.incidentesTotal,
@@ -879,8 +931,13 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         incidentesMudancaDeploy: deployBucket.count,
         incidentesMudancaTradicional: tradicionalBucket.count,
         mttdInicioMedioHorasDeploy: mttdInicioDeploy !== null ? Math.round(mttdInicioDeploy * 10) / 10 : null,
-        mttdInicioMedioHorasTradicional: mttdInicioTradicional !== null ? Math.round(mttdInicioTradicional * 10) / 10 : null
+        mttdInicioMedioHorasTradicional: mttdInicioTradicional !== null ? Math.round(mttdInicioTradicional * 10) / 10 : null,
+        // Governança: Aderência Sev x Prioridade
+        aderenciaSevPrio: aderenciaSevPrio !== null ? Math.round(aderenciaSevPrio * 10) / 10 : null,
+        aderenciaSevPrioBase: metrics.sevPrioBase,
+        divergenciasSevPrioCount: metrics.divergenciasSevPrio.length
         },
+        divergenciasSevPrio: metrics.divergenciasSevPrio,
         monthlyMetrics: metrics.monthlyMetrics,
         mttrPorMesEmHoras: mttrPorMesEmHoras,
         weeklyMetrics: metrics.weeklyMetrics,

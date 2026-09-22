@@ -449,6 +449,53 @@
                     </div>
                 </div>
 
+                <!-- Governança de Classificação: Aderência Sev x Prioridade -->
+                <div class="pt-2">
+                    <div class="flex items-center gap-2 mb-3">
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Governança de
+                            Classificação &mdash; Severidade x Prioridade</h2>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        <!-- Card KPI -->
+                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
+                            <div class="flex items-center justify-between mb-1">
+                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">Aderência Sev x
+                                    Prioridade</p>
+                                <span class="info-tooltip" tabindex="0">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span class="tooltip-bubble">% de Sev0/Sev1 cuja Priority cadastrada no
+                                        ServiceNow (aba Major_ServiceNow) está alinhada à severidade técnica: Sev0 =
+                                        Prioridade 1 - Critical, Sev1 = Prioridade 2 - High. Considera apenas
+                                        incidentes com Priority encontrada.</span>
+                                </span>
+                            </div>
+                            <p id="val-aderencia-sevprio" class="text-3xl font-extrabold text-natura-blue-profundo">
+                                —</p>
+                            <p class="text-[10px] text-slate-400 mt-2 leading-tight">Meta: <span
+                                    class="font-bold text-natura-green-cerrado">≥ 80%</span> · Base: <span
+                                    id="val-aderencia-sevprio-base">0</span> incidente(s)</p>
+                        </div>
+                        <!-- Card Divergências -->
+                        <div id="card-divergencias-sevprio"
+                            class="lg:col-span-2 kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
+                            <div class="flex items-center justify-between mb-3">
+                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">Divergências
+                                    Encontradas</p>
+                                <span id="val-divergencias-count"
+                                    class="text-xs font-bold text-natura-red-buriti bg-natura-red-buriti/10 px-2 py-0.5 rounded-full">0</span>
+                            </div>
+                            <div id="divergencias-sevprio-list" class="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                                <p class="text-xs text-slate-300 italic py-2">Nenhuma divergência no período
+                                    filtrado.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Visão Executiva: Impacto de Mudanças -->
                 <div class="pt-2">
                     <div class="flex items-center gap-2 mb-3">
