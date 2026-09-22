@@ -800,36 +800,42 @@
                     </div>
                 </div>
 
-                <!-- Origem da Detecção do Incidente + Dispersão MTTD x MTTR -->
+                <!-- Origem da Detecção do Incidente -->
                 <div class="pt-2">
                     <div class="flex items-center gap-2 mb-3">
-                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Origem da Detecção &amp;
-                            Dispersão MTTD x MTTR</h2>
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Origem da Detecção</h2>
                     </div>
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        <!-- Origem da Detecção (Caller) -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
+                        <div class="flex items-center justify-between mb-3">
+                            <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">Volumetria e MTTR por
+                                Origem</p>
+                            <span class="info-tooltip" tabindex="0">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span class="tooltip-bubble">Classificação do campo Caller (Major_ServiceNow):
+                                    Monitoração = contém "Integração"; Experiências = contém "Experiência"; demais
+                                    (nomes de pessoas) = End-users.</span>
+                            </span>
+                        </div>
+                        <div id="origem-deteccao-list" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
+                    </div>
+                </div>
+
+                <!-- Dispersão MTTD x MTTR -->
+                <div class="pt-2">
+                    <div class="flex items-center gap-2 mb-3">
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Dispersão MTTD x MTTR
+                            — Incidentes causados por Mudança</h2>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <!-- Dispersão MTTD Início x MTTR -->
                         <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
                             <div class="flex items-center justify-between mb-3">
-                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">Origem da
-                                    Detecção</p>
-                                <span class="info-tooltip" tabindex="0">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <span class="tooltip-bubble">Classificação do campo Caller (Major_ServiceNow):
-                                        Monitoração = contém "Integração"; Experiências = contém "Experiência"; demais
-                                        (nomes de pessoas) = End-users.</span>
-                                </span>
-                            </div>
-                            <div id="origem-deteccao-list" class="space-y-2"></div>
-                        </div>
-                        <!-- Dispersão MTTD x MTTR -->
-                        <div class="lg:col-span-2 kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
-                            <div class="flex items-center justify-between mb-3">
-                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">Dispersão MTTD x
-                                    MTTR — Incidentes causados por Mudança</p>
+                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">MTTD Início x
+                                    MTTR</p>
                                 <span class="info-tooltip" tabindex="0">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
                                         viewBox="0 0 24 24" stroke="currentColor">
@@ -837,11 +843,29 @@
                                             d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                     <span class="tooltip-bubble">Cada ponto é um Incidente causado por Mudança. Eixo X
-                                        = MTTD (horas até detecção após início planejado da CHG). Eixo Y = MTTR
-                                        (horas até restauração). Azul = Deploy, Laranja = Tradicional.</span>
+                                        = MTTD Início (horas até detecção após início planejado da CHG). Eixo Y =
+                                        MTTR (horas até restauração). Azul = Deploy, Laranja = Tradicional.</span>
                                 </span>
                             </div>
                             <div class="h-64"><canvas id="mttdVsMttrChart"></canvas></div>
+                        </div>
+                        <!-- Dispersão MTTD Término x MTTR -->
+                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
+                            <div class="flex items-center justify-between mb-3">
+                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">MTTD Término x
+                                    MTTR</p>
+                                <span class="info-tooltip" tabindex="0">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span class="tooltip-bubble">Cada ponto é um Incidente causado por Mudança. Eixo X
+                                        = MTTD Término (horas até detecção após término planejado da CHG). Eixo Y =
+                                        MTTR (horas até restauração). Azul = Deploy, Laranja = Tradicional.</span>
+                                </span>
+                            </div>
+                            <div class="h-64"><canvas id="mttdTerminoVsMttrChart"></canvas></div>
                         </div>
                     </div>
                 </div>
@@ -1018,8 +1042,6 @@
                             <option value="jornada">Jornadas Impactadas</option>
                             <option value="pais">Países Impactados</option>
                         </select>
-                        <span id="evolution-dimension-note" class="hidden text-[10px] text-slate-400 italic">Disponível
-                            apenas na visão Mensal.</span>
                     </div>
                     <div class="flex flex-col lg:flex-row gap-6">
                         <div class="relative w-full h-80 sm:h-96 flex-1"><canvas id="monthlyIncidentsChart"></canvas>

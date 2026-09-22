@@ -719,11 +719,12 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
            gruposResponsaveis: { deploy: [], tradicional: [] },
            sankeyMudanca: { deploy: [], tradicional: [] },
            mttdVsMttrDispersao: [],
+           mttdTerminoVsMttrDispersao: [],
            filterOptions: { tecnologias: [], ofensores: [] },
-           monthlyBySeveridade: {},
-           monthlyByOrigem: {},
-           monthlyByJornada: {},
-           monthlyByPais: {}
+           monthlyBySeveridade: {}, weeklyBySeveridade: {}, quarterlyBySeveridade: {},
+           monthlyByOrigem: {}, weeklyByOrigem: {}, quarterlyByOrigem: {},
+           monthlyByJornada: {}, weeklyByJornada: {}, quarterlyByJornada: {},
+           monthlyByPais: {}, weeklyByPais: {}, quarterlyByPais: {}
         };
     }
 
@@ -759,6 +760,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             tradicional: { count: 0, mttdInicioSoma: 0, mttdInicioCount: 0, mttdTerminoSoma: 0, mttdTerminoCount: 0 }
         },
         mttdVsMttrDispersao: [],
+        mttdTerminoVsMttrDispersao: [],
         // Governança: Aderência Sev x Prioridade
         sevPrioBase: 0, sevPrioAderente: 0,
         sev0PrioBase: 0, sev0PrioAderente: 0,
@@ -777,11 +779,11 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         // Filtros disponíveis (para popular os selects de Tecnologia/Ofensor)
         tecnologiasDisponiveis: new Set(),
         ofensoresDisponiveis: new Set(),
-        // Evolução Mensal por Dimensão (Severidade / Origem da Detecção / Jornada / País)
-        monthlyBySeveridade: {}, // mes -> { sev0, sev1 }
-        monthlyByOrigem: {},     // mes -> { 'End-users', 'Monitoração', 'Experiências' }
-        monthlyByJornada: {},    // mes -> { jornada: count }
-        monthlyByPais: {}        // mes -> { pais: count }
+        // Evolução por Dimensão (Severidade / Origem da Detecção / Jornada / País), nos 3 agrupamentos temporais
+        monthlyBySeveridade: {}, weeklyBySeveridade: {}, quarterlyBySeveridade: {},
+        monthlyByOrigem: {}, weeklyByOrigem: {}, quarterlyByOrigem: {},
+        monthlyByJornada: {}, weeklyByJornada: {}, quarterlyByJornada: {},
+        monthlyByPais: {}, weeklyByPais: {}, quarterlyByPais: {}
     };
 
     dataRows.forEach((row, i) => {
@@ -832,17 +834,25 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         metrics.monthlyMetrics[mes].durationMin += durMin;
 
         // Weekly & Quarterly
+        let weekLabel = null, quarterLabel = null;
         if (openDate) {
-          const weekLabel = getWeekLabel(openDate);
+          weekLabel = getWeekLabel(openDate);
           if (!metrics.weeklyMetrics[weekLabel]) metrics.weeklyMetrics[weekLabel] = { count: 0, durationMin: 0 };
           metrics.weeklyMetrics[weekLabel].count++;
           metrics.weeklyMetrics[weekLabel].durationMin += durMin;
 
-          const quarterLabel = getQuarterLabel(openDate);
+          quarterLabel = getQuarterLabel(openDate);
           if (!metrics.quarterlyMetrics[quarterLabel]) metrics.quarterlyMetrics[quarterLabel] = { count: 0, durationMin: 0 };
           metrics.quarterlyMetrics[quarterLabel].count++;
           metrics.quarterlyMetrics[quarterLabel].durationMin += durMin;
         }
+
+        // Evolução por Dimensão (Severidade/Detecção/Jornada/País): grava no período Mensal, Semanal e Trimestral
+        const bumpBreakdown = (bucket, periodLabel, key) => {
+            if (!periodLabel) return;
+            if (!bucket[periodLabel]) bucket[periodLabel] = {};
+            bucket[periodLabel][key] = (bucket[periodLabel][key] || 0) + 1;
+        };
 
         if (!metrics.monthlyBySeveridade[mes]) metrics.monthlyBySeveridade[mes] = { sev0: 0, sev1: 0 };
         if (isSev0) {
@@ -850,11 +860,15 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         metrics.sev0DuracaoMinutos += durMin;
         if (durMin <= OLA_TARGET_SEV0_MIN) metrics.sev0DentroOLA++;
         metrics.monthlyBySeveridade[mes].sev0++;
+        bumpBreakdown(metrics.weeklyBySeveridade, weekLabel, 'sev0');
+        bumpBreakdown(metrics.quarterlyBySeveridade, quarterLabel, 'sev0');
         } else if (isSev1) {
         metrics.sev1Incidentes++;
         metrics.sev1DuracaoMinutos += durMin;
         if (durMin <= OLA_TARGET_SEV1_MIN) metrics.sev1DentroOLA++;
         metrics.monthlyBySeveridade[mes].sev1++;
+        bumpBreakdown(metrics.weeklyBySeveridade, weekLabel, 'sev1');
+        bumpBreakdown(metrics.quarterlyBySeveridade, quarterLabel, 'sev1');
         }
 
         // Governança: Aderência Sev x Prioridade (Sev0/Sev1 são aderentes se Priority = P1-Critical ou P2-High)
@@ -896,6 +910,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
 
                 if (!metrics.monthlyByOrigem[mes]) metrics.monthlyByOrigem[mes] = { 'End-users': 0, 'Monitoração': 0, 'Experiências': 0 };
                 metrics.monthlyByOrigem[mes][origem]++;
+                bumpBreakdown(metrics.weeklyByOrigem, weekLabel, origem);
+                bumpBreakdown(metrics.quarterlyByOrigem, quarterLabel, origem);
             }
         }
 
@@ -909,6 +925,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
 
                 if (!metrics.monthlyByJornada[mes]) metrics.monthlyByJornada[mes] = {};
                 metrics.monthlyByJornada[mes][jornada] = (metrics.monthlyByJornada[mes][jornada] || 0) + 1;
+                bumpBreakdown(metrics.weeklyByJornada, weekLabel, jornada);
+                bumpBreakdown(metrics.quarterlyByJornada, quarterLabel, jornada);
             });
         }
 
@@ -922,6 +940,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
 
                 if (!metrics.monthlyByPais[mes]) metrics.monthlyByPais[mes] = {};
                 metrics.monthlyByPais[mes][pais] = (metrics.monthlyByPais[mes][pais] || 0) + 1;
+                bumpBreakdown(metrics.weeklyByPais, weekLabel, pais);
+                bumpBreakdown(metrics.quarterlyByPais, quarterLabel, pais);
             });
         }
 
@@ -979,6 +999,14 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
                         metrics.mttdTerminoCount++;
                         metrics.mudancaPorTipo[tipoBucket].mttdTerminoSoma += diffTerminoH;
                         metrics.mudancaPorTipo[tipoBucket].mttdTerminoCount++;
+
+                        // Dispersão MTTD (Término) x MTTR, por Incidente causado por Mudança
+                        metrics.mttdTerminoVsMttrDispersao.push({
+                            id: String(row[0] || '').trim(),
+                            mttdHoras: Math.round(diffTerminoH * 10) / 10,
+                            mttrHoras: Math.round((durMin / 60) * 10) / 10,
+                            tipo: tipoBucket
+                        });
                     }
                 }
             }
@@ -1202,14 +1230,23 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             tradicional: sankeyTradicional
         },
         mttdVsMttrDispersao: metrics.mttdVsMttrDispersao,
+        mttdTerminoVsMttrDispersao: metrics.mttdTerminoVsMttrDispersao,
         filterOptions: {
             tecnologias: Array.from(metrics.tecnologiasDisponiveis).sort(),
             ofensores: Array.from(metrics.ofensoresDisponiveis).sort()
         },
         monthlyBySeveridade: metrics.monthlyBySeveridade,
+        weeklyBySeveridade: metrics.weeklyBySeveridade,
+        quarterlyBySeveridade: metrics.quarterlyBySeveridade,
         monthlyByOrigem: metrics.monthlyByOrigem,
+        weeklyByOrigem: metrics.weeklyByOrigem,
+        quarterlyByOrigem: metrics.quarterlyByOrigem,
         monthlyByJornada: metrics.monthlyByJornada,
+        weeklyByJornada: metrics.weeklyByJornada,
+        quarterlyByJornada: metrics.quarterlyByJornada,
         monthlyByPais: metrics.monthlyByPais,
+        weeklyByPais: metrics.weeklyByPais,
+        quarterlyByPais: metrics.quarterlyByPais,
         rawIncidents: metrics.rawIncidents
     };
   } catch (e) {

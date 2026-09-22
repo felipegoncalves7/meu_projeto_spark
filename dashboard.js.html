@@ -557,6 +557,7 @@
         renderSankeyMudanca(data.sankeyMudanca);
         renderOrigemDeteccao(data.origemDeteccao);
         renderMttdVsMttrChart(data.mttdVsMttrDispersao);
+        renderMttdTerminoVsMttrChart(data.mttdTerminoVsMttrDispersao);
         renderJornadaCards(data.jornadaMetrics, data.kpis.incidentesTotal);
         renderPaisCards(data.paisMetrics, data.kpis.incidentesTotal);
         populateTechOfensorFilters(data.filterOptions);
@@ -570,12 +571,13 @@
             weekly: { metrics: data.weeklyMetrics, mttr: data.mttrSemanalEmHoras, title: "Evolução Semanal" },
             quarterly: { metrics: data.quarterlyMetrics, mttr: data.mttrTrimestralEmHoras, title: "Evolução Trimestral" }
         };
-        ALL_DATA.monthlyBySeveridade = data.monthlyBySeveridade || {};
-        ALL_DATA.monthlyByOrigem = data.monthlyByOrigem || {};
-        ALL_DATA.monthlyByJornada = data.monthlyByJornada || {};
-        ALL_DATA.monthlyByPais = data.monthlyByPais || {};
+        ALL_DATA.dimensionBreakdowns = {
+            severidade: { monthly: data.monthlyBySeveridade || {}, weekly: data.weeklyBySeveridade || {}, quarterly: data.quarterlyBySeveridade || {} },
+            deteccao: { monthly: data.monthlyByOrigem || {}, weekly: data.weeklyByOrigem || {}, quarterly: data.quarterlyByOrigem || {} },
+            jornada: { monthly: data.monthlyByJornada || {}, weekly: data.weeklyByJornada || {}, quarterly: data.quarterlyByJornada || {} },
+            pais: { monthly: data.monthlyByPais || {}, weekly: data.weeklyByPais || {}, quarterly: data.quarterlyByPais || {} }
+        };
 
-        updateEvolutionSideStats(data.kpis);
         renderEvolutionByCurrentDimension();
 
         // Render Technology & Offender charts in the same flow
@@ -635,7 +637,7 @@
             let displayLabel = LABEL_MAP[filter.key] || filter.key;
 
             if (filter.key === 'T4Industria') {
-                btn.innerHTML = `${displayLabel} <span class="ml-1">${countryCodeToFlagEmoji('BR')}</span>`;
+                btn.innerHTML = `${displayLabel} <span class="ml-1">${buildFlagSvg('BR', 16, 11)}</span>`;
             } else {
                 btn.textContent = displayLabel;
             }
@@ -1699,17 +1701,17 @@
     }
 
     // Dispersão MTTD x MTTR para Incidentes causados por Mudança
-    function renderMttdVsMttrChart(points) {
-        const canvas = document.getElementById('mttdVsMttrChart');
+    function drawMttdScatterChart(canvasId, chartKey, points, xAxisLabel) {
+        const canvas = document.getElementById(canvasId);
         if (!canvas) return;
         const data = points || [];
 
-        if (charts.mttdVsMttr) charts.mttdVsMttr.destroy();
+        if (charts[chartKey]) charts[chartKey].destroy();
 
         const deployPoints = data.filter(p => p.tipo === 'deploy').map(p => ({ x: p.mttdHoras, y: p.mttrHoras, id: p.id }));
         const tradicionalPoints = data.filter(p => p.tipo === 'tradicional').map(p => ({ x: p.mttdHoras, y: p.mttrHoras, id: p.id }));
 
-        charts.mttdVsMttr = new Chart(canvas.getContext('2d'), {
+        charts[chartKey] = new Chart(canvas.getContext('2d'), {
             type: 'scatter',
             data: {
                 datasets: [
@@ -1730,11 +1732,19 @@
                     }
                 },
                 scales: {
-                    x: { title: { display: true, text: 'MTTD (horas)' } },
+                    x: { title: { display: true, text: xAxisLabel } },
                     y: { title: { display: true, text: 'MTTR (horas)' } }
                 }
             }
         });
+    }
+
+    function renderMttdVsMttrChart(points) {
+        drawMttdScatterChart('mttdVsMttrChart', 'mttdVsMttr', points, 'MTTD Início (horas)');
+    }
+
+    function renderMttdTerminoVsMttrChart(points) {
+        drawMttdScatterChart('mttdTerminoVsMttrChart', 'mttdTerminoVsMttr', points, 'MTTD Término (horas)');
     }
 
     // Cards de Incidentes por Jornada Impactada, com ícones
@@ -1786,7 +1796,7 @@
             const pct = totalIncidentes > 0 ? Math.round((item.count / totalIncidentes) * 1000) / 10 : 0;
             return `
                 <div class="kpi-card rounded-2xl p-3 border border-slate-200 bg-white flex flex-col items-center text-center gap-1">
-                    <span class="text-2xl leading-none">${countryCodeToFlagEmoji(code)}</span>
+                    ${buildFlagSvg(code, 32, 22)}
                     <p class="text-[10px] font-bold text-slate-600">${code}</p>
                     <p class="text-lg font-extrabold text-natura-green-cerrado leading-none">${item.count}</p>
                     <p class="text-[9px] text-slate-400">${pct}%</p>
@@ -2040,53 +2050,62 @@
                 btn.classList.remove('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
                 btn.classList.add('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
 
-                // As dimensões extras (Severidade/Detecção/Jornada/País) só têm breakdown Mensal
-                if (group !== 'monthly') {
-                    CURRENT_FILTERS.evolutionDimension = 'default';
-                    const dimSelect = document.getElementById('evolution-dimension-select');
-                    if (dimSelect) dimSelect.value = 'default';
-                }
-                updateEvolutionDimensionAvailability();
-
                 renderEvolutionByCurrentDimension();
             });
         });
     }
 
-    // Habilita/desabilita o seletor de dimensão da Evolução conforme o agrupamento (só disponível no Mensal)
-    function updateEvolutionDimensionAvailability() {
-        const dimSelect = document.getElementById('evolution-dimension-select');
-        const note = document.getElementById('evolution-dimension-note');
-        const isMonthly = (CURRENT_FILTERS.evolutionGrouping || 'monthly') === 'monthly';
-        if (dimSelect) dimSelect.disabled = !isMonthly;
-        if (note) note.classList.toggle('hidden', isMonthly);
-    }
-
-    // Seletor "Ver por": redesenha a Evolução Mensal por Severidade / Origem da Detecção / Jornada / País
+    // Seletor "Ver por": redesenha a Evolução por Severidade / Origem da Detecção / Jornada / País,
+    // disponível em qualquer agrupamento (Mensal/Semanal/Trimestral)
     function setupEvolutionDimensionSelect() {
         const select = document.getElementById('evolution-dimension-select');
         if (!select || select.dataset.wired) return;
         select.dataset.wired = 'true';
-        updateEvolutionDimensionAvailability();
         select.addEventListener('change', () => {
             CURRENT_FILTERS.evolutionDimension = select.value;
-            if (select.value !== 'default') {
-                // Força o agrupamento para Mensal, já que só há breakdown por mês para essas dimensões
-                CURRENT_FILTERS.evolutionGrouping = 'monthly';
-                const monthlyBtn = document.getElementById('btn-ev-monthly');
-                if (monthlyBtn) monthlyBtn.click();
-                return; // btn.click() já dispara renderEvolutionByCurrentDimension()
-            }
             renderEvolutionByCurrentDimension();
         });
     }
 
-    // Atualiza o painel lateral com Volumetria Total e MTTR Médio do período filtrado atual
-    function updateEvolutionSideStats(kpis) {
-        const volEl = document.getElementById('evolution-side-volume');
-        const mttrEl = document.getElementById('evolution-side-mttr');
-        if (volEl) volEl.textContent = kpis ? (kpis.incidentesTotal || 0) : 0;
-        if (mttrEl) mttrEl.textContent = kpis ? (kpis.mttrTotal || '00:00') : '00:00';
+    // Painel lateral: Volumetria Total + MTTR Médio (default) ou totais por categoria (demais dimensões)
+    function updateEvolutionSideStats(kpis, seriesTotals) {
+        const container = document.getElementById('evolution-side-stats');
+        if (!container) return;
+
+        if (!seriesTotals) {
+            container.innerHTML = `
+                <div class="kpi-card rounded-xl p-3 border border-slate-200 bg-slate-50/50 flex-1 lg:flex-none">
+                    <p class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Volumetria Total</p>
+                    <p id="evolution-side-volume" class="text-xl font-extrabold text-natura-green-cerrado">${kpis ? (kpis.incidentesTotal || 0) : 0}</p>
+                </div>
+                <div class="kpi-card rounded-xl p-3 border border-slate-200 bg-slate-50/50 flex-1 lg:flex-none">
+                    <p class="text-[9px] text-slate-400 uppercase tracking-wider font-bold">MTTR Médio</p>
+                    <p id="evolution-side-mttr" class="text-xl font-extrabold text-natura-orange">${kpis ? (kpis.mttrTotal || '00:00') : '00:00'}</p>
+                </div>
+            `;
+            return;
+        }
+
+        const total = seriesTotals.reduce((sum, s) => sum + s.value, 0) || 1;
+        container.innerHTML = seriesTotals.map(s => {
+            const pct = Math.round((s.value / total) * 1000) / 10;
+            return `
+                <div class="kpi-card rounded-xl p-3 border border-slate-200 bg-slate-50/50 flex-1 lg:flex-none">
+                    <p class="text-[9px] text-slate-400 uppercase tracking-wider font-bold truncate" title="${s.label}">${s.label}</p>
+                    <p class="text-xl font-extrabold" style="color:${s.color}">${s.value}</p>
+                    <p class="text-[9px] text-slate-400">${pct}%</p>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // Ordena os rótulos de período (mês/semana/trimestre) de um objeto de breakdown, igual ao gráfico padrão
+    function getSortedPeriodLabels(dataObj, group) {
+        const monthsOrder = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+        const quartersOrder = ["Q1", "Q2", "Q3", "Q4"];
+        if (group === 'monthly') return monthsOrder.filter(m => dataObj[m] !== undefined);
+        if (group === 'quarterly') return quartersOrder.filter(q => dataObj[q] !== undefined);
+        return Object.keys(dataObj).sort((a, b) => parseInt(a.substring(1)) - parseInt(b.substring(1)));
     }
 
     // Decide qual desenho fazer no gráfico de Evolução: combo Volumetria+MTTR (default) ou barras agrupadas por dimensão
@@ -2097,60 +2116,52 @@
         if (dimension === 'default') {
             const data = ALL_DATA.evolutionData ? ALL_DATA.evolutionData[group] : null;
             if (data) drawEvolutionChart(data.metrics, data.mttr, data.title);
+            updateEvolutionSideStats(ALL_DATA.currentKpis, null);
             return;
         }
 
-        const DIMENSION_CONFIG = {
-            severidade: {
-                title: 'Evolução Mensal por Severidade',
-                data: ALL_DATA.monthlyBySeveridade,
-                series: [
-                    { key: 'sev0', label: 'Sev0', color: '#e94839' },
-                    { key: 'sev1', label: 'Sev1', color: '#FF6600' }
-                ]
-            },
-            deteccao: {
-                title: 'Evolução Mensal por Origem da Detecção',
-                data: ALL_DATA.monthlyByOrigem,
-                series: [
-                    { key: 'End-users', label: 'End-users', color: '#045473' },
-                    { key: 'Monitoração', label: 'Monitoração', color: '#1B472A' },
-                    { key: 'Experiências', label: 'Experiências', color: '#FF6600' }
-                ]
-            },
-            jornada: {
-                title: 'Evolução Mensal por Jornada Impactada',
-                data: ALL_DATA.monthlyByJornada,
-                series: null // dinâmico: descoberto a partir dos dados
-            },
-            pais: {
-                title: 'Evolução Mensal por País Impactado',
-                data: ALL_DATA.monthlyByPais,
-                series: null // dinâmico, limitado ao Top 6 + Outros
-            }
+        const TITLES = {
+            severidade: 'por Severidade',
+            deteccao: 'por Origem da Detecção',
+            jornada: 'por Jornada Impactada',
+            pais: 'por País Impactado'
+        };
+        const GROUP_TITLES = { monthly: 'Evolução Mensal', weekly: 'Evolução Semanal', quarterly: 'Evolução Trimestral' };
+        const FIXED_SERIES = {
+            severidade: [
+                { key: 'sev0', label: 'Sev0', color: '#e94839' },
+                { key: 'sev1', label: 'Sev1', color: '#FF6600' }
+            ],
+            deteccao: [
+                { key: 'End-users', label: 'End-users', color: '#045473' },
+                { key: 'Monitoração', label: 'Monitoração', color: '#1B472A' },
+                { key: 'Experiências', label: 'Experiências', color: '#FF6600' }
+            ]
         };
 
-        const config = DIMENSION_CONFIG[dimension];
-        if (!config) return;
-        drawEvolutionGroupedChart(config.data || {}, config.series, config.title);
+        const breakdown = ALL_DATA.dimensionBreakdowns ? ALL_DATA.dimensionBreakdowns[dimension] : null;
+        const data = breakdown ? breakdown[group] : {};
+        const title = `${GROUP_TITLES[group] || 'Evolução'} ${TITLES[dimension] || ''}`;
+
+        drawEvolutionGroupedChart(data || {}, FIXED_SERIES[dimension] || null, title, group);
     }
 
-    // Desenha um gráfico de barras agrupadas: 1 grupo por mês, 1 série (barra) por categoria da dimensão escolhida
-    function drawEvolutionGroupedChart(breakdownByMonth, seriesConfig, title) {
+    // Desenha um gráfico de barras agrupadas: 1 grupo por período, 1 série (barra) por categoria da dimensão escolhida.
+    // Mostra rótulos de dados (quantidade + %) em cada barra e atualiza o painel lateral com os totais por categoria.
+    function drawEvolutionGroupedChart(breakdownByPeriod, seriesConfig, title, group) {
         const titleEl = document.getElementById('evolution-chart-title');
         if (titleEl) titleEl.textContent = title;
 
-        const monthsOrder = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
-        const labels = monthsOrder.filter(m => breakdownByMonth[m] !== undefined);
+        const labels = getSortedPeriodLabels(breakdownByPeriod, group);
         const displayLabels = labels.map(l => l.charAt(0).toUpperCase() + l.slice(1));
 
         let series = seriesConfig;
         if (!series) {
             // Dimensões dinâmicas (Jornada/País): descobre categorias a partir dos dados, limitando a Top 6 + "Outros"
             const totals = {};
-            labels.forEach(m => {
-                Object.keys(breakdownByMonth[m] || {}).forEach(cat => {
-                    totals[cat] = (totals[cat] || 0) + breakdownByMonth[m][cat];
+            labels.forEach(p => {
+                Object.keys(breakdownByPeriod[p] || {}).forEach(cat => {
+                    totals[cat] = (totals[cat] || 0) + breakdownByPeriod[p][cat];
                 });
             });
             const topCats = Object.keys(totals).sort((a, b) => totals[b] - totals[a]).slice(0, 6);
@@ -2161,19 +2172,42 @@
             }
         }
 
-        const datasets = series.map(s => ({
+        // Totais por período (para calcular %) e por série (para o painel lateral)
+        const periodTotals = labels.map(p => {
+            const periodData = breakdownByPeriod[p] || {};
+            return Object.keys(periodData).reduce((sum, k) => sum + periodData[k], 0);
+        });
+        const seriesTotals = series.map(s => ({ label: s.label, color: s.color, value: 0 }));
+
+        const datasets = series.map((s, sIdx) => ({
             label: s.label,
             backgroundColor: s.color,
-            data: labels.map(m => {
-                const monthData = breakdownByMonth[m] || {};
+            data: labels.map((p, pIdx) => {
+                const periodData = breakdownByPeriod[p] || {};
+                let value;
                 if (s.key === '__outros__') {
                     const known = series.filter(x => x.key !== '__outros__').map(x => x.key);
-                    return Object.keys(monthData).reduce((sum, k) => sum + (known.indexOf(k) === -1 ? monthData[k] : 0), 0);
+                    value = Object.keys(periodData).reduce((sum, k) => sum + (known.indexOf(k) === -1 ? periodData[k] : 0), 0);
+                } else {
+                    value = periodData[s.key] || 0;
                 }
-                return monthData[s.key] || 0;
+                seriesTotals[sIdx].value += value;
+                return value;
             }),
-            datalabels: { display: false }
+            datalabels: {
+                display: (ctx) => ctx.dataset.data[ctx.dataIndex] > 0,
+                anchor: 'end', align: 'end', offset: -2, rotation: -90,
+                font: { size: 9, weight: 'bold' },
+                color: '#374151',
+                formatter: (value, ctx) => {
+                    const periodTotal = periodTotals[ctx.dataIndex] || 0;
+                    const pct = periodTotal > 0 ? Math.round((value / periodTotal) * 1000) / 10 : 0;
+                    return `${value} (${pct}%)`;
+                }
+            }
         }));
+
+        updateEvolutionSideStats(null, seriesTotals);
 
         const ctx = document.getElementById('monthlyIncidentsChart').getContext('2d');
         if (window.monthlyChartInstance) window.monthlyChartInstance.destroy();
@@ -2183,6 +2217,7 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                layout: { padding: { top: 24 } },
                 scales: {
                     x: { stacked: false },
                     y: { beginAtZero: true, stacked: false }
@@ -2722,17 +2757,67 @@
         }, 300);
     }
 
-    // A maioria dos códigos usados na planilha já é ISO-3166 alpha-2 válido (BR, AR, CO, CL, PE, MX...);
-    // aqui só ficam os poucos códigos internos que divergem do padrão ISO usado para gerar a bandeira.
-    const FLAG_CODE_OVERRIDES = { 'EQ': 'EC', 'UR': 'UY' };
+    // Emoji de bandeira Unicode NÃO funciona no Windows (a Microsoft nunca implementou o rendering colorido
+    // dos Regional Indicator Symbols — eles caem para as letras do código, ex: "BR" em vez da bandeira).
+    // Para funcionar em qualquer SO/rede, desenhamos bandeiras simplificadas (faixas de cor) em SVG inline,
+    // sem nenhuma dependência externa (nem CDN de imagem, nem fonte de emoji).
+    const FLAG_PATTERNS = {
+        'BR': { type: 'diamond', bg: '#009739', fg: '#FEDD00' },
+        'MX': { type: 'vertical', colors: ['#006847', '#FFFFFF', '#CE1126'] },
+        'CL': { type: 'chile' },
+        'CO': { type: 'horizontal-weighted', colors: ['#FCD116', '#003893', '#CE1126'], weights: [0.5, 0.25, 0.25] },
+        'PE': { type: 'vertical', colors: ['#D91023', '#FFFFFF', '#D91023'] },
+        'EC': { type: 'horizontal-weighted', colors: ['#FFDD00', '#0072CE', '#EF3340'], weights: [0.5, 0.25, 0.25] },
+        'EQ': { type: 'horizontal-weighted', colors: ['#FFDD00', '#0072CE', '#EF3340'], weights: [0.5, 0.25, 0.25] },
+        'AR': { type: 'horizontal', colors: ['#74ACDF', '#FFFFFF', '#74ACDF'] },
+        'SV': { type: 'horizontal', colors: ['#0047AB', '#FFFFFF', '#0047AB'] },
+        'HN': { type: 'horizontal', colors: ['#0073CF', '#FFFFFF', '#0073CF'] },
+        'DO': { type: 'quadrants', colors: ['#002D62', '#CE1126', '#CE1126', '#002D62'] },
+        'GT': { type: 'vertical', colors: ['#4997D0', '#FFFFFF', '#4997D0'] },
+        'PA': { type: 'quadrants', colors: ['#FFFFFF', '#DA121A', '#0033A0', '#FFFFFF'] },
+        'NI': { type: 'horizontal', colors: ['#0067C6', '#FFFFFF', '#0067C6'] },
+        'UY': { type: 'uruguay' },
+        'UR': { type: 'uruguay' }
+    };
 
-    // Bandeiras como emoji Unicode (2 Regional Indicator Symbols), sem depender de imagem externa/CDN —
-    // evita o problema de bandeira "quebrada" quando o carregamento de imagens de terceiros é bloqueado.
-    function countryCodeToFlagEmoji(code) {
-        const iso = (FLAG_CODE_OVERRIDES[code] || code).toUpperCase();
-        if (iso.length !== 2 || !/^[A-Z]{2}$/.test(iso)) return '🏳️';
-        const points = iso.split('').map(ch => 127397 + ch.charCodeAt(0));
-        return String.fromCodePoint(points[0], points[1]);
+    function buildFlagSvg(code, w, h) {
+        w = w || 22; h = h || 15;
+        const spec = FLAG_PATTERNS[code];
+        let inner = '';
+        if (!spec) {
+            inner = `<rect width="${w}" height="${h}" fill="#cbd5e1"/>`;
+        } else if (spec.type === 'horizontal') {
+            const n = spec.colors.length;
+            spec.colors.forEach((c, i) => { inner += `<rect x="0" y="${(h / n) * i}" width="${w}" height="${h / n}" fill="${c}"/>`; });
+        } else if (spec.type === 'vertical') {
+            const n = spec.colors.length;
+            spec.colors.forEach((c, i) => { inner += `<rect x="${(w / n) * i}" y="0" width="${w / n}" height="${h}" fill="${c}"/>`; });
+        } else if (spec.type === 'horizontal-weighted') {
+            let y = 0;
+            spec.colors.forEach((c, i) => {
+                const bandH = h * spec.weights[i];
+                inner += `<rect x="0" y="${y.toFixed(1)}" width="${w}" height="${bandH.toFixed(1)}" fill="${c}"/>`;
+                y += bandH;
+            });
+        } else if (spec.type === 'diamond') {
+            inner += `<rect width="${w}" height="${h}" fill="${spec.bg}"/>`;
+            inner += `<polygon points="${w / 2},2 ${w - 3},${h / 2} ${w / 2},${h - 2} 3,${h / 2}" fill="${spec.fg}"/>`;
+        } else if (spec.type === 'quadrants') {
+            inner += `<rect x="0" y="0" width="${w / 2}" height="${h / 2}" fill="${spec.colors[0]}"/>`;
+            inner += `<rect x="${w / 2}" y="0" width="${w / 2}" height="${h / 2}" fill="${spec.colors[1]}"/>`;
+            inner += `<rect x="0" y="${h / 2}" width="${w / 2}" height="${h / 2}" fill="${spec.colors[2]}"/>`;
+            inner += `<rect x="${w / 2}" y="${h / 2}" width="${w / 2}" height="${h / 2}" fill="${spec.colors[3]}"/>`;
+        } else if (spec.type === 'chile') {
+            inner += `<rect x="0" y="0" width="${w}" height="${h / 2}" fill="#FFFFFF"/>`;
+            inner += `<rect x="0" y="${h / 2}" width="${w}" height="${h / 2}" fill="#D52B1E"/>`;
+            inner += `<rect x="0" y="0" width="${w / 3}" height="${h / 2}" fill="#0039A6"/>`;
+            inner += `<polygon points="${w / 6},${h * 0.12} ${w / 6 + 2},${h * 0.22} ${w / 6 - 2},${h * 0.22}" fill="#FFFFFF"/>`;
+        } else if (spec.type === 'uruguay') {
+            inner += `<rect width="${w}" height="${h}" fill="#FFFFFF"/>`;
+            for (let i = 0; i < 4; i++) { inner += `<rect x="0" y="${(h / 9) * (i * 2 + 1)}" width="${w}" height="${h / 9}" fill="#0038A8"/>`; }
+            inner += `<rect x="0" y="0" width="${w * 0.4}" height="${h * 0.5}" fill="#FCD116"/>`;
+        }
+        return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,0.12);flex-shrink:0;display:inline-block;vertical-align:middle">${inner}</svg>`;
     }
 
     function renderFlags(abrangenciaStr) {
@@ -2741,7 +2826,7 @@
         if (!countries.length) return 'N/A';
         return `<div class="flex flex-wrap gap-2 mt-1">` + countries.map(c => {
             return `<span title="${c}" class="inline-flex items-center gap-1.5 bg-white border border-slate-200 px-2 py-1 rounded shadow-sm">
-                        <span class="text-base leading-none">${countryCodeToFlagEmoji(c)}</span>
+                        ${buildFlagSvg(c, 18, 12)}
                         <span class="font-bold text-slate-700 text-[11px]">${c}</span>
                     </span>`;
         }).join('') + `</div>`;
