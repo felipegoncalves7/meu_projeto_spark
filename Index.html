@@ -78,12 +78,14 @@
             <!-- Navegação por Seção (scroll-spy): a aba ativa acompanha a seção visível na rolagem -->
             <nav id="section-nav" class="flex gap-1 overflow-x-auto no-scrollbar -mb-px">
                 <a href="#sec-visao-geral" data-section="sec-visao-geral" class="section-nav-link">Visão Geral</a>
-                <a href="#sec-mudancas" data-section="sec-mudancas" class="section-nav-link">Mudanças</a>
                 <a href="#sec-jornadas-paises" data-section="sec-jornadas-paises" class="section-nav-link">Jornadas &amp;
                     Países</a>
-                <a href="#sec-qualidade" data-section="sec-qualidade" class="section-nav-link">Qualidade RCA</a>
+                <a href="#sec-origem-deteccao" data-section="sec-origem-deteccao" class="section-nav-link">Origem da
+                    Detecção</a>
                 <a href="#sec-evolucao" data-section="sec-evolucao" class="section-nav-link">Evolução &amp; Tecnologia</a>
-                <a href="#sec-problemas" data-section="sec-problemas" class="section-nav-link">Problemas</a>
+                <a href="#sec-mudancas" data-section="sec-mudancas" class="section-nav-link">Mudanças</a>
+                <a href="#sec-problemas" data-section="sec-problemas" class="section-nav-link">Problemas &amp;
+                    Qualidade</a>
             </nav>
         </div>
     </header>
@@ -288,11 +290,18 @@
                 </div>
 
                 <!-- ============ SEÇÃO: VISÃO GERAL (todos os KPIs em Cards) ============ -->
-                <section id="sec-visao-geral" class="space-y-10 scroll-mt-28">
+                <section id="sec-visao-geral" class="space-y-6 scroll-mt-28">
                 <div class="flex items-center gap-2">
                     <h2 class="text-xl font-black text-natura-green-amazonia">Visão Geral</h2>
                     <span class="text-xs text-slate-400 font-medium">Todos os KPIs de Incidentes, Mudanças e
                         Problemas, consolidados</span>
+                </div>
+
+                <!-- Bloco: Incidentes -->
+                <div class="rounded-3xl border border-natura-red-buriti/15 bg-natura-red-buriti/[0.03] p-4 sm:p-6 space-y-5">
+                <div class="flex items-center gap-2">
+                    <span class="h-2.5 w-2.5 rounded-full bg-natura-red-buriti"></span>
+                    <h3 class="text-[11px] font-black text-slate-500 uppercase tracking-[0.15em]">Incidentes</h3>
                 </div>
 
                 <!-- KPI Grid -->
@@ -604,6 +613,16 @@
                         </div>
                     </div>
                 </div>
+                </div>
+                <!-- Fim Bloco: Incidentes -->
+
+                <!-- Bloco: Incidentes Causados por Mudanças -->
+                <div class="rounded-3xl border border-natura-orange/15 bg-natura-orange/[0.03] p-4 sm:p-6 space-y-5">
+                <div class="flex items-center gap-2">
+                    <span class="h-2.5 w-2.5 rounded-full bg-natura-orange"></span>
+                    <h3 class="text-[11px] font-black text-slate-500 uppercase tracking-[0.15em]">Incidentes Causados
+                        por Mudanças</h3>
+                </div>
 
                 <!-- Visão Executiva: Impacto de Mudanças -->
                 <div class="pt-2">
@@ -733,6 +752,15 @@
                         </div>
                     </div>
                 </div>
+                </div>
+                <!-- Fim Bloco: Incidentes Causados por Mudanças -->
+
+                <!-- Bloco: Problemas -->
+                <div class="rounded-3xl border border-natura-blue-profundo/15 bg-natura-blue-profundo/[0.03] p-4 sm:p-6 space-y-5">
+                <div class="flex items-center gap-2">
+                    <span class="h-2.5 w-2.5 rounded-full bg-natura-blue-profundo"></span>
+                    <h3 class="text-[11px] font-black text-slate-500 uppercase tracking-[0.15em]">Problemas</h3>
+                </div>
 
                 <!-- Major Problems: KPI Grid (6 cards) -->
                 <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -847,147 +875,38 @@
                         </p>
                     </div>
                 </div>
+                </div>
+                <!-- Fim Bloco: Problemas -->
 
                 </section>
                 <!-- ============ FIM SEÇÃO: VISÃO GERAL ============ -->
-
-                <!-- ============ SEÇÃO: MUDANÇAS (detalhe de Incidentes causados por Mudança) ============ -->
-                <section id="sec-mudancas" class="space-y-10 scroll-mt-28 pt-4">
-                <div class="flex items-center gap-2">
-                    <h2 class="text-xl font-black text-natura-green-amazonia">Mudanças</h2>
-                    <span class="text-xs text-slate-400 font-medium">Grupos responsáveis, origem da detecção e
-                        dispersão MTTD x MTTR</span>
-                </div>
-
-                <!-- Top Grupos/Serviços Responsáveis por Incidentes causados por Mudança -->
-                <div class="pt-2">
-                    <div class="flex items-center gap-2 mb-3">
-                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Top Grupos/Serviços
-                            Responsáveis por Incidentes de Mudança</h2>
-                        <span class="info-tooltip" tabindex="0">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <span class="tooltip-bubble">Tradicionais: agrupado por Grupo Responsável (Assignment
-                                group) + Serviço (CHG Service) da Mudança, via aba Change_MI. Deploys: agrupado
-                                apenas por Service Offering (representa o repositório/esteira CI/CD).</span>
-                        </span>
-                    </div>
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <!-- Tradicionais: Sankey Grupo -> CHG Service -> Tecnologia -->
-                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
-                            <p class="text-xs text-slate-500 uppercase tracking-wider font-bold mb-3">Tradicionais —
-                                Grupo &gt; Serviço &gt; Tecnologia</p>
-                            <div class="h-72" id="sankeyTradicionalChart"></div>
-                            <button type="button" id="btn-toggle-grupos-tradicional"
-                                class="text-[10px] font-bold text-natura-orange mt-3 flex items-center gap-1">Ver
-                                ranking detalhado
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </button>
-                            <div id="grupos-tradicional-list" class="hidden space-y-2 mt-3"></div>
-                        </div>
-                        <!-- Deploys: Sankey Service Offering -> Tecnologia -->
-                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
-                            <p class="text-xs text-slate-500 uppercase tracking-wider font-bold mb-3">Deploys — Service
-                                Offering &gt; Tecnologia</p>
-                            <div class="h-72" id="sankeyDeployChart"></div>
-                            <button type="button" id="btn-toggle-grupos-deploy"
-                                class="text-[10px] font-bold text-natura-orange mt-3 flex items-center gap-1">Ver
-                                ranking detalhado
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </button>
-                            <div id="grupos-deploy-list" class="hidden space-y-2 mt-3"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Origem da Detecção do Incidente -->
-                <div class="pt-2">
-                    <div class="flex items-center gap-2 mb-3">
-                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Origem da Detecção</h2>
-                    </div>
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
-                        <div class="flex items-center justify-between mb-3">
-                            <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">Volumetria e MTTR por
-                                Origem</p>
-                            <span class="info-tooltip" tabindex="0">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <span class="tooltip-bubble">Classificação do campo Caller (Major_ServiceNow):
-                                    Monitoração = contém "Integração"; Experiências = contém "Experiência"; demais
-                                    (nomes de pessoas) = End-users.</span>
-                            </span>
-                        </div>
-                        <div id="origem-deteccao-list" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
-                    </div>
-                </div>
-
-                <!-- Dispersão MTTD x MTTR -->
-                <div class="pt-2">
-                    <div class="flex items-center gap-2 mb-3">
-                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Dispersão MTTD x MTTR
-                            — Incidentes causados por Mudança</h2>
-                    </div>
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <!-- Dispersão MTTD Início x MTTR -->
-                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
-                            <div class="flex items-center justify-between mb-3">
-                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">MTTD Início x
-                                    MTTR</p>
-                                <span class="info-tooltip" tabindex="0">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <span class="tooltip-bubble">Cada ponto é um Incidente causado por Mudança. Eixo X
-                                        = MTTD Início (horas até detecção após início planejado da CHG). Eixo Y =
-                                        MTTR (horas até restauração). Azul = Deploy, Laranja = Tradicional.</span>
-                                </span>
-                            </div>
-                            <div class="h-64"><canvas id="mttdVsMttrChart"></canvas></div>
-                        </div>
-                        <!-- Dispersão MTTD Término x MTTR -->
-                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
-                            <div class="flex items-center justify-between mb-3">
-                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">MTTD Término x
-                                    MTTR</p>
-                                <span class="info-tooltip" tabindex="0">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <span class="tooltip-bubble">Cada ponto é um Incidente causado por Mudança. Eixo X
-                                        = MTTD Término (horas até detecção após término planejado da CHG). Eixo Y =
-                                        MTTR (horas até restauração). Azul = Deploy, Laranja = Tradicional.</span>
-                                </span>
-                            </div>
-                            <div class="h-64"><canvas id="mttdTerminoVsMttrChart"></canvas></div>
-                        </div>
-                    </div>
-                </div>
-                </section>
-                <!-- ============ FIM SEÇÃO: MUDANÇAS ============ -->
 
                 <!-- ============ SEÇÃO: JORNADAS & PAÍSES ============ -->
                 <section id="sec-jornadas-paises" class="space-y-10 scroll-mt-28 pt-4">
                 <div class="flex items-center gap-2">
                     <h2 class="text-xl font-black text-natura-green-amazonia">Jornadas &amp; Países</h2>
                     <span class="text-xs text-slate-400 font-medium">Impacto por Jornada de negócio e por País</span>
+                </div>
+
+                <!-- Volumetria & MTTR (Semanal/Mensal/Trimestral) desta seção -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                        <div class="flex items-center gap-2">
+                            <h3 id="jp-evolution-title" class="text-base font-bold text-slate-800">Volumetria &amp;
+                                MTTR Mensal</h3>
+                            <span id="delta-badge-jp" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
+                        </div>
+                        <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100"
+                            id="jp-evolution-toggle">
+                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white"
+                                data-group="weekly">Semanal</button>
+                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all bg-white text-natura-green-cerrado shadow-sm border border-slate-200"
+                                data-group="monthly">Mensal</button>
+                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white"
+                                data-group="quarterly">Trimestral</button>
+                        </div>
+                    </div>
+                    <div class="relative w-full h-72"><canvas id="jp-evolution-chart"></canvas></div>
                 </div>
 
                 <!-- Jornadas Impactadas -->
@@ -1029,122 +948,60 @@
                 </section>
                 <!-- ============ FIM SEÇÃO: JORNADAS & PAÍSES ============ -->
 
-                <!-- ============ SEÇÃO: QUALIDADE RCA ============ -->
-                <section id="sec-qualidade" class="space-y-10 scroll-mt-28 pt-4">
+                <!-- ============ SEÇÃO: ORIGEM DA DETECÇÃO ============ -->
+                <section id="sec-origem-deteccao" class="space-y-10 scroll-mt-28 pt-4">
                 <div class="flex items-center gap-2">
-                    <h2 class="text-xl font-black text-natura-green-amazonia">Qualidade RCA</h2>
-                    <span class="text-xs text-slate-400 font-medium">Qualidade de RCA, Plano de Ação e Governança de
-                        Testes</span>
+                    <h2 class="text-xl font-black text-natura-green-amazonia">Origem da Detecção</h2>
+                    <span class="text-xs text-slate-400 font-medium">Como os Incidentes Críticos são detectados</span>
                 </div>
 
-                <!-- Qualidade de RCA, Plano de Ação e Governança de Testes (Manual_Info), por Universo -->
+                <!-- Volumetria & MTTR (Semanal/Mensal/Trimestral) desta seção -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                        <div class="flex items-center gap-2">
+                            <h3 id="origem-evolution-title" class="text-base font-bold text-slate-800">Volumetria &amp;
+                                MTTR Mensal</h3>
+                            <span id="delta-badge-origem" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
+                        </div>
+                        <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100"
+                            id="origem-evolution-toggle">
+                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white"
+                                data-group="weekly">Semanal</button>
+                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all bg-white text-natura-green-cerrado shadow-sm border border-slate-200"
+                                data-group="monthly">Mensal</button>
+                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white"
+                                data-group="quarterly">Trimestral</button>
+                        </div>
+                    </div>
+                    <div class="relative w-full h-72"><canvas id="origem-evolution-chart"></canvas></div>
+                </div>
+
+                <!-- Origem da Detecção do Incidente -->
                 <div class="pt-2">
                     <div class="flex items-center gap-2 mb-3">
-                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Qualidade de RCA & Governança
-                            de Testes, por Universo</h2>
-                        <span class="info-tooltip" tabindex="0">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <span class="tooltip-bubble">Dados de avaliação manual feita pela equipe (aba
-                                Manual_Info), consolidados para todos os registros disponíveis (não filtrados por
-                                Ano/Período). "—" indica que o Problema ainda está em aberto ou a análise não foi
-                                concluída, e é excluído do cálculo do percentual (nunca contado como 0%). Cada
-                                Universo só exibe as perguntas que fazem sentido para ele.</span>
-                        </span>
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Origem da Detecção</h2>
                     </div>
-                    <p class="text-[10px] text-slate-400 italic mb-4">Base de dados em construção: cobre atualmente
-                        os incidentes de 2026. O histórico de 2025 será incluído futuramente na mesma aba, e os
-                        percentuais abaixo serão atualizados automaticamente assim que os dados forem preenchidos.
-                        Clique numa Causa Raiz ou Processo de Origem para ver os incidentes por trás do número.</p>
-
-                    <div class="space-y-6">
-                        <!-- Universo: Geral -->
-                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                            <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
-                                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
-                                    <span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
-                                    Universo Geral
-                                    <span class="text-[10px] font-normal text-slate-400">(Incidentes não causados por
-                                        Mudança Deploy/Tradicional)</span>
-                                </h3>
-                                <span class="text-[10px] text-slate-400 font-semibold">n=<span
-                                        id="qm-geral-n">0</span></span>
-                            </div>
-                            <div id="qm-metrics-geral" class="grid grid-cols-2 gap-4 mb-5"></div>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        Causas Raiz mais Recorrentes</h4>
-                                    <div id="qm-causaraiz-geral" class="space-y-1.5"></div>
-                                </div>
-                                <div>
-                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        Processos de Origem mais Recorrentes</h4>
-                                    <div id="qm-processo-geral" class="space-y-1.5"></div>
-                                </div>
-                            </div>
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
+                        <div class="flex items-center justify-between mb-3">
+                            <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">Volumetria e MTTR por
+                                Origem</p>
+                            <span class="info-tooltip" tabindex="0">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span class="tooltip-bubble">Classificação do campo Caller (Major_ServiceNow):
+                                    Monitoração = contém "Integração"; Experiências = contém "Experiência"; demais
+                                    (nomes de pessoas) = End-users.</span>
+                            </span>
                         </div>
-
-                        <!-- Universo: Deploy -->
-                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                            <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
-                                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
-                                    <span class="w-2.5 h-2.5 rounded-full bg-natura-orange"></span>
-                                    Universo Deploy
-                                    <span class="text-[10px] font-normal text-slate-400">(Incidentes causados por
-                                        Mudança Deploy/CI-CD)</span>
-                                </h3>
-                                <span class="text-[10px] text-slate-400 font-semibold">n=<span
-                                        id="qm-deploy-n">0</span></span>
-                            </div>
-                            <div id="qm-metrics-deploy" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5"></div>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        Causas Raiz mais Recorrentes</h4>
-                                    <div id="qm-causaraiz-deploy" class="space-y-1.5"></div>
-                                </div>
-                                <div>
-                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        Processos de Origem mais Recorrentes</h4>
-                                    <div id="qm-processo-deploy" class="space-y-1.5"></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Universo: Tradicional -->
-                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                            <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
-                                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
-                                    <span class="w-2.5 h-2.5 rounded-full bg-natura-blue-profundo"></span>
-                                    Universo Tradicional
-                                    <span class="text-[10px] font-normal text-slate-400">(Incidentes causados por
-                                        Mudança Normal/Urgente/Emergencial)</span>
-                                </h3>
-                                <span class="text-[10px] text-slate-400 font-semibold">n=<span
-                                        id="qm-trad-n">0</span></span>
-                            </div>
-                            <div id="qm-metrics-tradicional" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5"></div>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        Causas Raiz mais Recorrentes</h4>
-                                    <div id="qm-causaraiz-tradicional" class="space-y-1.5"></div>
-                                </div>
-                                <div>
-                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        Processos de Origem mais Recorrentes</h4>
-                                    <div id="qm-processo-tradicional" class="space-y-1.5"></div>
-                                </div>
-                            </div>
-                        </div>
+                        <div id="origem-deteccao-list" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
                     </div>
                 </div>
+
                 </section>
-                <!-- ============ FIM SEÇÃO: QUALIDADE RCA ============ -->
+                <!-- ============ FIM SEÇÃO: ORIGEM DA DETECÇÃO ============ -->
 
                 <!-- ============ SEÇÃO: EVOLUÇÃO & TECNOLOGIA ============ -->
                 <section id="sec-evolucao" class="space-y-10 scroll-mt-28 pt-4">
@@ -1178,9 +1035,6 @@
                             class="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-natura-orange focus:border-natura-orange outline-none cursor-pointer hover:bg-slate-100">
                             <option value="default">Volumetria &amp; MTTR</option>
                             <option value="severidade">Severidade (Sev0 x Sev1)</option>
-                            <option value="deteccao">Origem da Detecção</option>
-                            <option value="jornada">Jornadas Impactadas</option>
-                            <option value="pais">Países Impactados</option>
                         </select>
                     </div>
                     <div class="flex flex-col lg:flex-row gap-6">
@@ -1339,14 +1193,140 @@
                 </div>
                 </section>
                 <!-- ============ FIM SEÇÃO: EVOLUÇÃO & TECNOLOGIA ============ -->
+
+                <!-- ============ SEÇÃO: MUDANÇAS (detalhe de Incidentes causados por Mudança) ============ -->
+                <section id="sec-mudancas" class="space-y-10 scroll-mt-28 pt-4">
+                <div class="flex items-center gap-2">
+                    <h2 class="text-xl font-black text-natura-green-amazonia">Mudanças</h2>
+                    <span class="text-xs text-slate-400 font-medium">Incidentes Causados por Mudanças: grupos
+                        responsáveis, Diagrama de Sankey e dispersão MTTD x MTTR</span>
+                </div>
+
+                <!-- Volumetria & MTTR (Semanal/Mensal/Trimestral) de Incidentes causados por Mudança -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                        <h3 id="mudanca-evolution-title" class="text-base font-bold text-slate-800">Incidentes por
+                            Mudança — Mensal</h3>
+                        <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100"
+                            id="mudanca-evolution-toggle">
+                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white"
+                                data-group="weekly">Semanal</button>
+                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all bg-white text-natura-green-cerrado shadow-sm border border-slate-200"
+                                data-group="monthly">Mensal</button>
+                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white"
+                                data-group="quarterly">Trimestral</button>
+                        </div>
+                    </div>
+                    <div class="relative w-full h-72"><canvas id="mudanca-evolution-chart"></canvas></div>
+                </div>
+
+                <!-- Top Grupos/Serviços Responsáveis por Incidentes causados por Mudança -->
+                <div class="pt-2">
+                    <div class="flex items-center gap-2 mb-3">
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Top Grupos/Serviços
+                            Responsáveis por Incidentes de Mudança</h2>
+                        <span class="info-tooltip" tabindex="0">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span class="tooltip-bubble">Tradicionais: agrupado por Grupo Responsável (Assignment
+                                group) + Serviço (CHG Service) da Mudança, via aba Change_MI. Deploys: agrupado
+                                apenas por Service Offering (representa o repositório/esteira CI/CD).</span>
+                        </span>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <!-- Tradicionais: Sankey Grupo -> CHG Service -> Tecnologia -->
+                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
+                            <p class="text-xs text-slate-500 uppercase tracking-wider font-bold mb-3">Tradicionais —
+                                Grupo &gt; Serviço &gt; Tecnologia</p>
+                            <div class="h-72" id="sankeyTradicionalChart"></div>
+                            <button type="button" id="btn-toggle-grupos-tradicional"
+                                class="text-[10px] font-bold text-natura-orange mt-3 flex items-center gap-1">Ver
+                                ranking detalhado
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            <div id="grupos-tradicional-list" class="hidden space-y-2 mt-3"></div>
+                        </div>
+                        <!-- Deploys: Sankey Service Offering -> Tecnologia -->
+                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
+                            <p class="text-xs text-slate-500 uppercase tracking-wider font-bold mb-3">Deploys — Service
+                                Offering &gt; Tecnologia</p>
+                            <div class="h-72" id="sankeyDeployChart"></div>
+                            <button type="button" id="btn-toggle-grupos-deploy"
+                                class="text-[10px] font-bold text-natura-orange mt-3 flex items-center gap-1">Ver
+                                ranking detalhado
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            <div id="grupos-deploy-list" class="hidden space-y-2 mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dispersão MTTD x MTTR -->
+                <div class="pt-2">
+                    <div class="flex items-center gap-2 mb-3">
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Dispersão MTTD x MTTR
+                            — Incidentes causados por Mudança</h2>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <!-- Dispersão MTTD Início x MTTR -->
+                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
+                            <div class="flex items-center justify-between mb-3">
+                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">MTTD Início x
+                                    MTTR</p>
+                                <span class="info-tooltip" tabindex="0">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span class="tooltip-bubble">Cada ponto é um Incidente causado por Mudança. Eixo X
+                                        = MTTD Início (horas até detecção após início planejado da CHG). Eixo Y =
+                                        MTTR (horas até restauração). Azul = Deploy, Laranja = Tradicional.</span>
+                                </span>
+                            </div>
+                            <div class="h-64"><canvas id="mttdVsMttrChart"></canvas></div>
+                        </div>
+                        <!-- Dispersão MTTD Término x MTTR -->
+                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
+                            <div class="flex items-center justify-between mb-3">
+                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">MTTD Término x
+                                    MTTR</p>
+                                <span class="info-tooltip" tabindex="0">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span class="tooltip-bubble">Cada ponto é um Incidente causado por Mudança. Eixo X
+                                        = MTTD Término (horas até detecção após término planejado da CHG). Eixo Y =
+                                        MTTR (horas até restauração). Azul = Deploy, Laranja = Tradicional.</span>
+                                </span>
+                            </div>
+                            <div class="h-64"><canvas id="mttdTerminoVsMttrChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+                </section>
+                <!-- ============ FIM SEÇÃO: MUDANÇAS ============ -->
             </div>
 
-            <!-- ============ SEÇÃO: PROBLEMAS (Major Problems, detalhe) ============ -->
+            <!-- ============ SEÇÃO: PROBLEMAS & QUALIDADE (Major Problems + Qualidade de RCA, detalhe) ============ -->
             <section id="sec-problemas" class="space-y-8 scroll-mt-28">
                 <div class="flex items-center gap-2">
-                    <h2 class="text-xl font-black text-natura-green-amazonia">Problemas</h2>
-                    <span class="text-xs text-slate-400 font-medium">Detalhe de Major Problems &mdash; os KPIs
-                        principais estão na Visão Geral</span>
+                    <h2 class="text-xl font-black text-natura-green-amazonia">Problemas &amp; Qualidade</h2>
+                    <span class="text-xs text-slate-400 font-medium">Detalhe de Major Problems e da Qualidade de RCA
+                        &mdash; os KPIs principais estão na Visão Geral</span>
                 </div>
                 <!-- Mixed Chart & Explanatory Box -->
                 <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-stretch">
@@ -1481,6 +1461,113 @@
                         </div>
                         <div id="mp-top-resolved-list" class="space-y-2">
                             <div class="text-[11px] text-slate-300 italic py-2">Carregando rankings...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Qualidade de RCA, Plano de Ação e Governança de Testes (Manual_Info), por Universo -->
+                <div class="pt-2">
+                    <div class="flex items-center gap-2 mb-3">
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Qualidade de RCA & Governança
+                            de Testes, por Universo</h2>
+                        <span class="info-tooltip" tabindex="0">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span class="tooltip-bubble">Dados de avaliação manual feita pela equipe (aba
+                                Manual_Info), consolidados para todos os registros disponíveis (não filtrados por
+                                Ano/Período). "—" indica que o Problema ainda está em aberto ou a análise não foi
+                                concluída, e é excluído do cálculo do percentual (nunca contado como 0%). Cada
+                                Universo só exibe as perguntas que fazem sentido para ele.</span>
+                        </span>
+                    </div>
+                    <p class="text-[10px] text-slate-400 italic mb-4">Base de dados em construção: cobre atualmente
+                        os incidentes de 2026. O histórico de 2025 será incluído futuramente na mesma aba, e os
+                        percentuais abaixo serão atualizados automaticamente assim que os dados forem preenchidos.
+                        Clique numa Causa Raiz ou Processo de Origem para ver os incidentes por trás do número.</p>
+
+                    <div class="space-y-6">
+                        <!-- Universo: Geral -->
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                            <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
+                                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                                    Universo Geral
+                                    <span class="text-[10px] font-normal text-slate-400">(Incidentes não causados por
+                                        Mudança Deploy/Tradicional)</span>
+                                </h3>
+                                <span class="text-[10px] text-slate-400 font-semibold">n=<span
+                                        id="qm-geral-n">0</span></span>
+                            </div>
+                            <div id="qm-metrics-geral" class="grid grid-cols-2 gap-4 mb-5"></div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                                        Causas Raiz mais Recorrentes</h4>
+                                    <div id="qm-causaraiz-geral" class="space-y-1.5"></div>
+                                </div>
+                                <div>
+                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                                        Processos de Origem mais Recorrentes</h4>
+                                    <div id="qm-processo-geral" class="space-y-1.5"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Universo: Deploy -->
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                            <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
+                                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-natura-orange"></span>
+                                    Universo Deploy
+                                    <span class="text-[10px] font-normal text-slate-400">(Incidentes causados por
+                                        Mudança Deploy/CI-CD)</span>
+                                </h3>
+                                <span class="text-[10px] text-slate-400 font-semibold">n=<span
+                                        id="qm-deploy-n">0</span></span>
+                            </div>
+                            <div id="qm-metrics-deploy" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5"></div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                                        Causas Raiz mais Recorrentes</h4>
+                                    <div id="qm-causaraiz-deploy" class="space-y-1.5"></div>
+                                </div>
+                                <div>
+                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                                        Processos de Origem mais Recorrentes</h4>
+                                    <div id="qm-processo-deploy" class="space-y-1.5"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Universo: Tradicional -->
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                            <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
+                                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-natura-blue-profundo"></span>
+                                    Universo Tradicional
+                                    <span class="text-[10px] font-normal text-slate-400">(Incidentes causados por
+                                        Mudança Normal/Urgente/Emergencial)</span>
+                                </h3>
+                                <span class="text-[10px] text-slate-400 font-semibold">n=<span
+                                        id="qm-trad-n">0</span></span>
+                            </div>
+                            <div id="qm-metrics-tradicional" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5"></div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                                        Causas Raiz mais Recorrentes</h4>
+                                    <div id="qm-causaraiz-tradicional" class="space-y-1.5"></div>
+                                </div>
+                                <div>
+                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                                        Processos de Origem mais Recorrentes</h4>
+                                    <div id="qm-processo-tradicional" class="space-y-1.5"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1715,22 +1802,34 @@
                                 &mdash; Detalhe</h3>
                             <dl class="space-y-3">
                                 <div>
-                                    <dt class="font-bold text-slate-700">Top Grupos/Serviços Responsáveis</dt>
+                                    <dt class="font-bold text-slate-700">Top Grupos/Serviços Responsáveis (Sankey)</dt>
                                     <dd class="text-slate-500">Tradicionais: agrupado por Assignment group + Service
                                         da Mudança (Change_MI). Deploys: agrupado por Service Offering (representa o
                                         repositório/esteira CI/CD).</dd>
-                                </div>
-                                <div>
-                                    <dt class="font-bold text-slate-700">Origem da Detecção</dt>
-                                    <dd class="text-slate-500">Classificação do campo Caller (Major_ServiceNow):
-                                        Monitoração = contém "Integração"; Experiências = contém "Experiência";
-                                        demais (nomes de pessoas) = End-users. MTTR calculado por categoria.</dd>
                                 </div>
                                 <div>
                                     <dt class="font-bold text-slate-700">Dispersão MTTD x MTTR</dt>
                                     <dd class="text-slate-500">Cada ponto é um Incidente causado por Mudança: eixo X =
                                         MTTD (Início ou Término), eixo Y = MTTR, coloridos por tipo (Deploy/Tradicional)
                                         para identificar outliers.</dd>
+                                </div>
+                                <div>
+                                    <dt class="font-bold text-slate-700">Volumetria &amp; MTTR por Mudança</dt>
+                                    <dd class="text-slate-500">Evolução (Mensal/Semanal/Trimestral) restrita apenas a
+                                        Incidentes causados por Mudança.</dd>
+                                </div>
+                            </dl>
+                        </div>
+
+                        <div>
+                            <h3 class="text-xs font-bold text-natura-orange uppercase tracking-widest mb-3">Origem da
+                                Detecção</h3>
+                            <dl class="space-y-3">
+                                <div>
+                                    <dt class="font-bold text-slate-700">Classificação do Caller</dt>
+                                    <dd class="text-slate-500">Campo Caller (Major_ServiceNow): Monitoração = contém
+                                        "Integração"; Experiências = contém "Experiência"; demais (nomes de pessoas) =
+                                        End-users. MTTR calculado por categoria.</dd>
                                 </div>
                             </dl>
                         </div>

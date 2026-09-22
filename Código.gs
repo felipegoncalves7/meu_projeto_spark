@@ -724,7 +724,12 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
            monthlyBySeveridade: {}, weeklyBySeveridade: {}, quarterlyBySeveridade: {},
            monthlyByOrigem: {}, weeklyByOrigem: {}, quarterlyByOrigem: {},
            monthlyByJornada: {}, weeklyByJornada: {}, quarterlyByJornada: {},
-           monthlyByPais: {}, weeklyByPais: {}, quarterlyByPais: {}
+           monthlyByPais: {}, weeklyByPais: {}, quarterlyByPais: {},
+           mudancaEvolutionData: {
+             monthly: { metrics: {}, mttr: {} },
+             weekly: { metrics: {}, mttr: {} },
+             quarterly: { metrics: {}, mttr: {} }
+           }
         };
     }
 
@@ -783,7 +788,9 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         monthlyBySeveridade: {}, weeklyBySeveridade: {}, quarterlyBySeveridade: {},
         monthlyByOrigem: {}, weeklyByOrigem: {}, quarterlyByOrigem: {},
         monthlyByJornada: {}, weeklyByJornada: {}, quarterlyByJornada: {},
-        monthlyByPais: {}, weeklyByPais: {}, quarterlyByPais: {}
+        monthlyByPais: {}, weeklyByPais: {}, quarterlyByPais: {},
+        // Evolução (Volume + MTTR) restrita a Incidentes causados por Mudança
+        mudancaMonthlyMetrics: {}, mudancaWeeklyMetrics: {}, mudancaQuarterlyMetrics: {}
     };
 
     dataRows.forEach((row, i) => {
@@ -949,6 +956,21 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         if (ofensor === 'Mudança') {
             metrics.incidentesMudanca++;
 
+            // Evolução (Mensal/Semanal/Trimestral) de Volume + MTTR restrita a Incidentes causados por Mudança
+            if (!metrics.mudancaMonthlyMetrics[mes]) metrics.mudancaMonthlyMetrics[mes] = { count: 0, durationMin: 0 };
+            metrics.mudancaMonthlyMetrics[mes].count++;
+            metrics.mudancaMonthlyMetrics[mes].durationMin += durMin;
+            if (weekLabel) {
+                if (!metrics.mudancaWeeklyMetrics[weekLabel]) metrics.mudancaWeeklyMetrics[weekLabel] = { count: 0, durationMin: 0 };
+                metrics.mudancaWeeklyMetrics[weekLabel].count++;
+                metrics.mudancaWeeklyMetrics[weekLabel].durationMin += durMin;
+            }
+            if (quarterLabel) {
+                if (!metrics.mudancaQuarterlyMetrics[quarterLabel]) metrics.mudancaQuarterlyMetrics[quarterLabel] = { count: 0, durationMin: 0 };
+                metrics.mudancaQuarterlyMetrics[quarterLabel].count++;
+                metrics.mudancaQuarterlyMetrics[quarterLabel].durationMin += durMin;
+            }
+
             const tipoSm = String(row[COL_TYPE_SM]).trim().toUpperCase();
             const isDeploy = tipoSm === 'DEPLOY';
             const tipoBucket = isDeploy ? 'deploy' : 'tradicional';
@@ -1096,6 +1118,23 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
     for (const quarter in metrics.quarterlyMetrics) {
         const item = metrics.quarterlyMetrics[quarter];
         mttrTrimestralEmHoras[quarter] = item.count > 0 ? (item.durationMin / item.count) / 60 : 0;
+    }
+
+    // MTTR (Mensal/Semanal/Trimestral) restrito a Incidentes causados por Mudança
+    const mudancaMttrPorMesEmHoras = {};
+    for (const mes in metrics.mudancaMonthlyMetrics) {
+        const item = metrics.mudancaMonthlyMetrics[mes];
+        mudancaMttrPorMesEmHoras[mes] = item.count > 0 ? (item.durationMin / item.count) / 60 : 0;
+    }
+    const mudancaMttrSemanalEmHoras = {};
+    for (const week in metrics.mudancaWeeklyMetrics) {
+        const item = metrics.mudancaWeeklyMetrics[week];
+        mudancaMttrSemanalEmHoras[week] = item.count > 0 ? (item.durationMin / item.count) / 60 : 0;
+    }
+    const mudancaMttrTrimestralEmHoras = {};
+    for (const quarter in metrics.mudancaQuarterlyMetrics) {
+        const item = metrics.mudancaQuarterlyMetrics[quarter];
+        mudancaMttrTrimestralEmHoras[quarter] = item.count > 0 ? (item.durationMin / item.count) / 60 : 0;
     }
 
     const sev0Sev1Total = metrics.sev0Incidentes + metrics.sev1Incidentes;
@@ -1247,6 +1286,11 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         monthlyByPais: metrics.monthlyByPais,
         weeklyByPais: metrics.weeklyByPais,
         quarterlyByPais: metrics.quarterlyByPais,
+        mudancaEvolutionData: {
+            monthly: { metrics: metrics.mudancaMonthlyMetrics, mttr: mudancaMttrPorMesEmHoras },
+            weekly: { metrics: metrics.mudancaWeeklyMetrics, mttr: mudancaMttrSemanalEmHoras },
+            quarterly: { metrics: metrics.mudancaQuarterlyMetrics, mttr: mudancaMttrTrimestralEmHoras }
+        },
         rawIncidents: metrics.rawIncidents
     };
   } catch (e) {

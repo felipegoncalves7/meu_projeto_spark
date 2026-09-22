@@ -239,6 +239,9 @@
         setupTechOfensorFilterDropdowns();
         setupEvolutionToggle();
         setupEvolutionDimensionSelect();
+        setupLocalEvolutionToggle('jornadas-paises', 'jp-evolution-toggle', 'jp-evolution-chart', 'jpChartInstance', 'jp-evolution-title', 'Volumetria & MTTR');
+        setupLocalEvolutionToggle('origem-deteccao', 'origem-evolution-toggle', 'origem-evolution-chart', 'origemChartInstance', 'origem-evolution-title', 'Volumetria & MTTR');
+        setupLocalEvolutionToggle('mudancas', 'mudanca-evolution-toggle', 'mudanca-evolution-chart', 'mudancaEvChartInstance', 'mudanca-evolution-title', 'Incidentes por Mudança —');
         loadQualidadeMudancaData();
 
         logDebug("Initial setup complete. Loading page data...");
@@ -588,8 +591,14 @@
             jornada: { monthly: data.monthlyByJornada || {}, weekly: data.weeklyByJornada || {}, quarterly: data.quarterlyByJornada || {} },
             pais: { monthly: data.monthlyByPais || {}, weekly: data.weeklyByPais || {}, quarterly: data.quarterlyByPais || {} }
         };
+        ALL_DATA.mudancaEvolutionData = data.mudancaEvolutionData || { monthly: {}, weekly: {}, quarterly: {} };
 
         renderEvolutionByCurrentDimension();
+
+        // Gráficos combo locais (Volume + MTTR) das seções Jornadas & Países, Origem da Detecção e Mudanças
+        renderLocalEvolutionChart('jornadas-paises', 'jp-evolution-chart', 'jpChartInstance', 'jp-evolution-title', 'Volumetria & MTTR');
+        renderLocalEvolutionChart('origem-deteccao', 'origem-evolution-chart', 'origemChartInstance', 'origem-evolution-title', 'Volumetria & MTTR');
+        renderLocalEvolutionChart('mudancas', 'mudanca-evolution-chart', 'mudancaEvChartInstance', 'mudanca-evolution-title', 'Incidentes por Mudança —');
 
         // Render Technology & Offender charts in the same flow
         if (data.techMetrics) {
@@ -1041,7 +1050,8 @@
     // Busca os KPIs do período anterior equivalente e atualiza os badges de comparação dos cards
     function updateComparisonDisplay() {
         const badgeIds = ['delta-badge-total', 'delta-badge-sev0', 'delta-badge-sev1',
-            'delta-badge-ola', 'delta-badge-ola-sev0', 'delta-badge-ola-sev1'];
+            'delta-badge-ola', 'delta-badge-ola-sev0', 'delta-badge-ola-sev1',
+            'delta-badge-jp', 'delta-badge-origem'];
 
         if (CURRENT_FILTERS.comparisonMode !== 'previous' || !ALL_DATA.currentKpis) {
             badgeIds.forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
@@ -1064,6 +1074,9 @@
                 applyDeltaBadge('delta-badge-ola', cur.aderenciaOLA, prev.aderenciaOLA, { isPercentagePoints: true });
                 applyDeltaBadge('delta-badge-ola-sev0', cur.aderenciaOLASev0, prev.aderenciaOLASev0, { isPercentagePoints: true });
                 applyDeltaBadge('delta-badge-ola-sev1', cur.aderenciaOLASev1, prev.aderenciaOLASev1, { isPercentagePoints: true });
+                // Jornadas & Países e Origem da Detecção mostram a volumetria geral de Incidentes: reaproveita a mesma comparação
+                applyDeltaBadge('delta-badge-jp', cur.incidentesTotal, prev.incidentesTotal);
+                applyDeltaBadge('delta-badge-origem', cur.incidentesTotal, prev.incidentesTotal);
             })
             .withFailureHandler(e => {
                 logDebug("getComparisonData FAILED: " + e.message);
@@ -2241,12 +2254,34 @@
     }
 
     function drawEvolutionChart(metrics, mttrData, title) {
-        const titleEl = document.getElementById('evolution-chart-title');
-        if (titleEl) titleEl.textContent = title;
+        drawGenericEvolutionChart({
+            canvasId: 'monthlyIncidentsChart',
+            chartKey: 'monthlyChartInstance',
+            titleElId: 'evolution-chart-title',
+            metrics: metrics,
+            mttrData: mttrData,
+            title: title,
+            onBarClick: (label, title) => {
+                let contextType = 'monthly';
+                if (title.includes("Semanal")) contextType = 'weekly';
+                else if (title.includes("Trimestral")) contextType = 'quarterly';
+                openIncidentsModal(contextType, label);
+            }
+        });
+    }
 
-        const ctx = document.getElementById('monthlyIncidentsChart').getContext('2d');
+    // Gráfico combo genérico (Barras = Volume, Linha = MTTR), reaproveitado pela Evolução geral e pelas
+    // seções locais (Jornadas & Países, Origem da Detecção, Mudanças), cada uma com seu próprio canvas.
+    function drawGenericEvolutionChart(opts) {
+        const { canvasId, chartKey, titleElId, metrics, mttrData, title, onBarClick } = opts;
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
 
-        // Custom order for months to ensure they are sorted correctly
+        if (titleElId) {
+            const titleEl = document.getElementById(titleElId);
+            if (titleEl) titleEl.textContent = title;
+        }
+
         const monthsOrder = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
         const quartersOrder = ["Q1", "Q2", "Q3", "Q4"];
 
@@ -2256,7 +2291,6 @@
         } else if (title.includes("Trimestral")) {
             labels = quartersOrder.filter(q => metrics[q] !== undefined);
         } else {
-            // Weekly: Sort by numeric part of "Wn"
             labels = Object.keys(metrics).sort((a, b) => {
                 const na = parseInt(a.substring(1));
                 const nb = parseInt(b.substring(1));
@@ -2268,14 +2302,13 @@
         const counts = labels.map(l => metrics[l].count);
         const mttrs = labels.map(l => { const v = mttrData[l]; return v !== undefined ? v.toFixed(2) : 0; });
 
-        // Cálculos para eixos dinâmicos (arredondando para cima nas dezenas)
         const maxCounts = Math.max(...counts, 0);
         const maxMTTR = Math.max(...mttrs.map(Number), 0);
         const axisMaxCounts = Math.ceil((maxCounts + 0.1) / 10) * 10;
         const axisMaxMTTR = Math.ceil((maxMTTR + 0.1) / 10) * 10;
 
-        if (window.monthlyChartInstance) window.monthlyChartInstance.destroy();
-        window.monthlyChartInstance = new Chart(ctx, {
+        if (window[chartKey]) window[chartKey].destroy();
+        window[chartKey] = new Chart(canvas.getContext('2d'), {
             type: 'bar',
             data: {
                 labels: displayLabels,
@@ -2295,13 +2328,9 @@
             options: {
                 responsive: true, maintainAspectRatio: false,
                 onClick: (e, activeEls) => {
-                    if (activeEls.length > 0) {
+                    if (activeEls.length > 0 && onBarClick) {
                         const idx = activeEls[0].index;
-                        const label = displayLabels[idx];
-                        let contextType = 'monthly';
-                        if (title.includes("Semanal")) contextType = 'weekly';
-                        else if (title.includes("Trimestral")) contextType = 'quarterly';
-                        openIncidentsModal(contextType, label);
+                        onBarClick(displayLabels[idx], title);
                     }
                 },
                 scales: {
@@ -2340,6 +2369,57 @@
                     }
                 }
             }
+        });
+    }
+
+    // ---- Gráficos combo locais (Volume + MTTR) para Jornadas & Países, Origem da Detecção e Mudanças ----
+    // Cada seção guarda seu próprio agrupamento (Mensal/Semanal/Trimestral) e desenha de forma independente.
+    const LOCAL_EVOLUTION_STATE = {
+        'jornadas-paises': { grouping: 'monthly', dataKey: 'evolutionData' },
+        'origem-deteccao': { grouping: 'monthly', dataKey: 'evolutionData' },
+        'mudancas': { grouping: 'monthly', dataKey: 'mudancaEvolutionData' }
+    };
+
+    function setupLocalEvolutionToggle(sectionKey, containerId, canvasId, chartKey, titleElId, titlePrefix) {
+        const container = document.getElementById(containerId);
+        if (!container || container.dataset.wired) return;
+        container.dataset.wired = 'true';
+
+        container.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const group = btn.dataset.group;
+                LOCAL_EVOLUTION_STATE[sectionKey].grouping = group;
+
+                container.querySelectorAll('button').forEach(b => {
+                    b.classList.remove('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
+                    b.classList.add('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
+                });
+                btn.classList.remove('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
+                btn.classList.add('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
+
+                renderLocalEvolutionChart(sectionKey, canvasId, chartKey, titleElId, titlePrefix);
+            });
+        });
+    }
+
+    function renderLocalEvolutionChart(sectionKey, canvasId, chartKey, titleElId, titlePrefix) {
+        const state = LOCAL_EVOLUTION_STATE[sectionKey];
+        const dataSource = ALL_DATA[state.dataKey];
+        if (!dataSource) return;
+        const groupData = dataSource[state.grouping];
+        if (!groupData) return;
+
+        const GROUP_LABEL = { monthly: 'Mensal', weekly: 'Semanal', quarterly: 'Trimestral' };
+        const title = `${titlePrefix} ${GROUP_LABEL[state.grouping]}`;
+
+        drawGenericEvolutionChart({
+            canvasId: canvasId,
+            chartKey: chartKey,
+            titleElId: titleElId,
+            metrics: groupData.metrics || {},
+            mttrData: groupData.mttr || {},
+            title: title,
+            onBarClick: null
         });
     }
 
