@@ -12,6 +12,8 @@ const COL_TECH_IMPACTADA = 15; // P
 const COL_OFENSOR = 16;    // Q
 const COL_MES = 1;         // B
 const COL_ABERTURA = 2;    // C
+const COL_JORNADA = 5;     // F
+const COL_ABRANGENCIA = 9; // J (Países Impactados)
 const COL_PROBLEMA = 13;   // N
 const COL_TYPE_SM = 21;    // V
 const COL_SM_NUMBER = 22;  // W
@@ -21,13 +23,17 @@ const OLA_TARGET_SEV0_MIN = 120; // 2h
 const OLA_TARGET_SEV1_MIN = 360; // 6h
 
 // Mapeamento da aba Change_MI (Range A1:Z)
-const CHG_COL_NUMBER = 0;        // A
-const CHG_COL_PLANNED_START = 9; // J
-const CHG_COL_PLANNED_END = 10;  // K
+const CHG_COL_NUMBER = 0;            // A
+const CHG_COL_SERVICE = 7;           // H
+const CHG_COL_SERVICE_OFFERING = 8;  // I
+const CHG_COL_PLANNED_START = 9;     // J
+const CHG_COL_PLANNED_END = 10;      // K
+const CHG_COL_ASSIGNMENT_GROUP = 11; // L
 
 /**
- * Monta um mapa Number -> {plannedStart, plannedEnd} a partir da aba Change_MI,
- * usado para calcular o MTTD (tempo entre início/término planejado da Mudança e a abertura do incidente).
+ * Monta um mapa Number -> {plannedStart, plannedEnd, service, serviceOffering, assignmentGroup}
+ * a partir da aba Change_MI, usado para calcular o MTTD (tempo entre início/término planejado
+ * da Mudança e a abertura do incidente) e o ranking de Grupos/Serviços responsáveis.
  */
 function buildChangeMap(ss) {
   const map = {};
@@ -41,7 +47,10 @@ function buildChangeMap(ss) {
     if (!number) continue;
     map[number] = {
       plannedStart: row[CHG_COL_PLANNED_START] instanceof Date ? row[CHG_COL_PLANNED_START] : null,
-      plannedEnd: row[CHG_COL_PLANNED_END] instanceof Date ? row[CHG_COL_PLANNED_END] : null
+      plannedEnd: row[CHG_COL_PLANNED_END] instanceof Date ? row[CHG_COL_PLANNED_END] : null,
+      service: String(row[CHG_COL_SERVICE] || '').trim() || 'N/A',
+      serviceOffering: String(row[CHG_COL_SERVICE_OFFERING] || '').trim() || 'N/A',
+      assignmentGroup: String(row[CHG_COL_ASSIGNMENT_GROUP] || '').trim() || 'N/A'
     };
   }
   return map;
@@ -68,6 +77,41 @@ function buildPriorityMap(ss) {
     map[number] = String(row[MSN_COL_PRIORITY] || '').trim();
   }
   return map;
+}
+
+const MSN_COL_CALLER = 9; // J
+
+/**
+ * Monta um mapa Number -> Caller a partir da aba Major_ServiceNow, usado para determinar a
+ * Origem da Detecção do Incidente (End-users / Monitoração / Experiências).
+ */
+function buildCallerMap(ss) {
+  const map = {};
+  const sheet = ss.getSheetByName('Major_ServiceNow');
+  if (!sheet) return map;
+
+  const values = sheet.getDataRange().getValues();
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const number = String(row[MSN_COL_NUMBER] || '').trim();
+    if (!number) continue;
+    map[number] = String(row[MSN_COL_CALLER] || '').trim();
+  }
+  return map;
+}
+
+/**
+ * Classifica o Caller (ServiceNow) em uma das 3 origens de detecção do Incidente.
+ * Monitoração: caller contém "Integração"/"Integration". Experiências: contém "Experiência".
+ * Demais valores (geralmente nomes de pessoas) são considerados End-users.
+ */
+function classifyCaller(caller) {
+  const c = String(caller || '').trim();
+  if (!c) return null;
+  const lower = c.toLowerCase();
+  if (lower.indexOf('integra') !== -1) return 'Monitoração';
+  if (lower.indexOf('experi') !== -1) return 'Experiências';
+  return 'End-users';
 }
 
 // Mapeamento da aba Manual_Info (Range A1:AB) - 3 blocos lado a lado (Base 0)
@@ -622,12 +666,14 @@ function getInitialConfig() {
 /**
  * Busca Dados Filtrados
  */
-function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCard) {
+function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCard, techFilter, ofensorFilter) {
   try {
     year = year || new Date().getFullYear();
     selectedPeriodKey = selectedPeriodKey || 'All';
     selectedCard = selectedCard || 'total';
-   
+    const techFilterSet = (techFilter && techFilter.length) ? new Set(techFilter) : null;
+    const ofensorFilterSet = (ofensorFilter && ofensorFilter.length) ? new Set(ofensorFilter) : null;
+
     const targetSheetName = `MajorIncidentes${year}`;
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sheetDados = ss.getSheetByName(targetSheetName);
@@ -654,13 +700,20 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
              aderenciaSevPrio: null, aderenciaSevPrioBase: 0,
              aderenciaSevPrioSev0: null, aderenciaSevPrioSev0Base: 0,
              aderenciaSevPrioSev1: null, aderenciaSevPrioSev1Base: 0,
-             divergenciasSevPrioCount: 0
+             divergenciasSevPrioCount: 0,
+             mttdTerminoMedioHorasDeploy: null, mttdTerminoMedioHorasTradicional: null
            },
            divergenciasSevPrio: [],
            monthlyMetrics: {},
            mttrPorMesEmHoras: {},
            techMetrics: {},
-           offenderMetrics: {}
+           offenderMetrics: {},
+           jornadaMetrics: {},
+           paisMetrics: {},
+           origemDeteccao: { 'End-users': 0, 'Monitoração': 0, 'Experiências': 0, base: 0 },
+           gruposResponsaveis: { deploy: [], tradicional: [] },
+           mttdVsMttrDispersao: [],
+           filterOptions: { tecnologias: [], ofensores: [] }
         };
     }
 
@@ -672,6 +725,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
 
     const changeMap = buildChangeMap(ss);
     const priorityMap = buildPriorityMap(ss);
+    const callerMap = buildCallerMap(ss);
 
     let metrics = {
         incidentesTotal: 0, totalDuracaoMinutos: 0,
@@ -682,6 +736,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         quarterlyMetrics: {},
         techMetrics: {},
         offenderMetrics: {},
+        jornadaMetrics: {},
+        paisMetrics: {},
         rawIncidents: [],
         // Visão Executiva: Mudança & OLA
         sev0DentroOLA: 0, sev1DentroOLA: 0,
@@ -689,14 +745,24 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         mttdInicioSomaHoras: 0, mttdInicioCount: 0,
         mttdTerminoSomaHoras: 0, mttdTerminoCount: 0,
         mudancaPorTipo: {
-            deploy: { count: 0, mttdInicioSoma: 0, mttdInicioCount: 0 },
-            tradicional: { count: 0, mttdInicioSoma: 0, mttdInicioCount: 0 }
+            deploy: { count: 0, mttdInicioSoma: 0, mttdInicioCount: 0, mttdTerminoSoma: 0, mttdTerminoCount: 0 },
+            tradicional: { count: 0, mttdInicioSoma: 0, mttdInicioCount: 0, mttdTerminoSoma: 0, mttdTerminoCount: 0 }
         },
+        mttdVsMttrDispersao: [],
         // Governança: Aderência Sev x Prioridade
         sevPrioBase: 0, sevPrioAderente: 0,
         sev0PrioBase: 0, sev0PrioAderente: 0,
         sev1PrioBase: 0, sev1PrioAderente: 0,
-        divergenciasSevPrio: []
+        divergenciasSevPrio: [],
+        // Origem da Detecção (Caller do ServiceNow)
+        origemDeteccao: { 'End-users': 0, 'Monitoração': 0, 'Experiências': 0 },
+        origemDeteccaoBase: 0,
+        // Top Grupos/Serviços Responsáveis por Incidentes causados por Mudança
+        gruposDeploy: {},       // key: serviceOffering -> { count, tecnologias: Set }
+        gruposTradicional: {},  // key: grupo + '||' + chgService -> { grupo, chgService, count, tecnologias: Set }
+        // Filtros disponíveis (para popular os selects de Tecnologia/Ofensor)
+        tecnologiasDisponiveis: new Set(),
+        ofensoresDisponiveis: new Set()
     };
 
     dataRows.forEach((row, i) => {
@@ -730,6 +796,14 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         const techImpactada = String(row[COL_TECH_IMPACTADA]).trim() || "N/A";
         const ofensor = String(row[COL_OFENSOR]).trim() || "N/A";
 
+        // Coleta as opções disponíveis para os filtros de Tecnologia/Ofensor (antes de aplicá-los)
+        metrics.tecnologiasDisponiveis.add(techImpactada);
+        metrics.ofensoresDisponiveis.add(ofensor);
+
+        // Filtro por Tecnologia Impactada / Ofensor (multi-seleção)
+        if (techFilterSet && !techFilterSet.has(techImpactada)) return;
+        if (ofensorFilterSet && !ofensorFilterSet.has(ofensor)) return;
+
         // KPIs (agora com filtro Tecnologia = SIM applied)
         metrics.incidentesTotal++;
         metrics.totalDuracaoMinutos += durMin;
@@ -761,13 +835,14 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         if (durMin <= OLA_TARGET_SEV1_MIN) metrics.sev1DentroOLA++;
         }
 
-        // Governança: Aderência Sev x Prioridade (Sev0/Sev1 só são aderentes se Priority = "1 - Critical")
+        // Governança: Aderência Sev x Prioridade (Sev0/Sev1 são aderentes se Priority = P1-Critical ou P2-High)
         if (isSev0 || isSev1) {
             const ticketId = String(row[0] || '').trim();
             const priority = ticketId ? priorityMap[ticketId] : undefined;
             if (priority) {
                 metrics.sevPrioBase++;
-                const aderente = priority.trim().startsWith('1');
+                const prioTrim = priority.trim();
+                const aderente = prioTrim.startsWith('1') || prioTrim.startsWith('2');
                 if (isSev0) {
                     metrics.sev0PrioBase++;
                     if (aderente) metrics.sev0PrioAderente++;
@@ -787,6 +862,37 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             }
         }
 
+        // Origem da Detecção do Incidente (Caller do ServiceNow): End-users / Monitoração / Experiências
+        if (isSev0 || isSev1) {
+            const ticketIdCaller = String(row[0] || '').trim();
+            const caller = ticketIdCaller ? callerMap[ticketIdCaller] : undefined;
+            const origem = classifyCaller(caller);
+            if (origem) {
+                metrics.origemDeteccao[origem]++;
+                metrics.origemDeteccaoBase++;
+            }
+        }
+
+        // Jornadas Impactadas (coluna F): uma célula pode conter mais de uma Jornada, separadas por vírgula
+        const jornadaRaw = String(row[COL_JORNADA] || '').trim();
+        if (jornadaRaw) {
+            jornadaRaw.split(',').map(j => j.trim()).filter(Boolean).forEach(jornada => {
+                if (!metrics.jornadaMetrics[jornada]) metrics.jornadaMetrics[jornada] = { count: 0, durationMin: 0 };
+                metrics.jornadaMetrics[jornada].count++;
+                metrics.jornadaMetrics[jornada].durationMin += durMin;
+            });
+        }
+
+        // Países Impactados (coluna J - Abrangência): códigos separados por vírgula (ex: BR, AR, CO)
+        const paisRaw = String(row[COL_ABRANGENCIA] || '').trim();
+        if (paisRaw) {
+            paisRaw.split(',').map(p => p.trim().toUpperCase()).filter(Boolean).forEach(pais => {
+                if (!metrics.paisMetrics[pais]) metrics.paisMetrics[pais] = { count: 0, durationMin: 0 };
+                metrics.paisMetrics[pais].count++;
+                metrics.paisMetrics[pais].durationMin += durMin;
+            });
+        }
+
         // Visão Executiva: Incidentes causados por Mudança + MTTD (Início/Término), segmentado por tipo
         if (ofensor === 'Mudança') {
             metrics.incidentesMudanca++;
@@ -799,6 +905,23 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             const numSm = String(row[COL_SM_NUMBER]).trim();
             const chg = numSm ? changeMap[numSm] : null;
 
+            // Top Grupos/Serviços Responsáveis
+            if (chg) {
+                if (isDeploy) {
+                    const key = chg.serviceOffering || 'N/A';
+                    if (!metrics.gruposDeploy[key]) metrics.gruposDeploy[key] = { count: 0, tecnologias: new Set() };
+                    metrics.gruposDeploy[key].count++;
+                    metrics.gruposDeploy[key].tecnologias.add(techImpactada);
+                } else {
+                    const key = chg.assignmentGroup + '||' + chg.service;
+                    if (!metrics.gruposTradicional[key]) {
+                        metrics.gruposTradicional[key] = { grupo: chg.assignmentGroup, chgService: chg.service, count: 0, tecnologias: new Set() };
+                    }
+                    metrics.gruposTradicional[key].count++;
+                    metrics.gruposTradicional[key].tecnologias.add(techImpactada);
+                }
+            }
+
             if (chg && openDate) {
                 if (chg.plannedStart) {
                     const diffInicioH = (openDate.getTime() - chg.plannedStart.getTime()) / (1000 * 60 * 60);
@@ -807,13 +930,23 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
                         metrics.mttdInicioCount++;
                         metrics.mudancaPorTipo[tipoBucket].mttdInicioSoma += diffInicioH;
                         metrics.mudancaPorTipo[tipoBucket].mttdInicioCount++;
+
+                        // Dispersão MTTD (Início) x MTTR, por Incidente causado por Mudança
+                        metrics.mttdVsMttrDispersao.push({
+                            id: String(row[0] || '').trim(),
+                            mttdHoras: Math.round(diffInicioH * 10) / 10,
+                            mttrHoras: Math.round((durMin / 60) * 10) / 10,
+                            tipo: tipoBucket
+                        });
                     }
                 }
-                if (isDeploy && chg.plannedEnd) {
+                if (chg.plannedEnd) {
                     const diffTerminoH = (openDate.getTime() - chg.plannedEnd.getTime()) / (1000 * 60 * 60);
                     if (diffTerminoH >= 0) {
                         metrics.mttdTerminoSomaHoras += diffTerminoH;
                         metrics.mttdTerminoCount++;
+                        metrics.mudancaPorTipo[tipoBucket].mttdTerminoSoma += diffTerminoH;
+                        metrics.mudancaPorTipo[tipoBucket].mttdTerminoCount++;
                     }
                 }
             }
@@ -918,10 +1051,29 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
     const tradicionalBucket = metrics.mudancaPorTipo.tradicional;
     const mttdInicioDeploy = deployBucket.mttdInicioCount > 0 ? deployBucket.mttdInicioSoma / deployBucket.mttdInicioCount : null;
     const mttdInicioTradicional = tradicionalBucket.mttdInicioCount > 0 ? tradicionalBucket.mttdInicioSoma / tradicionalBucket.mttdInicioCount : null;
+    const mttdTerminoDeploy = deployBucket.mttdTerminoCount > 0 ? deployBucket.mttdTerminoSoma / deployBucket.mttdTerminoCount : null;
+    const mttdTerminoTradicional = tradicionalBucket.mttdTerminoCount > 0 ? tradicionalBucket.mttdTerminoSoma / tradicionalBucket.mttdTerminoCount : null;
 
     const aderenciaSevPrio = metrics.sevPrioBase > 0 ? (metrics.sevPrioAderente / metrics.sevPrioBase) * 100 : null;
     const aderenciaSevPrioSev0 = metrics.sev0PrioBase > 0 ? (metrics.sev0PrioAderente / metrics.sev0PrioBase) * 100 : null;
     const aderenciaSevPrioSev1 = metrics.sev1PrioBase > 0 ? (metrics.sev1PrioAderente / metrics.sev1PrioBase) * 100 : null;
+
+    // Top Grupos Responsáveis: converte Sets em arrays e ordena por Quantidade de Incidentes (desc)
+    const gruposDeployList = Object.keys(metrics.gruposDeploy).map(key => ({
+        serviceOffering: key,
+        count: metrics.gruposDeploy[key].count,
+        tecnologias: Array.from(metrics.gruposDeploy[key].tecnologias)
+    })).sort((a, b) => b.count - a.count);
+
+    const gruposTradicionalList = Object.keys(metrics.gruposTradicional).map(key => {
+        const g = metrics.gruposTradicional[key];
+        return {
+            grupo: g.grupo,
+            chgService: g.chgService,
+            count: g.count,
+            tecnologias: Array.from(g.tecnologias)
+        };
+    }).sort((a, b) => b.count - a.count);
 
     return {
         kpis: {
@@ -944,6 +1096,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         incidentesMudancaTradicional: tradicionalBucket.count,
         mttdInicioMedioHorasDeploy: mttdInicioDeploy !== null ? Math.round(mttdInicioDeploy * 10) / 10 : null,
         mttdInicioMedioHorasTradicional: mttdInicioTradicional !== null ? Math.round(mttdInicioTradicional * 10) / 10 : null,
+        mttdTerminoMedioHorasDeploy: mttdTerminoDeploy !== null ? Math.round(mttdTerminoDeploy * 10) / 10 : null,
+        mttdTerminoMedioHorasTradicional: mttdTerminoTradicional !== null ? Math.round(mttdTerminoTradicional * 10) / 10 : null,
         // Governança: Aderência Sev x Prioridade
         aderenciaSevPrio: aderenciaSevPrio !== null ? Math.round(aderenciaSevPrio * 10) / 10 : null,
         aderenciaSevPrioBase: metrics.sevPrioBase,
@@ -962,6 +1116,23 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         mttrTrimestralEmHoras: mttrTrimestralEmHoras,
         techMetrics: metrics.techMetrics,
         offenderMetrics: metrics.offenderMetrics,
+        jornadaMetrics: metrics.jornadaMetrics,
+        paisMetrics: metrics.paisMetrics,
+        origemDeteccao: {
+            'End-users': metrics.origemDeteccao['End-users'],
+            'Monitoração': metrics.origemDeteccao['Monitoração'],
+            'Experiências': metrics.origemDeteccao['Experiências'],
+            base: metrics.origemDeteccaoBase
+        },
+        gruposResponsaveis: {
+            deploy: gruposDeployList,
+            tradicional: gruposTradicionalList
+        },
+        mttdVsMttrDispersao: metrics.mttdVsMttrDispersao,
+        filterOptions: {
+            tecnologias: Array.from(metrics.tecnologiasDisponiveis).sort(),
+            ofensores: Array.from(metrics.ofensoresDisponiveis).sort()
+        },
         rawIncidents: metrics.rawIncidents
     };
   } catch (e) {
