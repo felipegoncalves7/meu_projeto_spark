@@ -651,7 +651,10 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
              mttdInicioMedioHoras: null, mttdTerminoMedioHoras: null,
              incidentesMudancaDeploy: 0, incidentesMudancaTradicional: 0,
              mttdInicioMedioHorasDeploy: null, mttdInicioMedioHorasTradicional: null,
-             aderenciaSevPrio: null, aderenciaSevPrioBase: 0, divergenciasSevPrioCount: 0
+             aderenciaSevPrio: null, aderenciaSevPrioBase: 0,
+             aderenciaSevPrioSev0: null, aderenciaSevPrioSev0Base: 0,
+             aderenciaSevPrioSev1: null, aderenciaSevPrioSev1Base: 0,
+             divergenciasSevPrioCount: 0
            },
            divergenciasSevPrio: [],
            monthlyMetrics: {},
@@ -691,6 +694,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         },
         // Governança: Aderência Sev x Prioridade
         sevPrioBase: 0, sevPrioAderente: 0,
+        sev0PrioBase: 0, sev0PrioAderente: 0,
+        sev1PrioBase: 0, sev1PrioAderente: 0,
         divergenciasSevPrio: []
     };
 
@@ -756,15 +761,20 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         if (durMin <= OLA_TARGET_SEV1_MIN) metrics.sev1DentroOLA++;
         }
 
-        // Governança: Aderência Sev x Prioridade (Severidade técnica vs Priority no ServiceNow)
+        // Governança: Aderência Sev x Prioridade (Sev0/Sev1 só são aderentes se Priority = "1 - Critical")
         if (isSev0 || isSev1) {
             const ticketId = String(row[0] || '').trim();
             const priority = ticketId ? priorityMap[ticketId] : undefined;
             if (priority) {
                 metrics.sevPrioBase++;
-                const isPrioridade1 = priority.trim().startsWith('1');
-                const isPrioridade2 = priority.trim().startsWith('2');
-                const aderente = isSev0 ? isPrioridade1 : isPrioridade2;
+                const aderente = priority.trim().startsWith('1');
+                if (isSev0) {
+                    metrics.sev0PrioBase++;
+                    if (aderente) metrics.sev0PrioAderente++;
+                } else {
+                    metrics.sev1PrioBase++;
+                    if (aderente) metrics.sev1PrioAderente++;
+                }
                 if (aderente) {
                     metrics.sevPrioAderente++;
                 } else {
@@ -910,6 +920,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
     const mttdInicioTradicional = tradicionalBucket.mttdInicioCount > 0 ? tradicionalBucket.mttdInicioSoma / tradicionalBucket.mttdInicioCount : null;
 
     const aderenciaSevPrio = metrics.sevPrioBase > 0 ? (metrics.sevPrioAderente / metrics.sevPrioBase) * 100 : null;
+    const aderenciaSevPrioSev0 = metrics.sev0PrioBase > 0 ? (metrics.sev0PrioAderente / metrics.sev0PrioBase) * 100 : null;
+    const aderenciaSevPrioSev1 = metrics.sev1PrioBase > 0 ? (metrics.sev1PrioAderente / metrics.sev1PrioBase) * 100 : null;
 
     return {
         kpis: {
@@ -935,6 +947,10 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         // Governança: Aderência Sev x Prioridade
         aderenciaSevPrio: aderenciaSevPrio !== null ? Math.round(aderenciaSevPrio * 10) / 10 : null,
         aderenciaSevPrioBase: metrics.sevPrioBase,
+        aderenciaSevPrioSev0: aderenciaSevPrioSev0 !== null ? Math.round(aderenciaSevPrioSev0 * 10) / 10 : null,
+        aderenciaSevPrioSev0Base: metrics.sev0PrioBase,
+        aderenciaSevPrioSev1: aderenciaSevPrioSev1 !== null ? Math.round(aderenciaSevPrioSev1 * 10) / 10 : null,
+        aderenciaSevPrioSev1Base: metrics.sev1PrioBase,
         divergenciasSevPrioCount: metrics.divergenciasSevPrio.length
         },
         divergenciasSevPrio: metrics.divergenciasSevPrio,

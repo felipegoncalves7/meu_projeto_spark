@@ -43,6 +43,7 @@
 
         setupTabs();
         setupFiltersToggle();
+        setupDivergenciasToggle();
         loadInitialConfig();
         const yearSelect = document.getElementById('year-select');
         yearSelect.addEventListener('change', function (e) {
@@ -79,6 +80,20 @@
         const btn = document.getElementById('btn-toggle-filters');
         const body = document.getElementById('filters-body');
         const chevron = document.getElementById('filters-toggle-chevron');
+        if (!btn || !body) return;
+
+        btn.addEventListener('click', () => {
+            const isHidden = body.classList.contains('hidden');
+            body.classList.toggle('hidden', !isHidden);
+            if (chevron) chevron.classList.toggle('rotate-180', isHidden);
+        });
+    }
+
+    // Card de Divergências Sev x Prioridade: colapsado por padrão, expande ao clicar
+    function setupDivergenciasToggle() {
+        const btn = document.getElementById('btn-toggle-divergencias');
+        const body = document.getElementById('divergencias-sevprio-body');
+        const chevron = document.getElementById('divergencias-toggle-chevron');
         if (!btn || !body) return;
 
         btn.addEventListener('click', () => {
@@ -187,6 +202,7 @@
         setupCardFilter('card-sev1', 'sev1');
 
         setupSpecificFilters();
+        setupCustomRangeFilter();
         setupComparisonFilter();
         setupEvolutionToggle();
         loadQualidadeMudancaData();
@@ -705,12 +721,71 @@
         }
     }
 
-    // Limpa os seletores de Mês/Trimestre (usado quando outro filtro de período é escolhido)
+    // Limpa os seletores de Mês/Trimestre/Intervalo (usado quando outro filtro de período é escolhido)
     function resetSpecificFilterSelects() {
         const monthSelect = document.getElementById('month-filter-select');
         const quarterSelect = document.getElementById('quarter-filter-select');
+        const rangeStart = document.getElementById('range-filter-start');
+        const rangeEnd = document.getElementById('range-filter-end');
         if (monthSelect) monthSelect.value = '';
         if (quarterSelect) quarterSelect.value = '';
+        if (rangeStart) rangeStart.value = '';
+        if (rangeEnd) rangeEnd.value = '';
+    }
+
+    // Filtro por Intervalo de Datas livre: usuário escolhe De/Até e aplica, reaproveitando
+    // o mesmo mecanismo de filtro por data já usado pelos demais filtros de período
+    function setupCustomRangeFilter() {
+        const startInput = document.getElementById('range-filter-start');
+        const endInput = document.getElementById('range-filter-end');
+        const applyBtn = document.getElementById('btn-apply-range');
+        const clearBtn = document.getElementById('btn-clear-range');
+        if (!startInput || !endInput || !applyBtn) return;
+
+        const clearPeriodButtons = () => updateAllPeriodButtonsUI(null);
+
+        applyBtn.addEventListener('click', () => {
+            const startVal = startInput.value;
+            const endVal = endInput.value;
+            if (!startVal || !endVal) {
+                alert('Selecione as duas datas (De e Até) para aplicar o filtro.');
+                return;
+            }
+
+            const [sy, sm, sd] = startVal.split('-').map(n => parseInt(n, 10));
+            const [ey, em, ed] = endVal.split('-').map(n => parseInt(n, 10));
+            const start = new Date(sy, sm - 1, sd, 0, 0, 0);
+            const end = new Date(ey, em - 1, ed, 23, 59, 59);
+
+            if (start > end) {
+                alert('A data "De" não pode ser posterior à data "Até".');
+                return;
+            }
+
+            const key = `Range_${startVal}_${endVal}`;
+            const pad = n => String(n).padStart(2, '0');
+            LABEL_MAP[key] = `${pad(sd)}/${pad(sm)}/${sy} a ${pad(ed)}/${pad(em)}/${ey}`;
+
+            CURRENT_FILTERS.periodKey = key;
+            CURRENT_FILTERS.startDate = start.getTime();
+            CURRENT_FILTERS.endDate = end.getTime();
+
+            const monthSelect = document.getElementById('month-filter-select');
+            const quarterSelect = document.getElementById('quarter-filter-select');
+            if (monthSelect) monthSelect.value = '';
+            if (quarterSelect) quarterSelect.value = '';
+
+            clearPeriodButtons();
+            refreshActiveFilterText();
+            loadFilteredData();
+        });
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                startInput.value = '';
+                endInput.value = '';
+            });
+        }
     }
 
     const MONTH_NAMES_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -1244,6 +1319,10 @@
         // Governança: Aderência Sev x Prioridade
         setText('val-aderencia-sevprio', kpis.aderenciaSevPrio != null ? `${kpis.aderenciaSevPrio}%` : '—');
         setText('val-aderencia-sevprio-base', kpis.aderenciaSevPrioBase || 0);
+        setText('val-aderencia-sevprio-sev0', kpis.aderenciaSevPrioSev0 != null ? `${kpis.aderenciaSevPrioSev0}%` : '—');
+        setText('val-aderencia-sevprio-sev0-base', kpis.aderenciaSevPrioSev0Base || 0);
+        setText('val-aderencia-sevprio-sev1', kpis.aderenciaSevPrioSev1 != null ? `${kpis.aderenciaSevPrioSev1}%` : '—');
+        setText('val-aderencia-sevprio-sev1-base', kpis.aderenciaSevPrioSev1Base || 0);
     }
 
     // Lista de incidentes com divergência entre Severidade técnica e Priority do ServiceNow
