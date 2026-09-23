@@ -1081,6 +1081,10 @@
         };
         updateBadge('tech-filter-count', (CURRENT_FILTERS.techFilter || []).length);
         updateBadge('ofensor-filter-count', (CURRENT_FILTERS.ofensorFilter || []).length);
+
+        const container = document.getElementById('active-filters-text');
+        const hasFilter = !!(container && container.textContent && container.textContent !== 'Nenhum');
+        updateFilterIndicators(hasFilter);
     }
 
     // Aplica (ou esconde) o badge de variação de um card em relação ao período de comparação
@@ -1249,6 +1253,31 @@
             container.textContent = 'Nenhum';
             container.className = "text-sm font-semibold text-slate-700"; // Reset to text style
         }
+
+        updateFilterIndicators(hasFilter);
+    }
+
+    // Badge "Filtro aplicado" ao lado do título de cada seção que respeita os filtros de Período/Tecnologia/Ofensor
+    // (Visão Geral, Jornadas & Países, Origem da Detecção, Evolução & Tecnologia, Mudanças). Problemas & Qualidade
+    // não usam esses filtros (seguem só o Ano de Referência), por isso ficam de fora.
+    const FILTER_INDICATOR_IDS = ['filter-indicator-visao-geral', 'filter-indicator-jp', 'filter-indicator-origem',
+        'filter-indicator-evolucao', 'filter-indicator-mudancas'];
+
+    function updateFilterIndicators(hasFilter) {
+        const techOfensorActive = (CURRENT_FILTERS.techFilter || []).length > 0 || (CURRENT_FILTERS.ofensorFilter || []).length > 0;
+        const isActive = hasFilter || techOfensorActive;
+        const summaryEl = document.getElementById('active-filters-text');
+        const summary = summaryEl ? summaryEl.textContent : '';
+
+        FILTER_INDICATOR_IDS.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.classList.toggle('hidden', !isActive);
+            if (isActive) {
+                el.textContent = 'Filtro aplicado';
+                el.title = summary && summary !== 'Nenhum' ? summary : 'Filtro de Tecnologia/Ofensor aplicado';
+            }
+        });
     }
 
     // Qualidade de RCA / Plano de Ação / Governança de Testes (Manual_Info): não depende dos filtros
