@@ -617,268 +617,6 @@
                 </div>
                 <!-- Fim Bloco: Incidentes -->
 
-                <!-- Bloco: Incidentes Causados por Mudanças -->
-                <div class="rounded-3xl border border-natura-orange/15 bg-natura-orange/[0.03] p-4 sm:p-6 space-y-5">
-                <div class="flex items-center gap-2">
-                    <span class="h-2.5 w-2.5 rounded-full bg-natura-orange"></span>
-                    <h3 class="text-[11px] font-black text-slate-500 uppercase tracking-[0.15em]">Incidentes Causados
-                        por Mudanças</h3>
-                </div>
-
-                <!-- Visão Executiva: Impacto de Mudanças -->
-                <div class="pt-2">
-                    <div class="flex items-center gap-2 mb-3">
-                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Visão Executiva &mdash;
-                            Impacto de Mudanças</h2>
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <!-- Incidentes por Mudança -->
-                        <div id="card-mudanca-resumo"
-                            class="kpi-card cursor-pointer rounded-2xl p-5 border border-slate-200 bg-white transition-all duration-200 hover:-translate-y-1 hover:shadow-md"
-                            title="Ver análise detalhada de Incidentes causados por Mudança">
-                            <div class="flex items-center justify-between mb-1">
-                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">Incidentes por
-                                    Mudança</p>
-                                <div class="flex items-center gap-2">
-                                    <span class="info-tooltip" tabindex="0">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        <span class="tooltip-bubble">Volume de Major Incidents cujo Ofensor
-                                            registrado é "Mudança", segmentado por Deploy (CI/CD) e Tradicional
-                                            (Normal/Urgente/Emergencial). Clique para ver a análise completa.</span>
-                                    </span>
-                                    <div class="p-1.5 rounded-lg bg-natura-orange/10"><svg
-                                            xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-natura-orange"
-                                            fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                        </svg></div>
-                                </div>
-                            </div>
-                            <div class="flex items-baseline gap-2">
-                                <p id="val-incidentes-mudanca" class="text-3xl font-extrabold text-natura-orange">0
-                                </p>
-                                <span id="val-pct-mudanca" class="text-xs font-semibold text-slate-400">(0%)</span>
-                            </div>
-                            <div class="flex items-center gap-3 mt-2 text-[10px] font-bold">
-                                <span class="text-slate-500">Deploy: <span id="val-mudanca-deploy"
-                                        class="text-slate-700">0</span></span>
-                                <span class="text-slate-500">Tradicional: <span id="val-mudanca-tradicional"
-                                        class="text-slate-700">0</span></span>
-                            </div>
-                            <p class="text-[10px] text-natura-orange font-bold mt-2 flex items-center gap-1">Ver
-                                análise detalhada
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M9 5l7 7-7 7" />
-                                </svg>
-                            </p>
-                        </div>
-                        <!-- MTTD Início -->
-                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
-                            <div class="flex items-center justify-between mb-1">
-                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">MTTD Início CHG
-                                </p>
-                                <div class="flex items-center gap-2">
-                                    <span class="info-tooltip" tabindex="0">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        <span class="tooltip-bubble">Tempo médio entre o início planejado da Mudança e
-                                            a abertura do incidente que ela causou. Fórmula: AVG(Data Abertura do INC
-                                            − Data Início Planejada da CHG). Meta: ≤ 25h.</span>
-                                    </span>
-                                    <div class="p-1.5 rounded-lg bg-natura-blue-profundo/10"><svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            class="h-4 w-4 text-natura-blue-profundo" fill="none" viewBox="0 0 24 24"
-                                            stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg></div>
-                                </div>
-                            </div>
-                            <p id="val-mttd-inicio" class="text-3xl font-extrabold text-natura-blue-profundo">N/A</p>
-                            <div class="flex items-center gap-3 mt-2 text-[10px] font-bold">
-                                <span class="text-slate-500">Deploy: <span id="val-mttd-inicio-deploy"
-                                        class="text-slate-700">N/A</span></span>
-                                <span class="text-slate-500">Tradicional: <span id="val-mttd-inicio-tradicional"
-                                        class="text-slate-700">N/A</span></span>
-                            </div>
-                            <p class="text-[10px] text-slate-400 mt-2 leading-tight">Tempo médio até a detecção após o
-                                início planejado da mudança. <span class="font-bold text-natura-green-cerrado">Meta:
-                                    ≤25h</span></p>
-                        </div>
-                        <!-- MTTD Término (Deploy + Tradicional) -->
-                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
-                            <div class="flex items-center justify-between mb-1">
-                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">MTTD Término CHG
-                                </p>
-                                <div class="flex items-center gap-2">
-                                    <span class="info-tooltip" tabindex="0">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        <span class="tooltip-bubble">Tempo médio entre o término planejado da Mudança
-                                            e a abertura do incidente que ela causou. Fórmula: AVG(Data Abertura do
-                                            INC − Data Término Planejada da CHG). Meta de referência (Deploy/CI-CD):
-                                            ≤ 6h.</span>
-                                    </span>
-                                    <div class="p-1.5 rounded-lg bg-natura-blue-profundo/10"><svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            class="h-4 w-4 text-natura-blue-profundo" fill="none" viewBox="0 0 24 24"
-                                            stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M5 13l4 4L19 7" />
-                                        </svg></div>
-                                </div>
-                            </div>
-                            <p id="val-mttd-termino" class="text-3xl font-extrabold text-natura-blue-profundo">N/A</p>
-                            <div class="flex items-center gap-3 mt-2 text-[10px] font-bold">
-                                <span class="text-slate-500">Deploy: <span id="val-mttd-termino-deploy"
-                                        class="text-slate-700">N/A</span></span>
-                                <span class="text-slate-500">Tradicional: <span id="val-mttd-termino-tradicional"
-                                        class="text-slate-700">N/A</span></span>
-                            </div>
-                            <p class="text-[10px] text-slate-400 mt-2 leading-tight">Tempo médio até a detecção após o
-                                término planejado da mudança. <span class="font-bold text-natura-green-cerrado">Meta
-                                    (Deploy): ≤6h</span></p>
-                        </div>
-                    </div>
-                </div>
-                </div>
-                <!-- Fim Bloco: Incidentes Causados por Mudanças -->
-
-                <!-- Bloco: Problemas -->
-                <div class="rounded-3xl border border-natura-blue-profundo/15 bg-natura-blue-profundo/[0.03] p-4 sm:p-6 space-y-5">
-                <div class="flex items-center gap-2">
-                    <span class="h-2.5 w-2.5 rounded-full bg-natura-blue-profundo"></span>
-                    <h3 class="text-[11px] font-black text-slate-500 uppercase tracking-[0.15em]">Problemas</h3>
-                </div>
-
-                <!-- Major Problems: KPI Grid (6 cards) -->
-                <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                    <!-- 1. Total Incidentes -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Total de Incidentes
-                        </p>
-                        <div class="flex items-center justify-between">
-                            <p id="mp-total-incidencts" class="text-3xl font-extrabold text-slate-900">0</p>
-                            <div class="p-2 bg-slate-100 rounded-lg text-slate-500"><svg
-                                    xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                </svg></div>
-                        </div>
-                    </div>
-                    <!-- 2. Total Problemas -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Total de Problemas</p>
-                        <div class="flex items-center justify-between">
-                            <p id="mp-total-problems" class="text-3xl font-extrabold text-natura-orange">0</p>
-                            <div class="p-2 bg-natura-orange/10 rounded-lg text-natura-orange"><svg
-                                    xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                                </svg></div>
-                        </div>
-                    </div>
-                    <!-- 3. Problemas Abertos -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Problemas Abertos</p>
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <span id="mp-open-problems"
-                                    class="text-3xl font-extrabold text-natura-red-buriti">0</span>
-                                <span id="mp-open-problems-pct"
-                                    class="text-xs font-semibold text-slate-400 ml-1">0%</span>
-                            </div>
-                            <div class="w-3 h-3 rounded-full bg-natura-red-buriti animate-pulse"></div>
-                        </div>
-                    </div>
-                    <!-- 4. Problemas Resolvidos -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Problemas Resolvidos
-                        </p>
-                        <div>
-                            <span id="mp-resolved-problems"
-                                class="text-3xl font-extrabold text-natura-green-cerrado">0</span>
-                            <span id="mp-resolved-problems-pct"
-                                class="text-xs font-semibold text-slate-400 ml-1">0%</span>
-                        </div>
-                    </div>
-                    <!-- 5. Problemas em Implementação -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Em Implementação</p>
-                        <div>
-                            <span id="mp-impl-problems"
-                                class="text-3xl font-extrabold text-natura-yellow-tucuma">0</span>
-                            <span id="mp-impl-problems-pct" class="text-xs font-semibold text-slate-400 ml-1">0%</span>
-                        </div>
-                    </div>
-                    <!-- 6. RCAs Pendentes -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Na fase de RCA</p>
-                        <div>
-                            <span id="mp-rca-pending" class="text-3xl font-extrabold text-natura-blue-profundo">0</span>
-                            <span id="mp-rca-pending-pct" class="text-xs font-semibold text-slate-400 ml-1">0%</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Major Problems: Secondary KPI Grid (Aging & MTTRC) -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-slate-100">
-                    <!-- 7. Aging AVG Resolvidos -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Aging AVG Resolvidos
-                            (Dias)</p>
-                        <p id="mp-avg-aging-resolved" class="text-3xl font-extrabold text-natura-green-cerrado">0</p>
-                        <!-- Legend -->
-                        <div class="mt-3 pt-3 border-t border-slate-50 space-y-1">
-                            <div class="text-[10px] flex justify-between items-center">
-                                <span class="text-slate-400">Mínimo:</span>
-                                <span class="font-bold text-slate-500">31d - 40d</span>
-                            </div>
-                            <div class="text-[10px] flex justify-between items-center">
-                                <span class="text-natura-green-cerrado opacity-70">Meta:</span>
-                                <span class="font-bold text-natura-green-cerrado">30d - 25d</span>
-                            </div>
-                            <div class="text-[10px] flex justify-between items-center">
-                                <span class="text-natura-blue-profundo opacity-70">Desafio:</span>
-                                <span class="font-bold text-natura-blue-profundo">&lt;= 24d</span>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- 8. MTTRC -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">MTTRC (Horas)</p>
-                        <p id="mp-avg-mttrc" class="text-3xl font-extrabold text-[#E29627]">0</p>
-                        <p class="text-[10px] text-slate-400 mt-1 leading-tight">
-                            Tempo médio em horas para identificar e documentar as Causas Raízes.
-                        </p>
-                    </div>
-                    <!-- 9. Aging AVG Backlog -->
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Aging AVG Backlog
-                            (Dias)</p>
-                        <p id="mp-avg-aging-backlog" class="text-3xl font-extrabold text-natura-blue-profundo">0</p>
-                        <p class="text-[10px] text-slate-400 mt-1 leading-tight">
-                            Backlog = Soma dos estados RCA e Implementação.
-                        </p>
-                    </div>
-                </div>
-                </div>
-                <!-- Fim Bloco: Problemas -->
-
                 </section>
                 <!-- ============ FIM SEÇÃO: VISÃO GERAL ============ -->
 
@@ -1235,6 +973,145 @@
                     <div class="relative w-full h-72"><canvas id="mudanca-evolution-chart"></canvas></div>
                 </div>
 
+                <!-- Bloco: Incidentes Causados por Mudanças -->
+                <div class="rounded-3xl border border-natura-orange/15 bg-natura-orange/[0.03] p-4 sm:p-6 space-y-5">
+                <div class="flex items-center gap-2">
+                    <span class="h-2.5 w-2.5 rounded-full bg-natura-orange"></span>
+                    <h3 class="text-[11px] font-black text-slate-500 uppercase tracking-[0.15em]">Incidentes Causados
+                        por Mudanças</h3>
+                </div>
+
+                <!-- Visão Executiva: Impacto de Mudanças -->
+                <div class="pt-2">
+                    <div class="flex items-center gap-2 mb-3">
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Visão Executiva &mdash;
+                            Impacto de Mudanças</h2>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <!-- Incidentes por Mudança -->
+                        <div id="card-mudanca-resumo"
+                            class="kpi-card cursor-pointer rounded-2xl p-5 border border-slate-200 bg-white transition-all duration-200 hover:-translate-y-1 hover:shadow-md"
+                            title="Ver análise detalhada de Incidentes causados por Mudança">
+                            <div class="flex items-center justify-between mb-1">
+                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">Incidentes por
+                                    Mudança</p>
+                                <div class="flex items-center gap-2">
+                                    <span class="info-tooltip" tabindex="0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <span class="tooltip-bubble">Volume de Major Incidents cujo Ofensor
+                                            registrado é "Mudança", segmentado por Deploy (CI/CD) e Tradicional
+                                            (Normal/Urgente/Emergencial). Clique para ver a análise completa.</span>
+                                    </span>
+                                    <div class="p-1.5 rounded-lg bg-natura-orange/10"><svg
+                                            xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-natura-orange"
+                                            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                        </svg></div>
+                                </div>
+                            </div>
+                            <div class="flex items-baseline gap-2">
+                                <p id="val-incidentes-mudanca" class="text-3xl font-extrabold text-natura-orange">0
+                                </p>
+                                <span id="val-pct-mudanca" class="text-xs font-semibold text-slate-400">(0%)</span>
+                            </div>
+                            <div class="flex items-center gap-3 mt-2 text-[10px] font-bold">
+                                <span class="text-slate-500">Deploy: <span id="val-mudanca-deploy"
+                                        class="text-slate-700">0</span></span>
+                                <span class="text-slate-500">Tradicional: <span id="val-mudanca-tradicional"
+                                        class="text-slate-700">0</span></span>
+                            </div>
+                            <p class="text-[10px] text-natura-orange font-bold mt-2 flex items-center gap-1">Ver
+                                análise detalhada
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 5l7 7-7 7" />
+                                </svg>
+                            </p>
+                        </div>
+                        <!-- MTTD Início -->
+                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
+                            <div class="flex items-center justify-between mb-1">
+                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">MTTD Início CHG
+                                </p>
+                                <div class="flex items-center gap-2">
+                                    <span class="info-tooltip" tabindex="0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <span class="tooltip-bubble">Tempo médio entre o início planejado da Mudança e
+                                            a abertura do incidente que ela causou. Fórmula: AVG(Data Abertura do INC
+                                            − Data Início Planejada da CHG). Meta: ≤ 25h.</span>
+                                    </span>
+                                    <div class="p-1.5 rounded-lg bg-natura-blue-profundo/10"><svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            class="h-4 w-4 text-natura-blue-profundo" fill="none" viewBox="0 0 24 24"
+                                            stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg></div>
+                                </div>
+                            </div>
+                            <p id="val-mttd-inicio" class="text-3xl font-extrabold text-natura-blue-profundo">N/A</p>
+                            <div class="flex items-center gap-3 mt-2 text-[10px] font-bold">
+                                <span class="text-slate-500">Deploy: <span id="val-mttd-inicio-deploy"
+                                        class="text-slate-700">N/A</span></span>
+                                <span class="text-slate-500">Tradicional: <span id="val-mttd-inicio-tradicional"
+                                        class="text-slate-700">N/A</span></span>
+                            </div>
+                            <p class="text-[10px] text-slate-400 mt-2 leading-tight">Tempo médio até a detecção após o
+                                início planejado da mudança. <span class="font-bold text-natura-green-cerrado">Meta:
+                                    ≤25h</span></p>
+                        </div>
+                        <!-- MTTD Término (Deploy + Tradicional) -->
+                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
+                            <div class="flex items-center justify-between mb-1">
+                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">MTTD Término CHG
+                                </p>
+                                <div class="flex items-center gap-2">
+                                    <span class="info-tooltip" tabindex="0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <span class="tooltip-bubble">Tempo médio entre o término planejado da Mudança
+                                            e a abertura do incidente que ela causou. Fórmula: AVG(Data Abertura do
+                                            INC − Data Término Planejada da CHG). Meta de referência (Deploy/CI-CD):
+                                            ≤ 6h.</span>
+                                    </span>
+                                    <div class="p-1.5 rounded-lg bg-natura-blue-profundo/10"><svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            class="h-4 w-4 text-natura-blue-profundo" fill="none" viewBox="0 0 24 24"
+                                            stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M5 13l4 4L19 7" />
+                                        </svg></div>
+                                </div>
+                            </div>
+                            <p id="val-mttd-termino" class="text-3xl font-extrabold text-natura-blue-profundo">N/A</p>
+                            <div class="flex items-center gap-3 mt-2 text-[10px] font-bold">
+                                <span class="text-slate-500">Deploy: <span id="val-mttd-termino-deploy"
+                                        class="text-slate-700">N/A</span></span>
+                                <span class="text-slate-500">Tradicional: <span id="val-mttd-termino-tradicional"
+                                        class="text-slate-700">N/A</span></span>
+                            </div>
+                            <p class="text-[10px] text-slate-400 mt-2 leading-tight">Tempo médio até a detecção após o
+                                término planejado da mudança. <span class="font-bold text-natura-green-cerrado">Meta
+                                    (Deploy): ≤6h</span></p>
+                        </div>
+                    </div>
+                </div>
+                </div>
+                <!-- Fim Bloco: Incidentes Causados por Mudanças -->
+
                 <!-- Top Grupos/Serviços Responsáveis por Incidentes causados por Mudança -->
                 <div class="pt-2">
                     <div class="flex items-center gap-2 mb-3">
@@ -1332,6 +1209,67 @@
                         </div>
                     </div>
                 </div>
+                <!-- Qualidade de RCA por Universo (Deploy / Tradicional) -->
+                <div class="pt-2">
+                    <div class="flex items-center gap-2 mb-3">
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Qualidade de RCA — Deploy &amp; Tradicional</h2>
+                    </div>
+                    <div class="space-y-6">
+                        <!-- Universo: Deploy -->
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                            <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
+                                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-natura-orange"></span>
+                                    Universo Deploy
+                                    <span class="text-[10px] font-normal text-slate-400">(Incidentes causados por
+                                        Mudança Deploy/CI-CD)</span>
+                                </h3>
+                                <span class="text-[10px] text-slate-400 font-semibold">n=<span
+                                        id="qm-deploy-n">0</span></span>
+                            </div>
+                            <div id="qm-metrics-deploy" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5"></div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                                        Causas Raiz mais Recorrentes</h4>
+                                    <div id="qm-causaraiz-deploy" class="space-y-1.5"></div>
+                                </div>
+                                <div>
+                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                                        Processos de Origem mais Recorrentes</h4>
+                                    <div id="qm-processo-deploy" class="space-y-1.5"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Universo: Tradicional -->
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                            <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
+                                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-natura-blue-profundo"></span>
+                                    Universo Tradicional
+                                    <span class="text-[10px] font-normal text-slate-400">(Incidentes causados por
+                                        Mudança Normal/Urgente/Emergencial)</span>
+                                </h3>
+                                <span class="text-[10px] text-slate-400 font-semibold">n=<span
+                                        id="qm-trad-n">0</span></span>
+                            </div>
+                            <div id="qm-metrics-tradicional" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5"></div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                                        Causas Raiz mais Recorrentes</h4>
+                                    <div id="qm-causaraiz-tradicional" class="space-y-1.5"></div>
+                                </div>
+                                <div>
+                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                                        Processos de Origem mais Recorrentes</h4>
+                                    <div id="qm-processo-tradicional" class="space-y-1.5"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 </section>
                 <!-- ============ FIM SEÇÃO: MUDANÇAS ============ -->
             </div>
@@ -1343,6 +1281,130 @@
                     <span class="text-xs text-slate-400 font-medium">Detalhe de Major Problems e da Qualidade de RCA
                         &mdash; os KPIs principais estão na Visão Geral</span>
                 </div>
+
+                <!-- Bloco: Problemas -->
+                <div class="rounded-3xl border border-natura-blue-profundo/15 bg-natura-blue-profundo/[0.03] p-4 sm:p-6 space-y-5">
+                <div class="flex items-center gap-2">
+                    <span class="h-2.5 w-2.5 rounded-full bg-natura-blue-profundo"></span>
+                    <h3 class="text-[11px] font-black text-slate-500 uppercase tracking-[0.15em]">Problemas</h3>
+                </div>
+
+                <!-- Major Problems: KPI Grid (6 cards) -->
+                <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                    <!-- 1. Total Incidentes -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Total de Incidentes
+                        </p>
+                        <div class="flex items-center justify-between">
+                            <p id="mp-total-incidencts" class="text-3xl font-extrabold text-slate-900">0</p>
+                            <div class="p-2 bg-slate-100 rounded-lg text-slate-500"><svg
+                                    xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg></div>
+                        </div>
+                    </div>
+                    <!-- 2. Total Problemas -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Total de Problemas</p>
+                        <div class="flex items-center justify-between">
+                            <p id="mp-total-problems" class="text-3xl font-extrabold text-natura-orange">0</p>
+                            <div class="p-2 bg-natura-orange/10 rounded-lg text-natura-orange"><svg
+                                    xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                                </svg></div>
+                        </div>
+                    </div>
+                    <!-- 3. Problemas Abertos -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Problemas Abertos</p>
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <span id="mp-open-problems"
+                                    class="text-3xl font-extrabold text-natura-red-buriti">0</span>
+                                <span id="mp-open-problems-pct"
+                                    class="text-xs font-semibold text-slate-400 ml-1">0%</span>
+                            </div>
+                            <div class="w-3 h-3 rounded-full bg-natura-red-buriti animate-pulse"></div>
+                        </div>
+                    </div>
+                    <!-- 4. Problemas Resolvidos -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Problemas Resolvidos
+                        </p>
+                        <div>
+                            <span id="mp-resolved-problems"
+                                class="text-3xl font-extrabold text-natura-green-cerrado">0</span>
+                            <span id="mp-resolved-problems-pct"
+                                class="text-xs font-semibold text-slate-400 ml-1">0%</span>
+                        </div>
+                    </div>
+                    <!-- 5. Problemas em Implementação -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Em Implementação</p>
+                        <div>
+                            <span id="mp-impl-problems"
+                                class="text-3xl font-extrabold text-natura-yellow-tucuma">0</span>
+                            <span id="mp-impl-problems-pct" class="text-xs font-semibold text-slate-400 ml-1">0%</span>
+                        </div>
+                    </div>
+                    <!-- 6. RCAs Pendentes -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Na fase de RCA</p>
+                        <div>
+                            <span id="mp-rca-pending" class="text-3xl font-extrabold text-natura-blue-profundo">0</span>
+                            <span id="mp-rca-pending-pct" class="text-xs font-semibold text-slate-400 ml-1">0%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Major Problems: Secondary KPI Grid (Aging & MTTRC) -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-slate-100">
+                    <!-- 7. Aging AVG Resolvidos -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Aging AVG Resolvidos
+                            (Dias)</p>
+                        <p id="mp-avg-aging-resolved" class="text-3xl font-extrabold text-natura-green-cerrado">0</p>
+                        <!-- Legend -->
+                        <div class="mt-3 pt-3 border-t border-slate-50 space-y-1">
+                            <div class="text-[10px] flex justify-between items-center">
+                                <span class="text-slate-400">Mínimo:</span>
+                                <span class="font-bold text-slate-500">31d - 40d</span>
+                            </div>
+                            <div class="text-[10px] flex justify-between items-center">
+                                <span class="text-natura-green-cerrado opacity-70">Meta:</span>
+                                <span class="font-bold text-natura-green-cerrado">30d - 25d</span>
+                            </div>
+                            <div class="text-[10px] flex justify-between items-center">
+                                <span class="text-natura-blue-profundo opacity-70">Desafio:</span>
+                                <span class="font-bold text-natura-blue-profundo">&lt;= 24d</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 8. MTTRC -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">MTTRC (Horas)</p>
+                        <p id="mp-avg-mttrc" class="text-3xl font-extrabold text-[#E29627]">0</p>
+                        <p class="text-[10px] text-slate-400 mt-1 leading-tight">
+                            Tempo médio em horas para identificar e documentar as Causas Raízes.
+                        </p>
+                    </div>
+                    <!-- 9. Aging AVG Backlog -->
+                    <div class="kpi-card rounded-2xl p-5 border border-slate-200">
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">Aging AVG Backlog
+                            (Dias)</p>
+                        <p id="mp-avg-aging-backlog" class="text-3xl font-extrabold text-natura-blue-profundo">0</p>
+                        <p class="text-[10px] text-slate-400 mt-1 leading-tight">
+                            Backlog = Soma dos estados RCA e Implementação.
+                        </p>
+                    </div>
+                </div>
+                </div>
+                <!-- Fim Bloco: Problemas -->
+
                 <!-- Mixed Chart & Explanatory Box -->
                 <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 items-stretch">
                     <!-- Chart Column -->
@@ -1527,60 +1589,6 @@
                                     <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                                         Processos de Origem mais Recorrentes</h4>
                                     <div id="qm-processo-geral" class="space-y-1.5"></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Universo: Deploy -->
-                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                            <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
-                                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
-                                    <span class="w-2.5 h-2.5 rounded-full bg-natura-orange"></span>
-                                    Universo Deploy
-                                    <span class="text-[10px] font-normal text-slate-400">(Incidentes causados por
-                                        Mudança Deploy/CI-CD)</span>
-                                </h3>
-                                <span class="text-[10px] text-slate-400 font-semibold">n=<span
-                                        id="qm-deploy-n">0</span></span>
-                            </div>
-                            <div id="qm-metrics-deploy" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5"></div>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        Causas Raiz mais Recorrentes</h4>
-                                    <div id="qm-causaraiz-deploy" class="space-y-1.5"></div>
-                                </div>
-                                <div>
-                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        Processos de Origem mais Recorrentes</h4>
-                                    <div id="qm-processo-deploy" class="space-y-1.5"></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Universo: Tradicional -->
-                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                            <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
-                                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
-                                    <span class="w-2.5 h-2.5 rounded-full bg-natura-blue-profundo"></span>
-                                    Universo Tradicional
-                                    <span class="text-[10px] font-normal text-slate-400">(Incidentes causados por
-                                        Mudança Normal/Urgente/Emergencial)</span>
-                                </h3>
-                                <span class="text-[10px] text-slate-400 font-semibold">n=<span
-                                        id="qm-trad-n">0</span></span>
-                            </div>
-                            <div id="qm-metrics-tradicional" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5"></div>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        Causas Raiz mais Recorrentes</h4>
-                                    <div id="qm-causaraiz-tradicional" class="space-y-1.5"></div>
-                                </div>
-                                <div>
-                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        Processos de Origem mais Recorrentes</h4>
-                                    <div id="qm-processo-tradicional" class="space-y-1.5"></div>
                                 </div>
                             </div>
                         </div>
