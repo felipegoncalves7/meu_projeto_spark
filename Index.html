@@ -336,21 +336,22 @@
                             <div>
                                 <p class="text-xs text-slate-500 mb-1">Volume</p>
                                 <p id="val-total-incidents" class="text-3xl font-extrabold text-slate-900">0</p>
+                                <span id="delta-badge-total" class="hidden inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
                             </div>
                             <div class="pl-4">
                                 <p class="text-xs text-slate-500 mb-1">MTTR Médio</p>
                                 <p id="val-mttr-total" class="text-xl font-bold text-slate-700">00:00</p>
+                                <span id="delta-badge-mttr-total" class="hidden inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
                             </div>
                         </div>
                         <!-- Baseline Info -->
-                        <div class="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between">
-                            <span id="delta-badge-total" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
-                            <p class="text-[10px] text-slate-400 font-medium ml-auto">Baseline 2025: <span
+                        <div class="mt-4 pt-3 border-t border-slate-50 flex items-center justify-end">
+                            <p class="text-[10px] text-slate-400 font-medium">Baseline 2025: <span
                                     class="text-slate-500 font-bold">06:42</span></p>
                         </div>
                     </div>
                     <div id="card-sev0"
-                        class="group kpi-card cursor-pointer rounded-2xl p-5 border border-slate-200 transition-all duration-200 hover:-translate-y-1 bg-white hover:shadow-md"
+                        class="group kpi-card rounded-2xl p-5 border border-slate-200 transition-all duration-200 bg-white"
                         data-filter-value="0">
                         <div class="flex items-center justify-between mb-4">
                             <span class="text-sm font-bold tracking-wider uppercase flex items-center gap-1"
@@ -381,16 +382,17 @@
                                     <p id="val-sev0-incidents" class="text-3xl font-extrabold text-slate-900">0</p>
                                     <span id="val-sev0-pct" class="text-xs font-semibold text-slate-400 ml-1"></span>
                                 </div>
+                                <span id="delta-badge-sev0" class="hidden inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
                             </div>
                             <div class="pl-4">
                                 <p class="text-xs text-slate-500 mb-1">MTTR</p>
                                 <p id="val-mttr-sev0" class="text-xl font-bold text-slate-700">00:00</p>
+                                <span id="delta-badge-mttr-sev0" class="hidden inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
                             </div>
                         </div>
                         <!-- Baseline & Meta -->
-                        <div class="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between flex-wrap gap-1">
-                            <span id="delta-badge-sev0" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
-                            <div class="ml-auto text-right">
+                        <div class="mt-4 pt-3 border-t border-slate-50 flex items-center justify-end flex-wrap gap-1">
+                            <div class="text-right">
                                 <span class="text-[10px] text-slate-400 font-medium">Baseline 2025: <span
                                         class="text-slate-500 font-bold">04:29</span></span>
                                 <span class="mx-1 text-slate-200 text-[10px]">|</span>
@@ -399,7 +401,7 @@
                         </div>
                     </div>
                     <div id="card-sev1"
-                        class="group kpi-card cursor-pointer rounded-2xl p-5 border border-slate-200 transition-all duration-200 hover:-translate-y-1 bg-white hover:shadow-md"
+                        class="group kpi-card rounded-2xl p-5 border border-slate-200 transition-all duration-200 bg-white"
                         data-filter-value="1">
                         <div class="flex items-center justify-between mb-4">
                             <span class="text-sm font-bold tracking-wider uppercase flex items-center gap-1"
@@ -430,16 +432,17 @@
                                     <p id="val-sev1-incidents" class="text-3xl font-extrabold text-slate-900">0</p>
                                     <span id="val-sev1-pct" class="text-xs font-semibold text-slate-400 ml-1"></span>
                                 </div>
+                                <span id="delta-badge-sev1" class="hidden inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
                             </div>
                             <div class="pl-4">
                                 <p class="text-xs text-slate-500 mb-1">MTTR</p>
                                 <p id="val-mttr-sev1" class="text-xl font-bold text-slate-700">00:00</p>
+                                <span id="delta-badge-mttr-sev1" class="hidden inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
                             </div>
                         </div>
                         <!-- Baseline & Meta -->
-                        <div class="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between flex-wrap gap-1">
-                            <span id="delta-badge-sev1" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
-                            <div class="ml-auto text-right">
+                        <div class="mt-4 pt-3 border-t border-slate-50 flex items-center justify-end flex-wrap gap-1">
+                            <div class="text-right">
                                 <span class="text-[10px] text-slate-400 font-medium">Baseline 2025: <span
                                         class="text-slate-500 font-bold">09:29</span></span>
                                 <span class="mx-1 text-slate-200 text-[10px]">|</span>
