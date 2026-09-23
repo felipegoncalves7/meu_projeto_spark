@@ -62,7 +62,7 @@
 
         setupSectionNav();
         setupFiltersToggle();
-        setupDivergenciasToggle();
+        setupTabularIncidentsButtons();
         setupMetodologiaModal();
         loadInitialConfig();
         const yearSelect = document.getElementById('year-select');
@@ -109,18 +109,82 @@
         });
     }
 
-    // Card de Divergências Sev x Prioridade: colapsado por padrão, expande ao clicar
-    function setupDivergenciasToggle() {
-        const btn = document.getElementById('btn-toggle-divergencias');
-        const body = document.getElementById('divergencias-sevprio-body');
-        const chevron = document.getElementById('divergencias-toggle-chevron');
-        if (!btn || !body) return;
+    // Botões que abrem o pop-up tabular genérico (Incidentes Fora do OLA / Divergências Sev x Prioridade)
+    function setupTabularIncidentsButtons() {
+        const foraOlaBtn = document.getElementById('btn-open-fora-ola');
+        if (foraOlaBtn) {
+            foraOlaBtn.addEventListener('click', () => {
+                openTabularIncidentsModal({
+                    title: 'Incidentes Fora do OLA',
+                    subtitle: `${(ALL_DATA.incidentesForaOLA || []).length} incidente(s) acima da meta de restauração (Sev0 > 2h, Sev1 > 6h)`,
+                    items: ALL_DATA.incidentesForaOLA || [],
+                    columns: [
+                        { key: 'id', label: 'Incidente' },
+                        { key: 'severidade', label: 'Severidade' },
+                        { key: 'ttr', label: 'TTR' },
+                        { key: 'origemDeteccao', label: 'Origem da Detecção' },
+                        { key: 'service', label: 'Service (ServiceNow)' },
+                        { key: 'serviceOffering', label: 'Service Offering (ServiceNow)' },
+                        { key: 'grupoResponsavel', label: 'Grupo Responsável (ServiceNow)' }
+                    ]
+                });
+            });
+        }
 
-        btn.addEventListener('click', () => {
-            const isHidden = body.classList.contains('hidden');
-            body.classList.toggle('hidden', !isHidden);
-            if (chevron) chevron.classList.toggle('rotate-180', isHidden);
-        });
+        const divergenciasBtn = document.getElementById('btn-open-divergencias');
+        if (divergenciasBtn) {
+            divergenciasBtn.addEventListener('click', () => {
+                openTabularIncidentsModal({
+                    title: 'Divergências Sev x Prioridade',
+                    subtitle: `${(ALL_DATA.divergenciasSevPrio || []).length} incidente(s) com Severidade não alinhada à Priority do ServiceNow`,
+                    items: ALL_DATA.divergenciasSevPrio || [],
+                    columns: [
+                        { key: 'id', label: 'Incidente' },
+                        { key: 'severidade', label: 'Severidade' },
+                        { key: 'priority', label: 'Priority (ServiceNow)' },
+                        { key: 'origemDeteccao', label: 'Origem da Detecção' },
+                        { key: 'service', label: 'Service (ServiceNow)' },
+                        { key: 'serviceOffering', label: 'Service Offering (ServiceNow)' },
+                        { key: 'grupoResponsavel', label: 'Grupo Responsável (ServiceNow)' }
+                    ]
+                });
+            });
+        }
+
+        const closeBtn = document.getElementById('btn-close-tabular-incidents');
+        const modal = document.getElementById('tabular-incidents-modal');
+        if (closeBtn && modal) {
+            closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+            modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+        }
+    }
+
+    // Renderiza o pop-up tabular genérico com as colunas informadas
+    function openTabularIncidentsModal(opts) {
+        const modal = document.getElementById('tabular-incidents-modal');
+        const titleEl = document.getElementById('tabular-incidents-title');
+        const subtitleEl = document.getElementById('tabular-incidents-subtitle');
+        const thead = document.getElementById('tabular-incidents-thead');
+        const tbody = document.getElementById('tabular-incidents-tbody');
+        if (!modal || !thead || !tbody) return;
+
+        if (titleEl) titleEl.textContent = opts.title || 'Incidentes';
+        if (subtitleEl) subtitleEl.textContent = opts.subtitle || '';
+
+        thead.innerHTML = `<tr>${opts.columns.map(c => `<th class="text-left font-bold text-slate-500 uppercase tracking-wider text-[10px] px-3 py-2 border-b border-slate-200">${c.label}</th>`).join('')}</tr>`;
+
+        const items = opts.items || [];
+        if (!items.length) {
+            tbody.innerHTML = `<tr><td colspan="${opts.columns.length}" class="text-center text-slate-300 italic py-6">Nenhum registro encontrado no período filtrado.</td></tr>`;
+        } else {
+            tbody.innerHTML = items.map(item => `
+                <tr class="hover:bg-slate-50">
+                    ${opts.columns.map(c => `<td class="px-3 py-2 text-slate-600 whitespace-nowrap">${escapeXml(item[c.key] != null ? item[c.key] : 'N/A')}</td>`).join('')}
+                </tr>
+            `).join('');
+        }
+
+        modal.classList.remove('hidden');
     }
 
     // Navegação por seção (página única, scroll contínuo): clique rola suavemente até a seção,
@@ -555,6 +619,7 @@
         }
         renderKpiCards(data.kpis);
         renderDivergenciasSevPrio(data.divergenciasSevPrio);
+        renderIncidentesForaOLA(data.incidentesForaOLA);
         renderGruposResponsaveis(data.gruposResponsaveis);
         renderSankeyMudanca(data.sankeyMudanca);
         renderOrigemDeteccao(data.origemDeteccao);
@@ -1513,33 +1578,22 @@
 
         // Governança: Aderência Sev x Prioridade
         setText('val-aderencia-sevprio', kpis.aderenciaSevPrio != null ? `${kpis.aderenciaSevPrio}%` : '—');
-        setText('val-aderencia-sevprio-base', kpis.aderenciaSevPrioBase || 0);
         setText('val-aderencia-sevprio-sev0', kpis.aderenciaSevPrioSev0 != null ? `${kpis.aderenciaSevPrioSev0}%` : '—');
-        setText('val-aderencia-sevprio-sev0-base', kpis.aderenciaSevPrioSev0Base || 0);
         setText('val-aderencia-sevprio-sev1', kpis.aderenciaSevPrioSev1 != null ? `${kpis.aderenciaSevPrioSev1}%` : '—');
-        setText('val-aderencia-sevprio-sev1-base', kpis.aderenciaSevPrioSev1Base || 0);
     }
 
     // Lista de incidentes com divergência entre Severidade técnica e Priority do ServiceNow
     function renderDivergenciasSevPrio(list) {
+        ALL_DATA.divergenciasSevPrio = list || [];
         const countEl = document.getElementById('val-divergencias-count');
-        const listEl = document.getElementById('divergencias-sevprio-list');
-        if (!listEl) return;
+        if (countEl) countEl.textContent = ALL_DATA.divergenciasSevPrio.length;
+    }
 
-        const items = list || [];
-        if (countEl) countEl.textContent = items.length;
-
-        if (!items.length) {
-            listEl.innerHTML = `<p class="text-xs text-slate-300 italic py-2">Nenhuma divergência no período filtrado.</p>`;
-            return;
-        }
-
-        listEl.innerHTML = items.map(d => `
-            <div class="flex items-center justify-between text-xs bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
-                <span class="font-bold text-slate-700">${d.id}</span>
-                <span class="text-slate-500">Sev ${d.severidade} <span class="text-slate-300">·</span> Priority: <span class="font-semibold text-natura-red-buriti">${d.priority}</span></span>
-            </div>
-        `).join('');
+    // Lista de incidentes fora da meta de OLA (Sev0 > 2h, Sev1 > 6h)
+    function renderIncidentesForaOLA(list) {
+        ALL_DATA.incidentesForaOLA = list || [];
+        const countEl = document.getElementById('val-fora-ola-count');
+        if (countEl) countEl.textContent = ALL_DATA.incidentesForaOLA.length;
     }
 
     // Top Grupos/Serviços Responsáveis por Incidentes causados por Mudança

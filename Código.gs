@@ -100,6 +100,34 @@ function buildCallerMap(ss) {
   return map;
 }
 
+const MSN_COL_ASSIGNMENT_GROUP = 12; // M
+const MSN_COL_SERVICE = 18;          // S
+const MSN_COL_SERVICE_OFFERING = 19; // T
+
+/**
+ * Monta um mapa Number -> {assignmentGroup, service, serviceOffering} a partir da aba Major_ServiceNow,
+ * usado para enriquecer listas de Incidentes (ex: fora do OLA, divergências Sev x Prioridade) com o
+ * Grupo Responsável, Service e Service Offering cadastrados no ServiceNow.
+ */
+function buildServiceNowInfoMap(ss) {
+  const map = {};
+  const sheet = ss.getSheetByName('Major_ServiceNow');
+  if (!sheet) return map;
+
+  const values = sheet.getDataRange().getValues();
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const number = String(row[MSN_COL_NUMBER] || '').trim();
+    if (!number) continue;
+    map[number] = {
+      assignmentGroup: String(row[MSN_COL_ASSIGNMENT_GROUP] || '').trim() || 'N/A',
+      service: String(row[MSN_COL_SERVICE] || '').trim() || 'N/A',
+      serviceOffering: String(row[MSN_COL_SERVICE_OFFERING] || '').trim() || 'N/A'
+    };
+  }
+  return map;
+}
+
 /**
  * Classifica o Caller (ServiceNow) em uma das 3 origens de detecção do Incidente.
  * Monitoração: caller contém "Integração"/"Integration". Experiências: contém "Experiência".
@@ -704,6 +732,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
              mttdTerminoMedioHorasDeploy: null, mttdTerminoMedioHorasTradicional: null
            },
            divergenciasSevPrio: [],
+           incidentesForaOLA: [],
            monthlyMetrics: {},
            mttrPorMesEmHoras: {},
            techMetrics: {},
@@ -743,6 +772,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
     const changeMap = buildChangeMap(ss);
     const priorityMap = buildPriorityMap(ss);
     const callerMap = buildCallerMap(ss);
+    const serviceNowInfoMap = buildServiceNowInfoMap(ss);
 
     let metrics = {
         incidentesTotal: 0, totalDuracaoMinutos: 0,
@@ -772,6 +802,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         sev0PrioBase: 0, sev0PrioAderente: 0,
         sev1PrioBase: 0, sev1PrioAderente: 0,
         divergenciasSevPrio: [],
+        // Incidentes fora da meta de OLA (Sev0 > 2h, Sev1 > 6h)
+        incidentesForaOLA: [],
         // Origem da Detecção (Caller do ServiceNow)
         origemDeteccao: {
             'End-users': { count: 0, durationMin: 0 },
@@ -793,6 +825,18 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         // Evolução (Volume + MTTR) restrita a Incidentes causados por Mudança
         mudancaMonthlyMetrics: {}, mudancaWeeklyMetrics: {}, mudancaQuarterlyMetrics: {},
         mudancaMonthlyPorTipo: {}, mudancaWeeklyPorTipo: {}, mudancaQuarterlyPorTipo: {}
+    };
+
+    // Enriquece um Incidente com dados do ServiceNow (Origem da Detecção, Service, Service Offering, Grupo
+    // Responsável), usado nas listas de Divergências Sev x Prioridade e Incidentes Fora do OLA.
+    const getIncidentEnrichment = (ticketId) => {
+        const info = serviceNowInfoMap[ticketId] || {};
+        return {
+            origemDeteccao: classifyCaller(callerMap[ticketId]) || 'N/A',
+            service: info.service || 'N/A',
+            serviceOffering: info.serviceOffering || 'N/A',
+            grupoResponsavel: info.assignmentGroup || 'N/A'
+        };
     };
 
     dataRows.forEach((row, i) => {
@@ -863,18 +907,32 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             bucket[periodLabel][key] = (bucket[periodLabel][key] || 0) + 1;
         };
 
+        const ticketId = String(row[0] || '').trim();
+
         if (!metrics.monthlyBySeveridade[mes]) metrics.monthlyBySeveridade[mes] = { sev0: 0, sev1: 0 };
         if (isSev0) {
         metrics.sev0Incidentes++;
         metrics.sev0DuracaoMinutos += durMin;
-        if (durMin <= OLA_TARGET_SEV0_MIN) metrics.sev0DentroOLA++;
+        if (durMin <= OLA_TARGET_SEV0_MIN) {
+            metrics.sev0DentroOLA++;
+        } else {
+            metrics.incidentesForaOLA.push(Object.assign({
+                id: ticketId, severidade: severidade, ttr: durRaw, metaMin: OLA_TARGET_SEV0_MIN
+            }, getIncidentEnrichment(ticketId)));
+        }
         metrics.monthlyBySeveridade[mes].sev0++;
         bumpBreakdown(metrics.weeklyBySeveridade, weekLabel, 'sev0');
         bumpBreakdown(metrics.quarterlyBySeveridade, quarterLabel, 'sev0');
         } else if (isSev1) {
         metrics.sev1Incidentes++;
         metrics.sev1DuracaoMinutos += durMin;
-        if (durMin <= OLA_TARGET_SEV1_MIN) metrics.sev1DentroOLA++;
+        if (durMin <= OLA_TARGET_SEV1_MIN) {
+            metrics.sev1DentroOLA++;
+        } else {
+            metrics.incidentesForaOLA.push(Object.assign({
+                id: ticketId, severidade: severidade, ttr: durRaw, metaMin: OLA_TARGET_SEV1_MIN
+            }, getIncidentEnrichment(ticketId)));
+        }
         metrics.monthlyBySeveridade[mes].sev1++;
         bumpBreakdown(metrics.weeklyBySeveridade, weekLabel, 'sev1');
         bumpBreakdown(metrics.quarterlyBySeveridade, quarterLabel, 'sev1');
@@ -882,7 +940,6 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
 
         // Governança: Aderência Sev x Prioridade (Sev0/Sev1 são aderentes se Priority = P1-Critical ou P2-High)
         if (isSev0 || isSev1) {
-            const ticketId = String(row[0] || '').trim();
             const priority = ticketId ? priorityMap[ticketId] : undefined;
             if (priority) {
                 metrics.sevPrioBase++;
@@ -898,11 +955,11 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
                 if (aderente) {
                     metrics.sevPrioAderente++;
                 } else {
-                    metrics.divergenciasSevPrio.push({
+                    metrics.divergenciasSevPrio.push(Object.assign({
                         id: ticketId,
                         severidade: severidade,
                         priority: priority
-                    });
+                    }, getIncidentEnrichment(ticketId)));
                 }
             }
         }
@@ -1251,6 +1308,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         divergenciasSevPrioCount: metrics.divergenciasSevPrio.length
         },
         divergenciasSevPrio: metrics.divergenciasSevPrio,
+        incidentesForaOLA: metrics.incidentesForaOLA,
         monthlyMetrics: metrics.monthlyMetrics,
         mttrPorMesEmHoras: mttrPorMesEmHoras,
         weeklyMetrics: metrics.weeklyMetrics,
