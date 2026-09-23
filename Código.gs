@@ -396,6 +396,30 @@ function getIncidentsByIds(ids) {
 }
 
 /**
+ * Constrói um mapa { ticketId -> severidade ('Sev0'/'Sev1'/'Outro') } varrendo todas as abas
+ * MajorIncidentes{ano} disponíveis. Usado para descobrir a Severidade de um Problema via o(s)
+ * Incidente(s) associado(s), já que a aba MajorProblems não possui coluna própria de Severidade.
+ */
+function buildIncidentSeverityMap(ss) {
+  const map = {};
+  const sheets = ss.getSheets();
+  const regex = /^MajorIncidentes(\d{4})$/i;
+  sheets.forEach(sheet => {
+    if (!regex.test(sheet.getName())) return;
+    const values = sheet.getDataRange().getValues();
+    for (let i = 1; i < values.length; i++) {
+      const ticketId = String(values[i][0] || '').trim();
+      if (!ticketId) continue;
+      const severidade = String(values[i][COL_SEVERIDADE] || '').trim();
+      if (severidade.startsWith('0')) map[ticketId] = 'Sev0';
+      else if (severidade.startsWith('1')) map[ticketId] = 'Sev1';
+      else map[ticketId] = 'Outro';
+    }
+  });
+  return map;
+}
+
+/**
  * Ponto de entrada
  */
 function doGet() {
@@ -1525,6 +1549,8 @@ function getMajorProblemsData(year) {
 
      if (!sheet) return { error: `Aba '${targetSheetName}' não encontrada.` };
 
+     const sevMap = buildIncidentSeverityMap(ss);
+
      const data = sheet.getDataRange().getValues();
      const rows = data.slice(1); // Skip header
 
@@ -1545,7 +1571,12 @@ function getMajorProblemsData(year) {
          problemasResolvidos: 0,
          problemasImpl: 0,
          rcaPendentes: 0,
-         
+
+         bySev: {
+             Sev0: { problemasAbertos: 0, problemasResolvidos: 0, problemasImpl: 0, rcaPendentes: 0 },
+             Sev1: { problemasAbertos: 0, problemasResolvidos: 0, problemasImpl: 0, rcaPendentes: 0 }
+         },
+
          sumResolvedAging: 0,
          countResolvedAging: 0,
          sumMTTRC: 0,
@@ -1644,9 +1675,19 @@ function getMajorProblemsData(year) {
      // Multi-incident alignment
      uniqueProblemData.forEach((p, prbId) => {
          const status = p.status;
-         
+
+         // Severidade do Problema = a maior Severidade entre os Incidentes associados (Sev0 > Sev1)
+         let problemSev = null;
+         p.incidents.forEach(incId => {
+             const s = sevMap[incId];
+             if (s === 'Sev0') problemSev = 'Sev0';
+             else if (s === 'Sev1' && problemSev !== 'Sev0') problemSev = 'Sev1';
+         });
+         const sevBucket = problemSev ? metrics.bySev[problemSev] : null;
+
          if (status === 'resolved' || status === 'closed') {
              metrics.problemasResolvidos += 1; // Count as 1 problem
+             if (sevBucket) sevBucket.problemasResolvidos += 1;
              if (p.resolvedAging !== null) {
                  metrics.sumResolvedAging += p.resolvedAging;
                  metrics.countResolvedAging += 1;
@@ -1665,10 +1706,15 @@ function getMajorProblemsData(year) {
              metrics.monthlyYTD[openMonth].countAging += 1;
          } else {
              metrics.problemasAbertos += 1; // Count as 1 problem
-             if (status === 'fix in progress') metrics.problemasImpl += 1;
+             if (sevBucket) sevBucket.problemasAbertos += 1;
+             if (status === 'fix in progress') {
+                 metrics.problemasImpl += 1;
+                 if (sevBucket) sevBucket.problemasImpl += 1;
+             }
              if (status === 'root cause analysis' || status === 'new') {
                  metrics.rcaPendentes += 1;
-                 
+                 if (sevBucket) sevBucket.rcaPendentes += 1;
+
                  // Backlog Aging represents RCA Pending + New
                  metrics.sumBacklogAging += p.backlogAging;
                  metrics.countBacklogAging += 1;
@@ -1782,6 +1828,7 @@ function getMajorProblemsData(year) {
               avgAgingBacklog: metrics.countBacklogAging > 0 ? Math.round(metrics.sumBacklogAging / metrics.countBacklogAging) : 0,
               mttrcCount: metrics.countMTTRC // Debugging
           },
+          kpisBySeveridade: metrics.bySev,
           topBacklogTeams: Object.entries(metrics.areaBacklog)
             .map(([name, d]) => ({ name, count: d.count, avgAging: Math.round(d.totalAging / d.count) }))
             .sort((a, b) => b.count - a.count)
