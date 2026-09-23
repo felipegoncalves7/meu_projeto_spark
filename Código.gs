@@ -989,19 +989,17 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         }
 
         // Origem da Detecção do Incidente (Caller do ServiceNow): End-users / Monitoração / Experiências
+        const origemDeteccao = (isSev0 || isSev1) ? classifyCaller(callerMap[ticketId]) : null;
         if (isSev0 || isSev1) {
-            const ticketIdCaller = String(row[0] || '').trim();
-            const caller = ticketIdCaller ? callerMap[ticketIdCaller] : undefined;
-            const origem = classifyCaller(caller);
-            if (origem) {
-                metrics.origemDeteccao[origem].count++;
-                metrics.origemDeteccao[origem].durationMin += durMin;
+            if (origemDeteccao) {
+                metrics.origemDeteccao[origemDeteccao].count++;
+                metrics.origemDeteccao[origemDeteccao].durationMin += durMin;
                 metrics.origemDeteccaoBase++;
 
                 if (!metrics.monthlyByOrigem[mes]) metrics.monthlyByOrigem[mes] = { 'End-users': 0, 'Monitoração': 0, 'Experiências': 0 };
-                metrics.monthlyByOrigem[mes][origem]++;
-                bumpBreakdown(metrics.weeklyByOrigem, weekLabel, origem);
-                bumpBreakdown(metrics.quarterlyByOrigem, quarterLabel, origem);
+                metrics.monthlyByOrigem[mes][origemDeteccao]++;
+                bumpBreakdown(metrics.weeklyByOrigem, weekLabel, origemDeteccao);
+                bumpBreakdown(metrics.quarterlyByOrigem, quarterLabel, origemDeteccao);
             }
         }
 
@@ -1009,9 +1007,27 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         const jornadaRaw = String(row[COL_JORNADA] || '').trim();
         if (jornadaRaw) {
             jornadaRaw.split(',').map(j => j.trim()).filter(Boolean).forEach(jornada => {
-                if (!metrics.jornadaMetrics[jornada]) metrics.jornadaMetrics[jornada] = { count: 0, durationMin: 0 };
-                metrics.jornadaMetrics[jornada].count++;
-                metrics.jornadaMetrics[jornada].durationMin += durMin;
+                if (!metrics.jornadaMetrics[jornada]) {
+                    metrics.jornadaMetrics[jornada] = {
+                        count: 0, durationMin: 0,
+                        sev0Count: 0, sev0DurationMin: 0, sev0DentroOLA: 0,
+                        sev1Count: 0, sev1DurationMin: 0, sev1DentroOLA: 0,
+                        origemBreakdown: {}
+                    };
+                }
+                const jm = metrics.jornadaMetrics[jornada];
+                jm.count++;
+                jm.durationMin += durMin;
+                if (isSev0) {
+                    jm.sev0Count++;
+                    jm.sev0DurationMin += durMin;
+                    if (durMin <= OLA_TARGET_SEV0_MIN) jm.sev0DentroOLA++;
+                } else if (isSev1) {
+                    jm.sev1Count++;
+                    jm.sev1DurationMin += durMin;
+                    if (durMin <= OLA_TARGET_SEV1_MIN) jm.sev1DentroOLA++;
+                }
+                if (origemDeteccao) jm.origemBreakdown[origemDeteccao] = (jm.origemBreakdown[origemDeteccao] || 0) + 1;
 
                 if (!metrics.monthlyByJornada[mes]) metrics.monthlyByJornada[mes] = {};
                 metrics.monthlyByJornada[mes][jornada] = (metrics.monthlyByJornada[mes][jornada] || 0) + 1;
@@ -1024,9 +1040,27 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         const paisRaw = String(row[COL_ABRANGENCIA] || '').trim();
         if (paisRaw) {
             paisRaw.split(',').map(p => p.trim().toUpperCase()).filter(Boolean).forEach(pais => {
-                if (!metrics.paisMetrics[pais]) metrics.paisMetrics[pais] = { count: 0, durationMin: 0 };
-                metrics.paisMetrics[pais].count++;
-                metrics.paisMetrics[pais].durationMin += durMin;
+                if (!metrics.paisMetrics[pais]) {
+                    metrics.paisMetrics[pais] = {
+                        count: 0, durationMin: 0,
+                        sev0Count: 0, sev0DurationMin: 0, sev0DentroOLA: 0,
+                        sev1Count: 0, sev1DurationMin: 0, sev1DentroOLA: 0,
+                        origemBreakdown: {}
+                    };
+                }
+                const pm = metrics.paisMetrics[pais];
+                pm.count++;
+                pm.durationMin += durMin;
+                if (isSev0) {
+                    pm.sev0Count++;
+                    pm.sev0DurationMin += durMin;
+                    if (durMin <= OLA_TARGET_SEV0_MIN) pm.sev0DentroOLA++;
+                } else if (isSev1) {
+                    pm.sev1Count++;
+                    pm.sev1DurationMin += durMin;
+                    if (durMin <= OLA_TARGET_SEV1_MIN) pm.sev1DentroOLA++;
+                }
+                if (origemDeteccao) pm.origemBreakdown[origemDeteccao] = (pm.origemBreakdown[origemDeteccao] || 0) + 1;
 
                 if (!metrics.monthlyByPais[mes]) metrics.monthlyByPais[mes] = {};
                 metrics.monthlyByPais[mes][pais] = (metrics.monthlyByPais[mes][pais] || 0) + 1;

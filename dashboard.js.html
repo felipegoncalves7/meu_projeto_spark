@@ -1895,6 +1895,51 @@
         drawMttdScatterChart('mttdTerminoVsMttrChart', 'mttdTerminoVsMttr', points, 'MTTD Término (horas)');
     }
 
+    // Badges de Origem da Detecção, reutilizado nos cards estendidos de Jornada/País
+    function buildOrigemBadgesHtml(origemBreakdown) {
+        const breakdown = origemBreakdown || {};
+        const keys = Object.keys(breakdown).sort((a, b) => breakdown[b] - breakdown[a]);
+        if (!keys.length) return `<span class="text-[9px] text-slate-300 italic">Sem dados</span>`;
+        return keys.map(k => `
+            <span class="text-[9px] font-semibold text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-2 py-0.5">
+                ${escapeXml(k)}: <span class="font-extrabold text-slate-700">${breakdown[k]}</span>
+            </span>
+        `).join('');
+    }
+
+    // Bloco Sev0/Sev1 (Volume + MTTR + Aderência OLA) reutilizado nos cards estendidos de Jornada/País
+    function buildSevBreakdownHtml(item) {
+        const sev0Count = item.sev0Count || 0;
+        const sev1Count = item.sev1Count || 0;
+        const sev0MTTR = sev0Count > 0 ? item.sev0DurationMin / sev0Count : 0;
+        const sev1MTTR = sev1Count > 0 ? item.sev1DurationMin / sev1Count : 0;
+        const sev0OLA = sev0Count > 0 ? Math.round((item.sev0DentroOLA / sev0Count) * 1000) / 10 : 0;
+        const sev1OLA = sev1Count > 0 ? Math.round((item.sev1DentroOLA / sev1Count) * 1000) / 10 : 0;
+        const sev0OLAColor = sev0OLA >= 70 ? 'text-natura-green-cerrado' : 'text-natura-red-buriti';
+        const sev1OLAColor = sev1OLA >= 80 ? 'text-natura-green-cerrado' : 'text-natura-red-buriti';
+
+        return `
+            <div class="grid grid-cols-2 gap-2 pt-3 mt-3 border-t border-slate-100">
+                <div class="bg-natura-red-buriti/5 rounded-lg p-2">
+                    <p class="text-[9px] font-black text-natura-red-buriti uppercase tracking-wider">Sev0</p>
+                    <p class="text-sm font-extrabold text-slate-800 leading-tight">${sev0Count}</p>
+                    <p class="text-[9px] text-slate-400">MTTR ${formatMinutesToHHMM(sev0MTTR)}</p>
+                    <p class="text-[9px] font-bold ${sev0OLAColor}">${sev0Count > 0 ? sev0OLA + '% OLA' : '—'}</p>
+                </div>
+                <div class="bg-natura-orange/5 rounded-lg p-2">
+                    <p class="text-[9px] font-black text-natura-orange uppercase tracking-wider">Sev1</p>
+                    <p class="text-sm font-extrabold text-slate-800 leading-tight">${sev1Count}</p>
+                    <p class="text-[9px] text-slate-400">MTTR ${formatMinutesToHHMM(sev1MTTR)}</p>
+                    <p class="text-[9px] font-bold ${sev1OLAColor}">${sev1Count > 0 ? sev1OLA + '% OLA' : '—'}</p>
+                </div>
+            </div>
+            <div class="mt-2 pt-2 border-t border-slate-50">
+                <p class="text-[9px] text-slate-400 uppercase font-bold mb-1.5">Origem da Detecção</p>
+                <div class="flex flex-wrap gap-1">${buildOrigemBadgesHtml(item.origemBreakdown)}</div>
+            </div>
+        `;
+    }
+
     // Cards de Incidentes por Jornada Impactada, com ícones
     function renderJornadaCards(jornadaMetrics, totalIncidentes) {
         const gridEl = document.getElementById('jornada-cards-grid');
@@ -1922,6 +1967,7 @@
                     </div>
                     <p class="text-2xl font-extrabold text-natura-green-cerrado">${item.count}</p>
                     <p class="text-[10px] text-slate-400 mt-1">${pct}% dos Incidentes · MTTR médio ${formatMinutesToHHMM(avgMin)}</p>
+                    ${buildSevBreakdownHtml(item)}
                 </div>
             `;
         }).join('');
@@ -1943,11 +1989,14 @@
             const item = metrics[code];
             const pct = totalIncidentes > 0 ? Math.round((item.count / totalIncidentes) * 1000) / 10 : 0;
             return `
-                <div class="kpi-card rounded-2xl p-3 border border-slate-200 bg-white flex flex-col items-center text-center gap-1">
-                    ${buildFlagSvg(code, 32, 22)}
-                    <p class="text-[10px] font-bold text-slate-600">${code}</p>
-                    <p class="text-lg font-extrabold text-natura-green-cerrado leading-none">${item.count}</p>
-                    <p class="text-[9px] text-slate-400">${pct}%</p>
+                <div class="kpi-card rounded-2xl p-4 border border-slate-200 bg-white">
+                    <div class="flex items-center gap-2 mb-2">
+                        ${buildFlagSvg(code, 28, 20)}
+                        <p class="text-xs font-bold text-slate-600">${code}</p>
+                    </div>
+                    <p class="text-2xl font-extrabold text-natura-green-cerrado leading-none">${item.count}</p>
+                    <p class="text-[10px] text-slate-400 mt-1">${pct}% dos Incidentes</p>
+                    ${buildSevBreakdownHtml(item)}
                 </div>
             `;
         }).join('');
