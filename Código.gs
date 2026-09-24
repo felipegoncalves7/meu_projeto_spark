@@ -1178,21 +1178,23 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
                     }
                 }
                 if (chg.plannedEnd) {
+                    // MTTD Término pode ser negativo: o Incidente foi aberto ANTES do término planejado da
+                    // Mudança (detectado durante a execução, ainda dentro da janela). Isso é um dado real e
+                    // relevante (detecção precoce), então não é descartado — nem do cálculo da média nem
+                    // da dispersão no Plano Cartesiano.
                     const diffTerminoH = (openDate.getTime() - chg.plannedEnd.getTime()) / (1000 * 60 * 60);
-                    if (diffTerminoH >= 0) {
-                        metrics.mttdTerminoSomaHoras += diffTerminoH;
-                        metrics.mttdTerminoCount++;
-                        metrics.mudancaPorTipo[tipoBucket].mttdTerminoSoma += diffTerminoH;
-                        metrics.mudancaPorTipo[tipoBucket].mttdTerminoCount++;
+                    metrics.mttdTerminoSomaHoras += diffTerminoH;
+                    metrics.mttdTerminoCount++;
+                    metrics.mudancaPorTipo[tipoBucket].mttdTerminoSoma += diffTerminoH;
+                    metrics.mudancaPorTipo[tipoBucket].mttdTerminoCount++;
 
-                        // Dispersão MTTD (Término) x MTTR, por Incidente causado por Mudança
-                        metrics.mttdTerminoVsMttrDispersao.push({
-                            id: String(row[0] || '').trim(),
-                            mttdHoras: Math.round(diffTerminoH * 10) / 10,
-                            mttrHoras: Math.round((durMin / 60) * 10) / 10,
-                            tipo: tipoBucket
-                        });
-                    }
+                    // Dispersão MTTD (Término) x MTTR, por Incidente causado por Mudança
+                    metrics.mttdTerminoVsMttrDispersao.push({
+                        id: String(row[0] || '').trim(),
+                        mttdHoras: Math.round(diffTerminoH * 10) / 10,
+                        mttrHoras: Math.round((durMin / 60) * 10) / 10,
+                        tipo: tipoBucket
+                    });
                 }
             }
         }

@@ -1642,9 +1642,13 @@
 
         const formatHoras = (h) => {
             if (h === null || h === undefined) return 'N/A';
-            const hh = Math.floor(h);
-            const mm = Math.round((h - hh) * 60);
-            return `${hh}h${String(mm).padStart(2, '0')}m`;
+            // MTTD Término pode ser negativo (Incidente aberto antes do término planejado da Mudança);
+            // formata pelo valor absoluto com sinal "-" na frente, em vez de floor() quebrar h/m negativos.
+            const sign = h < 0 ? '-' : '';
+            const absH = Math.abs(h);
+            const hh = Math.floor(absH);
+            const mm = Math.round((absH - hh) * 60);
+            return `${sign}${hh}h${String(mm).padStart(2, '0')}m`;
         };
         setText('val-mttd-inicio', formatHoras(kpis.mttdInicioMedioHoras));
         setText('val-mttd-termino', formatHoras(kpis.mttdTerminoMedioHoras));
