@@ -641,6 +641,8 @@
         renderMttdTerminoVsMttrChart(data.mttdTerminoVsMttrDispersao);
         renderJornadaCards(data.jornadaMetrics, data.kpis.incidentesTotal);
         renderPaisCards(data.paisMetrics, data.kpis.incidentesTotal);
+        renderMudancaCards(data.mudancaCards, data.kpis.incidentesMudanca);
+        renderMttdMatrix(data.mttdMatrix);
         populateTechOfensorFilters(data.filterOptions);
 
         // Save these for switching views WITHOUT server reload
@@ -1695,28 +1697,8 @@
         setBadge('ola-meta-badge-sev0', (kpis.aderenciaOLASev0 || 0) >= 70);
         setBadge('ola-meta-badge-sev1', (kpis.aderenciaOLASev1 || 0) >= 80);
 
-        // Visão Executiva: Mudança
-        setText('val-incidentes-mudanca', kpis.incidentesMudanca || 0);
-        setText('val-pct-mudanca', `(${kpis.pctMudanca != null ? kpis.pctMudanca : 0}%)`);
-        setText('val-mudanca-deploy', kpis.incidentesMudancaDeploy || 0);
-        setText('val-mudanca-tradicional', kpis.incidentesMudancaTradicional || 0);
-
-        const formatHoras = (h) => {
-            if (h === null || h === undefined) return 'N/A';
-            // MTTD Término pode ser negativo (Incidente aberto antes do término planejado da Mudança);
-            // formata pelo valor absoluto com sinal "-" na frente, em vez de floor() quebrar h/m negativos.
-            const sign = h < 0 ? '-' : '';
-            const absH = Math.abs(h);
-            const hh = Math.floor(absH);
-            const mm = Math.round((absH - hh) * 60);
-            return `${sign}${hh}h${String(mm).padStart(2, '0')}m`;
-        };
-        setText('val-mttd-inicio', formatHoras(kpis.mttdInicioMedioHoras));
-        setText('val-mttd-termino', formatHoras(kpis.mttdTerminoMedioHoras));
-        setText('val-mttd-inicio-deploy', formatHoras(kpis.mttdInicioMedioHorasDeploy));
-        setText('val-mttd-inicio-tradicional', formatHoras(kpis.mttdInicioMedioHorasTradicional));
-        setText('val-mttd-termino-deploy', formatHoras(kpis.mttdTerminoMedioHorasDeploy));
-        setText('val-mttd-termino-tradicional', formatHoras(kpis.mttdTerminoMedioHorasTradicional));
+        // Item 1/2: Cards de Mudança e matriz de MTTD (dados completos vêm em data.mudancaCards/data.mttdMatrix,
+        // renderizados por renderMudancaCards/renderMttdMatrix a partir de renderTab1Data)
 
         // Governança: Aderência Sev x Prioridade
         setText('val-aderencia-sevprio', kpis.aderenciaSevPrio != null ? `${kpis.aderenciaSevPrio}%` : '—');
@@ -2418,6 +2400,98 @@
         const scrollAmount = () => track.clientWidth * 0.9;
         prevBtn.addEventListener('click', () => track.scrollBy({ left: -scrollAmount(), behavior: 'smooth' }));
         nextBtn.addEventListener('click', () => track.scrollBy({ left: scrollAmount(), behavior: 'smooth' }));
+    }
+
+    // Item 1: Cards de Incidentes causados por Mudança (Geral/Deploy/Tradicional), no mesmo formato
+    // rico usado em Jornada/País/Origem (Volume, MTTR, OLA por Severidade, Origem da Detecção).
+    const MUDANCA_CARD_CONFIG = {
+        geral: { label: 'Geral', icon: '🔀', border: 'border-slate-200' },
+        deploy: { label: 'Deploy (CI/CD)', icon: '🚀', border: 'border-natura-orange/30' },
+        tradicional: { label: 'Tradicional', icon: '🛠️', border: 'border-natura-blue-profundo/30' }
+    };
+    function renderMudancaCards(mudancaCards, totalIncidentesMudanca) {
+        const gridEl = document.getElementById('mudanca-cards-grid');
+        if (!gridEl) return;
+        const cards = mudancaCards || {};
+        const keys = ['geral', 'deploy', 'tradicional'];
+
+        gridEl.innerHTML = keys.map(key => {
+            const cfg = MUDANCA_CARD_CONFIG[key];
+            const item = cards[key] || { count: 0, durationMin: 0, sev0Count: 0, sev1Count: 0, sev0DurationMin: 0, sev1DurationMin: 0, sev0DentroOLA: 0, sev1DentroOLA: 0, origemBreakdown: {} };
+            const pct = totalIncidentesMudanca > 0 ? Math.round((item.count / totalIncidentesMudanca) * 1000) / 10 : 0;
+            const avgMin = item.count > 0 ? item.durationMin / item.count : 0;
+            const donutId = `mudanca-donut-${key}`;
+
+            return `
+                <div class="kpi-card rounded-2xl p-4 border ${cfg.border} bg-white">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-xl">${cfg.icon}</span>
+                        <p class="text-xs font-bold text-slate-700 leading-tight">${cfg.label}</p>
+                    </div>
+                    <p class="text-2xl font-extrabold text-natura-orange">${item.count}</p>
+                    <p class="text-[10px] text-slate-400 mt-1">${key === 'geral' ? '100% (total)' : pct + '% do total de Mudança'} · MTTR médio ${formatMinutesToHHMM(avgMin)}</p>
+                    ${buildOlaSevBlockHtml(item)}
+                    ${buildOrigemDonutBlockHtml(item, donutId)}
+                </div>
+            `;
+        }).join('');
+
+        keys.forEach(key => renderMiniDonut(`mudanca-donut-${key}`, (cards[key] || {}).origemBreakdown));
+    }
+
+    // Item 2: matriz de MTTD (Início/Término) — tabela compacta: Geral/Deploy/Tradicional x Base
+    // Majors/Base ServiceNow, com Sev0/Sev1 como sub-linha.
+    function formatMttdHoras(h) {
+        if (h === null || h === undefined) return 'N/A';
+        // MTTD Término pode ser negativo (Incidente aberto antes do término planejado da Mudança);
+        // formata pelo valor absoluto com sinal "-" na frente.
+        const sign = h < 0 ? '-' : '';
+        const absH = Math.abs(h);
+        const hh = Math.floor(absH);
+        const mm = Math.round((absH - hh) * 60);
+        return `${sign}${hh}h${String(mm).padStart(2, '0')}m`;
+    }
+    function renderMttdMatrixTable(containerId, matrixInicioOuTermino) {
+        const el = document.getElementById(containerId);
+        if (!el) return;
+        const m = matrixInicioOuTermino || { majors: {}, servicenow: {} };
+        const rows = [
+            { key: 'geral', label: 'Geral' },
+            { key: 'deploy', label: 'Deploy' },
+            { key: 'tradicional', label: 'Tradicional' }
+        ];
+        const cell = (bucket) => {
+            if (!bucket || bucket.count === 0) return `<span class="text-slate-300">N/A</span>`;
+            return `
+                <div class="font-bold text-slate-700">${formatMttdHoras(bucket.avgHoras)} <span class="font-normal text-slate-400">(n=${bucket.count})</span></div>
+                <div class="text-[9px] text-slate-400 mt-0.5">Sev0: ${formatMttdHoras(bucket.sev0AvgHoras)} · Sev1: ${formatMttdHoras(bucket.sev1AvgHoras)}</div>
+            `;
+        };
+        el.innerHTML = `
+            <table class="w-full text-xs border-collapse">
+                <thead>
+                    <tr>
+                        <th class="text-left font-bold text-slate-400 uppercase text-[9px] tracking-wider py-1.5 pr-2"></th>
+                        <th class="text-left font-bold text-slate-400 uppercase text-[9px] tracking-wider py-1.5 px-2 border-l border-slate-100">Base Majors</th>
+                        <th class="text-left font-bold text-slate-400 uppercase text-[9px] tracking-wider py-1.5 px-2 border-l border-slate-100">Base ServiceNow</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-50">
+                    ${rows.map(r => `
+                        <tr>
+                            <td class="py-2 pr-2 font-bold text-slate-600 align-top">${r.label}</td>
+                            <td class="py-2 px-2 border-l border-slate-100 align-top">${cell(m.majors[r.key])}</td>
+                            <td class="py-2 px-2 border-l border-slate-100 align-top">${cell(m.servicenow[r.key])}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+    function renderMttdMatrix(mttdMatrix) {
+        const m = mttdMatrix || { majors: { inicio: {}, termino: {} }, servicenow: { inicio: {}, termino: {} } };
+        renderMttdMatrixTable('mttd-matrix-inicio', { majors: m.majors.inicio, servicenow: m.servicenow.inicio });
+        renderMttdMatrixTable('mttd-matrix-termino', { majors: m.majors.termino, servicenow: m.servicenow.termino });
     }
 
     // Clique no card de Visão Executiva "Incidentes por Mudança" -> abre a seção/análise detalhada

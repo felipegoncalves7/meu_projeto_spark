@@ -961,6 +961,57 @@
                         responsáveis, Diagrama de Sankey e dispersão MTTD x MTTR</span>
                 </div>
 
+                <!-- Item 1: Cards de Mudança (Geral/Deploy/Tradicional), primeiro que tudo nesta seção -->
+                <div class="pt-2">
+                    <div class="flex items-center gap-2 mb-3">
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Incidentes Causados por Mudança</h2>
+                        <span class="info-tooltip" tabindex="0">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span class="tooltip-bubble">Volume, MTTR, Aderência ao OLA por Severidade e Origem da
+                                Detecção dos Incidentes causados por Mudança — total Geral e por Tipo de Mudança
+                                (Deploy/CI-CD vs Tradicional).</span>
+                        </span>
+                        <button type="button" id="card-mudanca-resumo"
+                            class="ml-auto text-[10px] font-bold text-natura-orange hover:text-natura-red-boca transition-colors flex items-center gap-1"
+                            title="Ver análise detalhada de Incidentes causados por Mudança">
+                            Ver análise detalhada
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="mudanca-cards-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                </div>
+
+                <!-- Item 2: MTTD (Início/Término) — Geral/Deploy/Tradicional, base Majors x base ServiceNow -->
+                <div class="pt-2">
+                    <div class="flex items-center gap-2 mb-3">
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">MTTD — Início e Término da Mudança</h2>
+                        <span class="info-tooltip" tabindex="0">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span class="tooltip-bubble">MTTD Início = tempo entre o início planejado da Mudança e a
+                                abertura do Incidente. MTTD Término = idem, mas contra o término planejado (pode ser
+                                negativo: Incidente aberto ainda durante a execução). "Base Majors" usa a data de
+                                abertura registrada na planilha de Incidentes; "Base ServiceNow" usa a data de
+                                abertura do ticket no ServiceNow — podem divergir.</span>
+                        </span>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
+                            <p class="text-xs text-slate-500 uppercase tracking-wider font-bold mb-3">MTTD Início CHG <span class="text-slate-400 font-normal">(Meta: ≤ 25h)</span></p>
+                            <div id="mttd-matrix-inicio" class="overflow-x-auto"></div>
+                        </div>
+                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
+                            <p class="text-xs text-slate-500 uppercase tracking-wider font-bold mb-3">MTTD Término CHG <span class="text-slate-400 font-normal">(referência Deploy: ≤ 6h)</span></p>
+                            <div id="mttd-matrix-termino" class="overflow-x-auto"></div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Volumetria & MTTR (Semanal/Mensal/Trimestral) de Incidentes causados por Mudança -->
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col">
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -978,145 +1029,6 @@
                     </div>
                     <div class="relative w-full h-72"><canvas id="mudanca-evolution-chart"></canvas></div>
                 </div>
-
-                <!-- Bloco: Incidentes Causados por Mudanças -->
-                <div class="rounded-3xl border border-natura-orange/15 bg-natura-orange/[0.03] p-4 sm:p-6 space-y-5">
-                <div class="flex items-center gap-2">
-                    <span class="h-2.5 w-2.5 rounded-full bg-natura-orange"></span>
-                    <h3 class="text-[11px] font-black text-slate-500 uppercase tracking-[0.15em]">Incidentes Causados
-                        por Mudanças</h3>
-                </div>
-
-                <!-- Visão Executiva: Impacto de Mudanças -->
-                <div class="pt-2">
-                    <div class="flex items-center gap-2 mb-3">
-                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Visão Executiva &mdash;
-                            Impacto de Mudanças</h2>
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <!-- Incidentes por Mudança -->
-                        <div id="card-mudanca-resumo"
-                            class="kpi-card cursor-pointer rounded-2xl p-5 border border-slate-200 bg-white transition-all duration-200 hover:-translate-y-1 hover:shadow-md"
-                            title="Ver análise detalhada de Incidentes causados por Mudança">
-                            <div class="flex items-center justify-between mb-1">
-                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">Incidentes por
-                                    Mudança</p>
-                                <div class="flex items-center gap-2">
-                                    <span class="info-tooltip" tabindex="0">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        <span class="tooltip-bubble">Volume de Major Incidents cujo Ofensor
-                                            registrado é "Mudança", segmentado por Deploy (CI/CD) e Tradicional
-                                            (Normal/Urgente/Emergencial). Clique para ver a análise completa.</span>
-                                    </span>
-                                    <div class="p-1.5 rounded-lg bg-natura-orange/10"><svg
-                                            xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-natura-orange"
-                                            fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                        </svg></div>
-                                </div>
-                            </div>
-                            <div class="flex items-baseline gap-2">
-                                <p id="val-incidentes-mudanca" class="text-3xl font-extrabold text-natura-orange">0
-                                </p>
-                                <span id="val-pct-mudanca" class="text-xs font-semibold text-slate-400">(0%)</span>
-                            </div>
-                            <div class="flex items-center gap-3 mt-2 text-[10px] font-bold">
-                                <span class="text-slate-500">Deploy: <span id="val-mudanca-deploy"
-                                        class="text-slate-700">0</span></span>
-                                <span class="text-slate-500">Tradicional: <span id="val-mudanca-tradicional"
-                                        class="text-slate-700">0</span></span>
-                            </div>
-                            <p class="text-[10px] text-natura-orange font-bold mt-2 flex items-center gap-1">Ver
-                                análise detalhada
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M9 5l7 7-7 7" />
-                                </svg>
-                            </p>
-                        </div>
-                        <!-- MTTD Início -->
-                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
-                            <div class="flex items-center justify-between mb-1">
-                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">MTTD Início CHG
-                                </p>
-                                <div class="flex items-center gap-2">
-                                    <span class="info-tooltip" tabindex="0">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        <span class="tooltip-bubble">Tempo médio entre o início planejado da Mudança e
-                                            a abertura do incidente que ela causou. Fórmula: AVG(Data Abertura do INC
-                                            − Data Início Planejada da CHG). Meta: ≤ 25h.</span>
-                                    </span>
-                                    <div class="p-1.5 rounded-lg bg-natura-blue-profundo/10"><svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            class="h-4 w-4 text-natura-blue-profundo" fill="none" viewBox="0 0 24 24"
-                                            stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg></div>
-                                </div>
-                            </div>
-                            <p id="val-mttd-inicio" class="text-3xl font-extrabold text-natura-blue-profundo">N/A</p>
-                            <div class="flex items-center gap-3 mt-2 text-[10px] font-bold">
-                                <span class="text-slate-500">Deploy: <span id="val-mttd-inicio-deploy"
-                                        class="text-slate-700">N/A</span></span>
-                                <span class="text-slate-500">Tradicional: <span id="val-mttd-inicio-tradicional"
-                                        class="text-slate-700">N/A</span></span>
-                            </div>
-                            <p class="text-[10px] text-slate-400 mt-2 leading-tight">Tempo médio até a detecção após o
-                                início planejado da mudança. <span class="font-bold text-natura-green-cerrado">Meta:
-                                    ≤25h</span></p>
-                        </div>
-                        <!-- MTTD Término (Deploy + Tradicional) -->
-                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
-                            <div class="flex items-center justify-between mb-1">
-                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">MTTD Término CHG
-                                </p>
-                                <div class="flex items-center gap-2">
-                                    <span class="info-tooltip" tabindex="0">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        <span class="tooltip-bubble">Tempo médio entre o término planejado da Mudança
-                                            e a abertura do incidente que ela causou. Fórmula: AVG(Data Abertura do
-                                            INC − Data Término Planejada da CHG). Meta de referência (Deploy/CI-CD):
-                                            ≤ 6h.</span>
-                                    </span>
-                                    <div class="p-1.5 rounded-lg bg-natura-blue-profundo/10"><svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            class="h-4 w-4 text-natura-blue-profundo" fill="none" viewBox="0 0 24 24"
-                                            stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M5 13l4 4L19 7" />
-                                        </svg></div>
-                                </div>
-                            </div>
-                            <p id="val-mttd-termino" class="text-3xl font-extrabold text-natura-blue-profundo">N/A</p>
-                            <div class="flex items-center gap-3 mt-2 text-[10px] font-bold">
-                                <span class="text-slate-500">Deploy: <span id="val-mttd-termino-deploy"
-                                        class="text-slate-700">N/A</span></span>
-                                <span class="text-slate-500">Tradicional: <span id="val-mttd-termino-tradicional"
-                                        class="text-slate-700">N/A</span></span>
-                            </div>
-                            <p class="text-[10px] text-slate-400 mt-2 leading-tight">Tempo médio até a detecção após o
-                                término planejado da mudança. <span class="font-bold text-natura-green-cerrado">Meta
-                                    (Deploy): ≤6h</span></p>
-                        </div>
-                    </div>
-                </div>
-                </div>
-                <!-- Fim Bloco: Incidentes Causados por Mudanças -->
 
                 <!-- Top Grupos/Serviços Responsáveis por Incidentes causados por Mudança -->
                 <div class="pt-2">
