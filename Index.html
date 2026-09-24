@@ -628,37 +628,6 @@
                     <span class="text-xs text-slate-400 font-medium">Impacto por Jornada de negócio e por País</span>
                 </div>
 
-                <!-- Volume por Jornada/País (Semanal/Mensal/Trimestral) + MTTR geral desta seção -->
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col">
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                        <div class="flex items-center gap-2">
-                            <h3 id="jp-evolution-title" class="text-base font-bold text-slate-800">Incidentes por
-                                Jornada — Mensal</h3>
-                            <span id="delta-badge-jp" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
-                        </div>
-                        <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100"
-                            id="jp-evolution-toggle">
-                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white"
-                                data-group="weekly">Semanal</button>
-                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all bg-white text-natura-green-cerrado shadow-sm border border-slate-200"
-                                data-group="monthly">Mensal</button>
-                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white"
-                                data-group="quarterly">Trimestral</button>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2 mb-6">
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ver por:</span>
-                        <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100"
-                            id="jp-dimension-toggle">
-                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all bg-white text-natura-green-cerrado shadow-sm border border-slate-200"
-                                data-dimension="jornada">Jornadas</button>
-                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white"
-                                data-dimension="pais">Países</button>
-                        </div>
-                    </div>
-                    <div class="relative w-full h-72"><canvas id="jp-evolution-chart"></canvas></div>
-                </div>
-
                 <!-- Jornadas Impactadas -->
                 <div class="pt-2">
                     <div class="flex items-center gap-2 mb-3">
@@ -708,6 +677,55 @@
                         </div>
                     </div>
                     <div id="pais-cards-grid" class="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2 no-scrollbar scroll-smooth"></div>
+                </div>
+
+                <!-- Volume por Jornada/País (Semanal/Mensal/Trimestral) + MTTR geral desta seção -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                        <div class="flex items-center gap-2">
+                            <h3 id="jp-evolution-title" class="text-base font-bold text-slate-800">Incidentes por
+                                Jornada — Mensal</h3>
+                            <span id="delta-badge-jp" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
+                        </div>
+                        <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100"
+                            id="jp-evolution-toggle">
+                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white"
+                                data-group="weekly">Semanal</button>
+                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all bg-white text-natura-green-cerrado shadow-sm border border-slate-200"
+                                data-group="monthly">Mensal</button>
+                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white"
+                                data-group="quarterly">Trimestral</button>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between gap-2 mb-6 flex-wrap">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ver por:</span>
+                            <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100"
+                                id="jp-dimension-toggle">
+                                <button class="px-3 py-1 text-xs font-bold rounded-md transition-all bg-white text-natura-green-cerrado shadow-sm border border-slate-200"
+                                    data-dimension="jornada">Jornadas</button>
+                                <button class="px-3 py-1 text-xs font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white"
+                                    data-dimension="pais">Países</button>
+                            </div>
+                        </div>
+                        <div id="jp-week-nav" class="hidden flex items-center gap-2">
+                            <button type="button" id="jp-week-prev" aria-label="Semanas anteriores"
+                                class="w-7 h-7 flex items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 hover:text-natura-green-cerrado hover:border-natura-green-cerrado transition-colors disabled:opacity-30 disabled:pointer-events-none">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                                </svg>
+                            </button>
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">5 semanas</span>
+                            <button type="button" id="jp-week-next" aria-label="Semanas seguintes"
+                                class="w-7 h-7 flex items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 hover:text-natura-green-cerrado hover:border-natura-green-cerrado transition-colors disabled:opacity-30 disabled:pointer-events-none">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="relative w-full h-72"><canvas id="jp-evolution-chart"></canvas></div>
+                    <div id="jp-evolution-legend" class="flex flex-wrap gap-1.5 mt-4"></div>
                 </div>
                 </section>
                 <!-- ============ FIM SEÇÃO: JORNADAS & PAÍSES ============ -->
