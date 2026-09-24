@@ -1894,46 +1894,130 @@
     }
 
     // Badges de Origem da Detecção, reutilizado nos cards estendidos de Jornada/País
-    function buildOrigemBadgesHtml(origemBreakdown) {
+    // Badge "semáforo" de cumprimento de Meta (item 1): usa ícone + cor verde/âmbar, nunca
+    // vermelho/laranja, para não se confundir visualmente com as cores de Severidade (Sev0/Sev1).
+    function buildMetaBadge(isOk, okLabel, nokLabel) {
+        okLabel = okLabel || 'Dentro da Meta';
+        nokLabel = nokLabel || 'Fora da Meta';
+        if (isOk) {
+            return `<span class="inline-flex items-center gap-1 text-[9px] font-bold text-natura-green-cerrado bg-natura-green-cerrado/10 rounded-full px-1.5 py-0.5 whitespace-nowrap">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5 flex-none" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                ${okLabel}
+            </span>`;
+        }
+        return `<span class="inline-flex items-center gap-1 text-[9px] font-bold text-[#8a5a00] bg-natura-yellow-balsamo/25 rounded-full px-1.5 py-0.5 whitespace-nowrap">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5 flex-none" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l6.518 11.598c.75 1.334-.213 2.987-1.742 2.987H3.48c-1.53 0-2.493-1.653-1.743-2.987L8.257 3.1zM11 14a1 1 0 11-2 0 1 1 0 012 0zm-1-2a1 1 0 01-1-1V8a1 1 0 112 0v3a1 1 0 01-1 1z" clip-rule="evenodd"/></svg>
+            ${nokLabel}
+        </span>`;
+    }
+
+    const ORIGEM_COLORS = { 'End-users': '#045473', 'Monitoração': '#1B472A', 'Experiências': '#FF6600' };
+
+    function buildOrigemBadgesHtml(origemBreakdown, base) {
         const breakdown = origemBreakdown || {};
         const keys = Object.keys(breakdown).sort((a, b) => breakdown[b] - breakdown[a]);
         if (!keys.length) return `<span class="text-[9px] text-slate-300 italic">Sem dados</span>`;
-        return keys.map(k => `
+        return keys.map(k => {
+            const count = breakdown[k];
+            const pct = base > 0 ? Math.round((count / base) * 1000) / 10 : 0;
+            return `
             <span class="text-[9px] font-semibold text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-2 py-0.5">
-                ${escapeXml(k)}: <span class="font-extrabold text-slate-700">${breakdown[k]}</span>
+                <span class="inline-block w-1.5 h-1.5 rounded-full mr-1" style="background:${ORIGEM_COLORS[k] || '#94a3b8'}"></span>${escapeXml(k)}: <span class="font-extrabold text-slate-700">${count}</span> <span class="text-slate-400">(${pct}%)</span>
             </span>
-        `).join('');
+        `;
+        }).join('');
     }
 
-    // Bloco Sev0/Sev1 (Volume + MTTR + Aderência OLA) reutilizado nos cards estendidos de Jornada/País
-    function buildSevBreakdownHtml(item) {
+    // Mini gráfico de rosca (Chart.js) com a distribuição de Origem da Detecção, usado nos cards
+    // estendidos de Jornada/País. Instâncias são mantidas num registro próprio para destruir/recriar
+    // corretamente a cada re-render (filtros).
+    const miniDonutCharts = {};
+    function renderMiniDonut(canvasId, origemBreakdown) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        if (miniDonutCharts[canvasId]) miniDonutCharts[canvasId].destroy();
+
+        const breakdown = origemBreakdown || {};
+        const keys = Object.keys(breakdown).sort((a, b) => breakdown[b] - breakdown[a]);
+        if (!keys.length) return;
+
+        miniDonutCharts[canvasId] = new Chart(canvas.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: keys,
+                datasets: [{
+                    data: keys.map(k => breakdown[k]),
+                    backgroundColor: keys.map(k => ORIGEM_COLORS[k] || '#94a3b8'),
+                    borderWidth: 2,
+                    borderColor: '#ffffff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '62%',
+                plugins: {
+                    legend: { display: false },
+                    datalabels: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.label}: ${ctx.raw} (${((ctx.raw / ctx.dataset.data.reduce((a, b) => a + b, 0)) * 100).toFixed(1)}%)`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Bloco Sev0/Sev1 + OLA Geral + Origem da Detecção (com mini-rosca), reutilizado nos cards
+    // estendidos de Jornada e País.
+    function buildSevBreakdownHtml(item, donutCanvasId) {
         const sev0Count = item.sev0Count || 0;
         const sev1Count = item.sev1Count || 0;
         const sev0MTTR = sev0Count > 0 ? item.sev0DurationMin / sev0Count : 0;
         const sev1MTTR = sev1Count > 0 ? item.sev1DurationMin / sev1Count : 0;
         const sev0OLA = sev0Count > 0 ? Math.round((item.sev0DentroOLA / sev0Count) * 1000) / 10 : 0;
         const sev1OLA = sev1Count > 0 ? Math.round((item.sev1DentroOLA / sev1Count) * 1000) / 10 : 0;
-        const sev0OLAColor = sev0OLA >= 70 ? 'text-natura-green-cerrado' : 'text-natura-red-buriti';
-        const sev1OLAColor = sev1OLA >= 80 ? 'text-natura-green-cerrado' : 'text-natura-red-buriti';
+        const sev0Pct = item.count > 0 ? Math.round((sev0Count / item.count) * 1000) / 10 : 0;
+        const sev1Pct = item.count > 0 ? Math.round((sev1Count / item.count) * 1000) / 10 : 0;
+
+        const olaGeralTotal = sev0Count + sev1Count;
+        const olaGeralDentro = (item.sev0DentroOLA || 0) + (item.sev1DentroOLA || 0);
+        const olaGeralPct = olaGeralTotal > 0 ? Math.round((olaGeralDentro / olaGeralTotal) * 1000) / 10 : 0;
+        // Meta Geral: usa a média ponderada das metas de Sev0 (70%) e Sev1 (80%) pela proporção de cada severidade
+        const olaGeralMeta = olaGeralTotal > 0 ? ((sev0Count * 70 + sev1Count * 80) / olaGeralTotal) : 75;
+        const olaGeralOk = olaGeralPct >= olaGeralMeta;
+
+        const origemBase = Object.values(item.origemBreakdown || {}).reduce((a, b) => a + b, 0);
 
         return `
-            <div class="grid grid-cols-2 gap-2 pt-3 mt-3 border-t border-slate-100">
+            <div class="flex items-center justify-between pt-3 mt-3 border-t border-slate-100">
+                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">OLA Geral (Sev0+Sev1)</span>
+                <span class="flex items-center gap-1.5">
+                    <span class="text-xs font-extrabold text-slate-700">${olaGeralTotal > 0 ? olaGeralPct + '%' : '—'}</span>
+                    ${olaGeralTotal > 0 ? buildMetaBadge(olaGeralOk) : ''}
+                </span>
+            </div>
+            <div class="grid grid-cols-2 gap-2 mt-2">
                 <div class="bg-natura-red-buriti/5 rounded-lg p-2">
                     <p class="text-[9px] font-black text-natura-red-buriti uppercase tracking-wider">Sev0</p>
-                    <p class="text-sm font-extrabold text-slate-800 leading-tight">${sev0Count}</p>
+                    <p class="text-sm font-extrabold text-slate-800 leading-tight">${sev0Count} <span class="text-[9px] font-semibold text-slate-400">(${sev0Pct}%)</span></p>
                     <p class="text-[9px] text-slate-400">MTTR ${formatMinutesToHHMM(sev0MTTR)}</p>
-                    <p class="text-[9px] font-bold ${sev0OLAColor}">${sev0Count > 0 ? sev0OLA + '% OLA' : '—'}</p>
+                    <div class="mt-1">${sev0Count > 0 ? `<span class="text-[9px] font-bold text-slate-600 mr-1">${sev0OLA}% OLA</span>${buildMetaBadge(sev0OLA >= 70)}` : '<span class="text-[9px] text-slate-300">—</span>'}</div>
                 </div>
                 <div class="bg-natura-orange/5 rounded-lg p-2">
                     <p class="text-[9px] font-black text-natura-orange uppercase tracking-wider">Sev1</p>
-                    <p class="text-sm font-extrabold text-slate-800 leading-tight">${sev1Count}</p>
+                    <p class="text-sm font-extrabold text-slate-800 leading-tight">${sev1Count} <span class="text-[9px] font-semibold text-slate-400">(${sev1Pct}%)</span></p>
                     <p class="text-[9px] text-slate-400">MTTR ${formatMinutesToHHMM(sev1MTTR)}</p>
-                    <p class="text-[9px] font-bold ${sev1OLAColor}">${sev1Count > 0 ? sev1OLA + '% OLA' : '—'}</p>
+                    <div class="mt-1">${sev1Count > 0 ? `<span class="text-[9px] font-bold text-slate-600 mr-1">${sev1OLA}% OLA</span>${buildMetaBadge(sev1OLA >= 80)}` : '<span class="text-[9px] text-slate-300">—</span>'}</div>
                 </div>
             </div>
             <div class="mt-2 pt-2 border-t border-slate-50">
                 <p class="text-[9px] text-slate-400 uppercase font-bold mb-1.5">Origem da Detecção</p>
-                <div class="flex flex-wrap gap-1">${buildOrigemBadgesHtml(item.origemBreakdown)}</div>
+                <div class="flex items-center gap-3">
+                    <div class="flex-none w-16 h-16 relative"><canvas id="${donutCanvasId}"></canvas></div>
+                    <div class="flex flex-wrap gap-1 flex-1">${buildOrigemBadgesHtml(item.origemBreakdown, origemBase)}</div>
+                </div>
             </div>
         `;
     }
@@ -1956,6 +2040,7 @@
             const item = metrics[key];
             const pct = totalIncidentes > 0 ? Math.round((item.count / totalIncidentes) * 1000) / 10 : 0;
             const avgMin = item.count > 0 ? item.durationMin / item.count : 0;
+            const donutId = `jornada-donut-${key.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
             return `
                 <div class="kpi-card rounded-2xl p-4 border ${mapped.color.replace('bg-', 'border-').split(' ')[0]} bg-white">
@@ -1965,10 +2050,15 @@
                     </div>
                     <p class="text-2xl font-extrabold text-natura-green-cerrado">${item.count}</p>
                     <p class="text-[10px] text-slate-400 mt-1">${pct}% dos Incidentes · MTTR médio ${formatMinutesToHHMM(avgMin)}</p>
-                    ${buildSevBreakdownHtml(item)}
+                    ${buildSevBreakdownHtml(item, donutId)}
                 </div>
             `;
         }).join('');
+
+        keys.forEach(key => {
+            const donutId = `jornada-donut-${key.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            renderMiniDonut(donutId, metrics[key].origemBreakdown);
+        });
     }
 
     // Cards de Incidentes por País Impactado, com bandeiras
@@ -1986,18 +2076,39 @@
         gridEl.innerHTML = keys.map(code => {
             const item = metrics[code];
             const pct = totalIncidentes > 0 ? Math.round((item.count / totalIncidentes) * 1000) / 10 : 0;
+            const donutId = `pais-donut-${code.replace(/[^a-zA-Z0-9]/g, '_')}`;
             return `
-                <div class="kpi-card rounded-2xl p-4 border border-slate-200 bg-white">
+                <div class="kpi-card rounded-2xl p-4 border border-slate-200 bg-white flex-none w-72 snap-start">
                     <div class="flex items-center gap-2 mb-2">
                         ${buildFlagSvg(code, 28, 20)}
                         <p class="text-xs font-bold text-slate-600">${code}</p>
                     </div>
                     <p class="text-2xl font-extrabold text-natura-green-cerrado leading-none">${item.count}</p>
                     <p class="text-[10px] text-slate-400 mt-1">${pct}% dos Incidentes</p>
-                    ${buildSevBreakdownHtml(item)}
+                    ${buildSevBreakdownHtml(item, donutId)}
                 </div>
             `;
         }).join('');
+
+        keys.forEach(code => {
+            const donutId = `pais-donut-${code.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            renderMiniDonut(donutId, metrics[code].origemBreakdown);
+        });
+
+        setupPaisCarouselNav();
+    }
+
+    // Item 6: Cards de País percorridos lateralmente (carrossel), com setas de navegação
+    function setupPaisCarouselNav() {
+        const track = document.getElementById('pais-cards-grid');
+        const prevBtn = document.getElementById('pais-carousel-prev');
+        const nextBtn = document.getElementById('pais-carousel-next');
+        if (!track || !prevBtn || !nextBtn || track.dataset.navWired) return;
+        track.dataset.navWired = 'true';
+
+        const scrollAmount = () => track.clientWidth * 0.9;
+        prevBtn.addEventListener('click', () => track.scrollBy({ left: -scrollAmount(), behavior: 'smooth' }));
+        nextBtn.addEventListener('click', () => track.scrollBy({ left: scrollAmount(), behavior: 'smooth' }));
     }
 
     // Clique no card de Visão Executiva "Incidentes por Mudança" -> abre a seção/análise detalhada
@@ -3111,7 +3222,7 @@
         'AR': { type: 'horizontal', colors: ['#74ACDF', '#FFFFFF', '#74ACDF'] },
         'SV': { type: 'horizontal', colors: ['#0047AB', '#FFFFFF', '#0047AB'] },
         'HN': { type: 'horizontal', colors: ['#0073CF', '#FFFFFF', '#0073CF'] },
-        'DO': { type: 'quadrants', colors: ['#002D62', '#CE1126', '#CE1126', '#002D62'] },
+        'DO': { type: 'dominican-republic' },
         'GT': { type: 'vertical', colors: ['#4997D0', '#FFFFFF', '#4997D0'] },
         'PA': { type: 'quadrants', colors: ['#FFFFFF', '#DA121A', '#0033A0', '#FFFFFF'] },
         'NI': { type: 'horizontal', colors: ['#0067C6', '#FFFFFF', '#0067C6'] },
@@ -3146,6 +3257,15 @@
             inner += `<rect x="${w / 2}" y="0" width="${w / 2}" height="${h / 2}" fill="${spec.colors[1]}"/>`;
             inner += `<rect x="0" y="${h / 2}" width="${w / 2}" height="${h / 2}" fill="${spec.colors[2]}"/>`;
             inner += `<rect x="${w / 2}" y="${h / 2}" width="${w / 2}" height="${h / 2}" fill="${spec.colors[3]}"/>`;
+        } else if (spec.type === 'dominican-republic') {
+            // Cruz branca dividindo a bandeira em 4 quadrantes: azul (TL/BR) e vermelho (TR/BL)
+            const crossW = Math.max(1.5, h * 0.18);
+            inner += `<rect x="0" y="0" width="${w / 2 - crossW / 2}" height="${h / 2 - crossW / 2}" fill="#002D62"/>`;
+            inner += `<rect x="${w / 2 + crossW / 2}" y="0" width="${w / 2 - crossW / 2}" height="${h / 2 - crossW / 2}" fill="#CE1126"/>`;
+            inner += `<rect x="0" y="${h / 2 + crossW / 2}" width="${w / 2 - crossW / 2}" height="${h / 2 - crossW / 2}" fill="#CE1126"/>`;
+            inner += `<rect x="${w / 2 + crossW / 2}" y="${h / 2 + crossW / 2}" width="${w / 2 - crossW / 2}" height="${h / 2 - crossW / 2}" fill="#002D62"/>`;
+            inner += `<rect x="${w / 2 - crossW / 2}" y="0" width="${crossW}" height="${h}" fill="#FFFFFF"/>`;
+            inner += `<rect x="0" y="${h / 2 - crossW / 2}" width="${w}" height="${crossW}" fill="#FFFFFF"/>`;
         } else if (spec.type === 'chile') {
             inner += `<rect x="0" y="0" width="${w}" height="${h / 2}" fill="#FFFFFF"/>`;
             inner += `<rect x="0" y="${h / 2}" width="${w}" height="${h / 2}" fill="#D52B1E"/>`;

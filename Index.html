@@ -692,8 +692,22 @@
                             <span class="tooltip-bubble">Abrangência geográfica dos Incidentes (coluna J), por código
                                 de país. Um Incidente pode impactar mais de um país simultaneamente.</span>
                         </span>
+                        <div class="ml-auto flex items-center gap-1.5">
+                            <button type="button" id="pais-carousel-prev" aria-label="Anterior"
+                                class="w-7 h-7 flex items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 hover:text-natura-green-cerrado hover:border-natura-green-cerrado transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                                </svg>
+                            </button>
+                            <button type="button" id="pais-carousel-next" aria-label="Próximo"
+                                class="w-7 h-7 flex items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 hover:text-natura-green-cerrado hover:border-natura-green-cerrado transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
-                    <div id="pais-cards-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+                    <div id="pais-cards-grid" class="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2 no-scrollbar scroll-smooth"></div>
                 </div>
                 </section>
                 <!-- ============ FIM SEÇÃO: JORNADAS & PAÍSES ============ -->
