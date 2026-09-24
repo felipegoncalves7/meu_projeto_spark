@@ -56,6 +56,41 @@ function buildChangeMap(ss) {
   return map;
 }
 
+/**
+ * Monta um mapa Grupo -> { executed, failed } a partir da aba Change_Exe (todas as SMs executadas,
+ * não só as que causaram Incidentes), usado para calcular a Taxa de Falha de cada Grupo nos cards
+ * de Top Grupos (item 5). Detecta as colunas de Grupo Responsável e de resultado da execução pelo
+ * NOME do cabeçalho (linha 1), em vez de índice fixo, já que o layout exato desta aba não foi
+ * documentado ainda — evita quebrar caso as colunas mudem de posição.
+ */
+function buildChangeExeGroupStats(ss) {
+  const stats = {};
+  const sheet = ss.getSheetByName('Change_Exe');
+  if (!sheet) return stats;
+
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) return stats;
+
+  const header = values[0].map(h => String(h || '').trim().toLowerCase());
+  const findCol = (patterns) => header.findIndex(h => patterns.some(p => p.test(h)));
+
+  const groupCol = findCol([/assignment.*group/, /grupo.*respons/, /^grupo$/]);
+  const outcomeCol = findCol([/close.*code/, /result/, /resultado/, /outcome/, /status.*execu/]);
+  if (groupCol === -1 || outcomeCol === -1) return stats; // layout não reconhecido: sem dados de falha
+
+  const isFailure = (v) => /unsuccessful|fail|falh|insucesso|reprovad/i.test(String(v || ''));
+
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const group = String(row[groupCol] || '').trim();
+    if (!group) continue;
+    if (!stats[group]) stats[group] = { executed: 0, failed: 0 };
+    stats[group].executed++;
+    if (isFailure(row[outcomeCol])) stats[group].failed++;
+  }
+  return stats;
+}
+
 // Mapeamento da aba Major_ServiceNow (Range A1:AB)
 const MSN_COL_NUMBER = 1;    // B
 const MSN_COL_PRIORITY = 10; // K
@@ -820,6 +855,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
     if (end) end.setHours(23, 59, 59, 999);
 
     const changeMap = buildChangeMap(ss);
+    const changeExeGroupStats = buildChangeExeGroupStats(ss);
     const priorityMap = buildPriorityMap(ss);
     const callerMap = buildCallerMap(ss);
     const serviceNowInfoMap = buildServiceNowInfoMap(ss);
@@ -862,7 +898,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         },
         origemDeteccaoBase: 0,
         // Top Grupos/Serviços Responsáveis por Incidentes causados por Mudança (com detalhe por Tecnologia, p/ Sankey)
-        gruposDeploy: {},       // key: serviceOffering -> { count, tecnologias: {tech: count} }
+        gruposDeploy: {},       // key: grupo+'||'+serviceOffering -> { grupo, serviceOffering, count, tecnologias: {tech: count} }
         gruposTradicional: {},  // key: grupo + '||' + chgService -> { grupo, chgService, count, tecnologias: {tech: count} }
         // Filtros disponíveis (para popular os selects de Tecnologia/Ofensor)
         tecnologiasDisponiveis: new Set(),
@@ -1142,11 +1178,15 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             const numSm = String(row[COL_SM_NUMBER]).trim();
             const chg = numSm ? changeMap[numSm] : null;
 
-            // Top Grupos/Serviços Responsáveis (contagem por Tecnologia, usada no ranking e no Diagrama de Sankey)
+            // Top Grupos/Serviços Responsáveis (contagem por Tecnologia, usada no ranking e no Diagrama de Sankey).
+            // Deploy também é agrupado por Grupo Ofensor (assignmentGroup), igual à Tradicional, para o
+            // estágio Grupo -> Service Offering -> Tecnologia do Sankey (item 4).
             if (chg) {
                 if (isDeploy) {
-                    const key = chg.serviceOffering || 'N/A';
-                    if (!metrics.gruposDeploy[key]) metrics.gruposDeploy[key] = { count: 0, tecnologias: {} };
+                    const key = chg.assignmentGroup + '||' + chg.serviceOffering;
+                    if (!metrics.gruposDeploy[key]) {
+                        metrics.gruposDeploy[key] = { grupo: chg.assignmentGroup, serviceOffering: chg.serviceOffering, count: 0, tecnologias: {} };
+                    }
                     metrics.gruposDeploy[key].count++;
                     metrics.gruposDeploy[key].tecnologias[techImpactada] = (metrics.gruposDeploy[key].tecnologias[techImpactada] || 0) + 1;
                 } else {
@@ -1322,49 +1362,66 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
     const aderenciaSevPrioSev0 = metrics.sev0PrioBase > 0 ? (metrics.sev0PrioAderente / metrics.sev0PrioBase) * 100 : null;
     const aderenciaSevPrioSev1 = metrics.sev1PrioBase > 0 ? (metrics.sev1PrioAderente / metrics.sev1PrioBase) * 100 : null;
 
-    // Top Grupos Responsáveis: converte contagens por Tecnologia em arrays e ordena por Quantidade (desc)
-    const gruposDeployList = Object.keys(metrics.gruposDeploy).map(key => ({
-        serviceOffering: key,
-        count: metrics.gruposDeploy[key].count,
-        tecnologias: Object.keys(metrics.gruposDeploy[key].tecnologias)
-    })).sort((a, b) => b.count - a.count);
-
-    const gruposTradicionalList = Object.keys(metrics.gruposTradicional).map(key => {
-        const g = metrics.gruposTradicional[key];
+    // Top Grupos Responsáveis (item 5): ranking agregado por GRUPO apenas (independente de terem sido
+    // em Service Offerings/CHG Services diferentes), com a Taxa de Falha do grupo (SMs executadas vs
+    // SMs que falharam, via Change_Exe) anexada a cada card.
+    const attachFailureRate = (grupo) => {
+        const stats = changeExeGroupStats[grupo];
+        if (!stats || stats.executed === 0) return { smsExecutadas: null, smsFalhas: null, taxaFalhaPct: null };
         return {
-            grupo: g.grupo,
-            chgService: g.chgService,
-            count: g.count,
-            tecnologias: Object.keys(g.tecnologias)
+            smsExecutadas: stats.executed,
+            smsFalhas: stats.failed,
+            taxaFalhaPct: Math.round((stats.failed / stats.executed) * 1000) / 10
         };
-    }).sort((a, b) => b.count - a.count);
+    };
 
-    // Diagrama de Sankey: Deploy é 2 estágios (Service Offering -> Tecnologia).
-    const sankeyDeploy = [];
-    Object.keys(metrics.gruposDeploy).forEach(key => {
-        const techs = metrics.gruposDeploy[key].tecnologias;
-        Object.keys(techs).forEach(tech => {
-            sankeyDeploy.push({ from: key, to: tech, flow: techs[tech] });
+    const buildGroupRanking = (gruposObj) => {
+        const byGrupo = {};
+        Object.keys(gruposObj).forEach(key => {
+            const g = gruposObj[key];
+            if (!byGrupo[g.grupo]) byGrupo[g.grupo] = { grupo: g.grupo, count: 0, tecnologias: {} };
+            byGrupo[g.grupo].count += g.count;
+            Object.keys(g.tecnologias).forEach(tech => {
+                byGrupo[g.grupo].tecnologias[tech] = (byGrupo[g.grupo].tecnologias[tech] || 0) + g.tecnologias[tech];
+            });
         });
-    });
+        return Object.keys(byGrupo).map(grupo => {
+            const g = byGrupo[grupo];
+            return Object.assign({
+                grupo: g.grupo,
+                count: g.count,
+                tecnologias: Object.keys(g.tecnologias)
+            }, attachFailureRate(g.grupo));
+        }).sort((a, b) => b.count - a.count);
+    };
 
-    // Tradicional é 3 estágios (Grupo -> CHG Service -> Tecnologia), agregando por par em cada estágio.
-    const grupoServiceCounts = {};
-    const serviceTechCounts = {};
-    Object.keys(metrics.gruposTradicional).forEach(key => {
-        const g = metrics.gruposTradicional[key];
-        const stage1Key = g.grupo + '||' + g.chgService;
-        if (!grupoServiceCounts[stage1Key]) grupoServiceCounts[stage1Key] = { from: g.grupo, to: g.chgService, flow: 0 };
-        grupoServiceCounts[stage1Key].flow += g.count;
+    const gruposDeployList = buildGroupRanking(metrics.gruposDeploy);
+    const gruposTradicionalList = buildGroupRanking(metrics.gruposTradicional);
 
-        Object.keys(g.tecnologias).forEach(tech => {
-            const stage2Key = g.chgService + '||' + tech;
-            if (!serviceTechCounts[stage2Key]) serviceTechCounts[stage2Key] = { from: g.chgService, to: tech, flow: 0 };
-            serviceTechCounts[stage2Key].flow += g.tecnologias[tech];
+    // Diagrama de Sankey: Deploy e Tradicional são ambos 3 estágios (Grupo -> Service Offering/CHG
+    // Service -> Tecnologia), agregando por par em cada estágio.
+    const buildSankeyStages = (gruposObj, serviceKeyName) => {
+        const stage1Counts = {};
+        const stage2Counts = {};
+        Object.keys(gruposObj).forEach(key => {
+            const g = gruposObj[key];
+            const serviceVal = g[serviceKeyName];
+            const stage1Key = g.grupo + '||' + serviceVal;
+            if (!stage1Counts[stage1Key]) stage1Counts[stage1Key] = { from: g.grupo, to: serviceVal, flow: 0 };
+            stage1Counts[stage1Key].flow += g.count;
+
+            Object.keys(g.tecnologias).forEach(tech => {
+                const stage2Key = serviceVal + '||' + tech;
+                if (!stage2Counts[stage2Key]) stage2Counts[stage2Key] = { from: serviceVal, to: tech, flow: 0 };
+                stage2Counts[stage2Key].flow += g.tecnologias[tech];
+            });
         });
-    });
-    const sankeyTradicional = Object.keys(grupoServiceCounts).map(k => grupoServiceCounts[k])
-        .concat(Object.keys(serviceTechCounts).map(k => serviceTechCounts[k]));
+        return Object.keys(stage1Counts).map(k => stage1Counts[k])
+            .concat(Object.keys(stage2Counts).map(k => stage2Counts[k]));
+    };
+
+    const sankeyDeploy = buildSankeyStages(metrics.gruposDeploy, 'serviceOffering');
+    const sankeyTradicional = buildSankeyStages(metrics.gruposTradicional, 'chgService');
 
     // Origem da Detecção: formata contagem + MTTR por origem, incluindo o detalhamento por
     // Severidade/OLA e o ranking de Caller bruto (usado no pop-up de drill-down dos cards)
