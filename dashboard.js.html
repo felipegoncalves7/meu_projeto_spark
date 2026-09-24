@@ -84,6 +84,7 @@
             // Página única: Incidentes e Problemas ficam visíveis ao mesmo tempo, então ambos recarregam
             loadFilteredData();
             loadProblemsTab();
+            loadQualidadeMudancaData();
         });
 
         // Ranking Search Handler
@@ -1292,15 +1293,15 @@
         });
     }
 
-    // Qualidade de RCA / Plano de Ação / Governança de Testes (Manual_Info): não depende dos filtros
-    // de Ano/Período, então é carregada uma única vez.
+    // Qualidade de RCA / Plano de Ação / Governança de Testes (Manual_Info): escopada ao Ano
+    // selecionado (cada linha é checada contra MajorIncidentes{ano}), então recarrega a cada troca de Ano.
     function loadQualidadeMudancaData() {
         google.script.run
             .withSuccessHandler(renderQualidadeMudancaData)
             .withFailureHandler((e) => {
                 logDebug("getQualidadeMudancaData FAILED: " + e.message);
             })
-            .getQualidadeMudancaData();
+            .getQualidadeMudancaData(CURRENT_FILTERS.year);
     }
 
     // Config de quais métricas de qualidade fazem sentido em cada Universo (nunca mistura perguntas
@@ -1340,6 +1341,22 @@
             return;
         }
 
+        // Item 8: alterna entre o conteúdo normal e o aviso de "dados em apuração" quando o ano
+        // selecionado ainda não tem Qualidade de RCA registrada na aba Manual_Info.
+        const toggleNotice = (noticeId, contentId, show) => {
+            const noticeEl = document.getElementById(noticeId);
+            const contentEl = document.getElementById(contentId);
+            if (noticeEl) noticeEl.classList.toggle('hidden', !show);
+            if (contentEl) contentEl.classList.toggle('hidden', show);
+        };
+        const hasData = data.hasDataForYear !== false;
+        toggleNotice('qm-notice-geral', 'qm-content-geral', !hasData);
+        toggleNotice('qm-notice-mudancas', 'qm-content-mudancas', !hasData);
+        if (!hasData) {
+            QM_ITEM_REGISTRY = {};
+            return;
+        }
+
         QM_ITEM_REGISTRY = {};
         qmRegistryCounter = 0;
 
@@ -1349,6 +1366,18 @@
 
             const nEl = document.getElementById(QM_N_ELEMENT_ID[universoKey]);
             if (nEl) nEl.textContent = block.total || 0;
+
+            // Item 7: deixa claro que os percentuais de Qualidade são apurados sobre os Problemas já
+            // avaliados (RCA preenchida), não sobre 100% dos Incidentes do Universo.
+            const captionEl = document.getElementById(`qm-caption-${universoKey}`);
+            if (captionEl) {
+                const totalProblemas = block.totalProblemas || 0;
+                const rcaBase = block.qualidadeRcaBase || 0;
+                const coveragePct = totalProblemas > 0 ? Math.round((rcaBase / totalProblemas) * 1000) / 10 : 0;
+                captionEl.textContent = totalProblemas > 0
+                    ? `Dados apurados de ${rcaBase} de ${totalProblemas} problema(s) já avaliado(s) (${coveragePct}%). Os demais seguem em RCA/Implementação.`
+                    : 'Nenhum problema identificado neste Universo para o ano selecionado.';
+            }
 
             renderQmRankedList(`qm-causaraiz-${universoKey}`, block.causaRaiz || [], universoKey, 'causaRaiz');
             renderQmRankedList(`qm-processo-${universoKey}`, block.processoOrigem || [], universoKey, 'processoOrigem');

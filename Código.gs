@@ -180,11 +180,29 @@ const MI_TRAD_PROBLEMA = 18;   // S
  * Células vazias significam que o Problema segue em aberto ou a análise não foi concluída,
  * e são excluídas do denominador de cada percentual (mesma lógica de Aderência OLA).
  */
-function getQualidadeMudancaData() {
+function getQualidadeMudancaData(year) {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sheet = ss.getSheetByName('Manual_Info');
     if (!sheet) return { error: "Aba 'Manual_Info' não encontrada." };
+
+    // Manual_Info não tem coluna própria de Ano: cada linha é escopada ao ano filtrado verificando se o
+    // Incidente (coluna de ID de cada bloco) existe na aba MajorIncidentes{ano} correspondente.
+    year = parseInt(year || new Date().getFullYear(), 10);
+    const targetSheetName = `MajorIncidentes${year}`;
+    const yearSheet = ss.getSheetByName(targetSheetName);
+    const idSetForYear = new Set();
+    if (yearSheet) {
+      const yearValues = yearSheet.getDataRange().getValues();
+      for (let i = 1; i < yearValues.length; i++) {
+        const ticketId = String(yearValues[i][0] || '').trim();
+        if (ticketId) idSetForYear.add(ticketId);
+      }
+    }
+    // Se a aba do ano não existe ou está vazia, ainda não há dados apurados para esse ano.
+    if (idSetForYear.size === 0) {
+      return { hasDataForYear: false, year: year };
+    }
 
     const values = sheet.getDataRange().getValues();
     // Linhas 1 e 2 são títulos/subtítulos dos 3 blocos; os dados começam de fato na linha 3.
@@ -216,6 +234,7 @@ function getQualidadeMudancaData() {
       rows.forEach(row => {
         if (!isFilled(row[cols.id])) return;
         const id = String(row[cols.id]).trim();
+        if (!idSetForYear.has(id)) return; // fora do ano filtrado
         total++;
 
         if (cols.ambienteAdequado !== undefined && isFilled(row[cols.ambienteAdequado])) {
@@ -265,7 +284,7 @@ function getQualidadeMudancaData() {
       });
 
       return {
-        total, rcaFilled, rcaBoa, planoFilled, planoBoa,
+        total, totalProblemas: Object.keys(problemaGroups).length, rcaFilled, rcaBoa, planoFilled, planoBoa,
         ambienteFilled: perRow.ambienteFilled, ambienteAdequado: perRow.ambienteAdequado,
         estrategiaFilled: perRow.estrategiaFilled, estrategiaAdequada: perRow.estrategiaAdequada,
         rollbackFilled: perRow.rollbackFilled, rollbackBoa: perRow.rollbackBoa,
@@ -307,7 +326,7 @@ function getQualidadeMudancaData() {
     const pct = (n, d) => d > 0 ? Math.round((n / d) * 1000) / 10 : null;
 
     const formatBlock = (b) => {
-      const out = { total: b.total };
+      const out = { total: b.total, totalProblemas: b.totalProblemas };
       out.qualidadeRcaPct = pct(b.rcaBoa, b.rcaFilled); out.qualidadeRcaBase = b.rcaFilled;
       out.qualidadePlanoAcaoPct = pct(b.planoBoa, b.planoFilled); out.qualidadePlanoAcaoBase = b.planoFilled;
       if (b.hasAmbiente) { out.ambienteAdequadoPct = pct(b.ambienteAdequado, b.ambienteFilled); out.ambienteAdequadoBase = b.ambienteFilled; }
@@ -320,7 +339,13 @@ function getQualidadeMudancaData() {
       return out;
     };
 
+    // "Apurado" = pelo menos 1 Problema com Qualidade de RCA/Plano de Ação preenchida neste ano,
+    // em qualquer um dos 3 Universos. Sem isso, os % seriam calculados sobre uma base vazia (0/0).
+    const hasDataForYear = (geral.rcaFilled + geral.planoFilled + deploy.rcaFilled + deploy.planoFilled + tradicional.rcaFilled + tradicional.planoFilled) > 0;
+
     return {
+      hasDataForYear: hasDataForYear,
+      year: year,
       geral: formatBlock(geral),
       deploy: formatBlock(deploy),
       tradicional: formatBlock(tradicional)

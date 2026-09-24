@@ -1220,7 +1220,11 @@
                     <div class="flex items-center gap-2 mb-3">
                         <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Qualidade de RCA — Deploy &amp; Tradicional</h2>
                     </div>
-                    <div class="space-y-6">
+                    <div id="qm-notice-mudancas" class="hidden bg-natura-yellow-balsamo/10 border border-natura-yellow-balsamo/40 rounded-2xl p-6 text-center">
+                        <p class="text-sm font-bold text-slate-600">Dados em apuração para este ano</p>
+                        <p class="text-xs text-slate-400 mt-1">A Qualidade de RCA ainda não foi registrada para os Incidentes deste ano na planilha.</p>
+                    </div>
+                    <div id="qm-content-mudancas" class="space-y-6">
                         <!-- Universo: Deploy -->
                         <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                             <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
@@ -1233,11 +1237,12 @@
                                 <span class="text-[10px] text-slate-400 font-semibold">n=<span
                                         id="qm-deploy-n">0</span></span>
                             </div>
+                            <p id="qm-caption-deploy" class="text-[10px] text-slate-400 italic mb-3"></p>
                             <div id="qm-metrics-deploy" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5"></div>
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        Causas Raiz mais Recorrentes</h4>
+                                        Findings de Causa mais Recorrentes</h4>
                                     <div id="qm-causaraiz-deploy" class="space-y-1.5"></div>
                                 </div>
                                 <div>
@@ -1260,11 +1265,12 @@
                                 <span class="text-[10px] text-slate-400 font-semibold">n=<span
                                         id="qm-trad-n">0</span></span>
                             </div>
+                            <p id="qm-caption-tradicional" class="text-[10px] text-slate-400 italic mb-3"></p>
                             <div id="qm-metrics-tradicional" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5"></div>
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        Causas Raiz mais Recorrentes</h4>
+                                        Findings de Causa mais Recorrentes</h4>
                                     <div id="qm-causaraiz-tradicional" class="space-y-1.5"></div>
                                 </div>
                                 <div>
@@ -1617,18 +1623,20 @@
                                     d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                             <span class="tooltip-bubble">Dados de avaliação manual feita pela equipe (aba
-                                Manual_Info), consolidados para todos os registros disponíveis (não filtrados por
-                                Ano/Período). "—" indica que o Problema ainda está em aberto ou a análise não foi
-                                concluída, e é excluído do cálculo do percentual (nunca contado como 0%). Cada
-                                Universo só exibe as perguntas que fazem sentido para ele.</span>
+                                Manual_Info), escopados ao Ano selecionado. "—" indica que o Problema ainda está em
+                                aberto ou a análise não foi concluída, e é excluído do cálculo do percentual (nunca
+                                contado como 0%). Cada Universo só exibe as perguntas que fazem sentido para ele.</span>
                         </span>
                     </div>
-                    <p class="text-[10px] text-slate-400 italic mb-4">Base de dados em construção: cobre atualmente
-                        os incidentes de 2026. O histórico de 2025 será incluído futuramente na mesma aba, e os
-                        percentuais abaixo serão atualizados automaticamente assim que os dados forem preenchidos.
-                        Clique numa Causa Raiz ou Processo de Origem para ver os incidentes por trás do número.</p>
+                    <p class="text-[10px] text-slate-400 italic mb-1">Clique num Finding de
+                        Causa ou Processo de Origem para ver os incidentes por trás do número.</p>
+                    <p id="qm-caption-geral" class="text-[10px] text-slate-400 italic mb-4"></p>
 
-                    <div class="space-y-6">
+                    <div id="qm-notice-geral" class="hidden bg-natura-yellow-balsamo/10 border border-natura-yellow-balsamo/40 rounded-2xl p-6 text-center">
+                        <p class="text-sm font-bold text-slate-600">Dados em apuração para este ano</p>
+                        <p class="text-xs text-slate-400 mt-1">A Qualidade de RCA ainda não foi registrada para os Incidentes deste ano na planilha.</p>
+                    </div>
+                    <div id="qm-content-geral" class="space-y-6">
                         <!-- Universo: Geral -->
                         <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                             <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
@@ -1645,7 +1653,7 @@
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        Causas Raiz mais Recorrentes</h4>
+                                        Findings de Causa mais Recorrentes</h4>
                                     <div id="qm-causaraiz-geral" class="space-y-1.5"></div>
                                 </div>
                                 <div>
