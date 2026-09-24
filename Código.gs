@@ -456,6 +456,129 @@ function getIncidentsByIds(ids) {
   }
 }
 
+// Mapeamento da aba Major_ServiceNow: colunas de referência cruzada (Problem, Change Request)
+const MSN_COL_PROBLEM = 5;         // F
+const MSN_COL_CHANGE_REQUEST = 7;  // H
+
+// Mapeamento da aba Problem_ServiceNow (Range A1:P)
+const PSN_COL_NUMBER = 1;             // B
+const PSN_COL_STATEMENT = 4;          // E
+const PSN_COL_PRIORITY = 6;           // G
+const PSN_COL_STATE = 7;              // H
+const PSN_COL_ASSIGNMENT_GROUP = 8;   // I
+
+// Mapeamento da aba PTASK_IMP / PTASK_RCA (Range A1:W, RCA tem X/Y extras)
+const PTASK_COL_NUMBER = 1;           // B
+const PTASK_COL_PROBLEM = 2;          // C
+const PTASK_COL_SHORT_DESC = 4;       // E
+const PTASK_COL_TYPE = 6;             // G
+const PTASK_COL_STATE = 8;            // H
+const PTASK_COL_ASSIGNMENT_GROUP = 10; // K
+
+/**
+ * Drill-down completo (item 6): para cada Incidente, além dos dados já usados nos cards, busca o
+ * contexto da Mudança que o causou (Change_MI), do Problema associado (Problem_ServiceNow) e das
+ * tarefas desse Problema (PTASK_RCA/PTASK_IMP), cada um com seu Grupo Responsável. Usado no pop-up
+ * de Qualidade de RCA ao clicar num Finding de Causa ou Processo de Origem.
+ */
+function getIncidentFullContext(ids) {
+  try {
+    const base = getIncidentsByIds(ids);
+    if (base.error) return base;
+    if (!base.length) return base;
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+    // Referências cruzadas (Problem / Change Request) por Incidente, a partir de Major_ServiceNow
+    const refMap = {};
+    const msnSheet = ss.getSheetByName('Major_ServiceNow');
+    if (msnSheet) {
+      const msnValues = msnSheet.getDataRange().getValues();
+      for (let i = 1; i < msnValues.length; i++) {
+        const number = String(msnValues[i][MSN_COL_NUMBER] || '').trim();
+        if (!number) continue;
+        refMap[number] = {
+          problem: String(msnValues[i][MSN_COL_PROBLEM] || '').trim(),
+          changeRequest: String(msnValues[i][MSN_COL_CHANGE_REQUEST] || '').trim()
+        };
+      }
+    }
+
+    // Mudança (Change_MI) com mais detalhe do que buildChangeMap (usado no cálculo de MTTD)
+    const changeDetailMap = {};
+    const chgSheet = ss.getSheetByName('Change_MI');
+    if (chgSheet) {
+      const chgValues = chgSheet.getDataRange().getValues();
+      for (let i = 1; i < chgValues.length; i++) {
+        const number = String(chgValues[i][CHG_COL_NUMBER] || '').trim();
+        if (!number) continue;
+        changeDetailMap[number] = {
+          number: number,
+          shortDescription: String(chgValues[i][2] || '').trim() || 'N/A',
+          type: String(chgValues[i][4] || '').trim() || 'N/A',
+          state: String(chgValues[i][6] || '').trim() || 'N/A',
+          service: String(chgValues[i][CHG_COL_SERVICE] || '').trim() || 'N/A',
+          serviceOffering: String(chgValues[i][CHG_COL_SERVICE_OFFERING] || '').trim() || 'N/A',
+          assignmentGroup: String(chgValues[i][CHG_COL_ASSIGNMENT_GROUP] || '').trim() || 'N/A'
+        };
+      }
+    }
+
+    // Problema (Problem_ServiceNow)
+    const problemDetailMap = {};
+    const psnSheet = ss.getSheetByName('Problem_ServiceNow');
+    if (psnSheet) {
+      const psnValues = psnSheet.getDataRange().getValues();
+      for (let i = 1; i < psnValues.length; i++) {
+        const number = String(psnValues[i][PSN_COL_NUMBER] || '').trim();
+        if (!number) continue;
+        problemDetailMap[number] = {
+          number: number,
+          statement: String(psnValues[i][PSN_COL_STATEMENT] || '').trim() || 'N/A',
+          priority: String(psnValues[i][PSN_COL_PRIORITY] || '').trim() || 'N/A',
+          state: String(psnValues[i][PSN_COL_STATE] || '').trim() || 'N/A',
+          assignmentGroup: String(psnValues[i][PSN_COL_ASSIGNMENT_GROUP] || '').trim() || 'N/A'
+        };
+      }
+    }
+
+    // Tarefas do Problema (PTASK_RCA + PTASK_IMP), agrupadas por número do Problema
+    const tasksByProblem = {};
+    const addTasksFromSheet = (sheetName, taskType) => {
+      const sheet = ss.getSheetByName(sheetName);
+      if (!sheet) return;
+      const values = sheet.getDataRange().getValues();
+      for (let i = 1; i < values.length; i++) {
+        const row = values[i];
+        const problemNumber = String(row[PTASK_COL_PROBLEM] || '').trim();
+        if (!problemNumber) continue;
+        if (!tasksByProblem[problemNumber]) tasksByProblem[problemNumber] = [];
+        tasksByProblem[problemNumber].push({
+          number: String(row[PTASK_COL_NUMBER] || '').trim(),
+          type: taskType,
+          shortDescription: String(row[PTASK_COL_SHORT_DESC] || '').trim() || 'N/A',
+          taskType: String(row[PTASK_COL_TYPE] || '').trim() || 'N/A',
+          state: String(row[PTASK_COL_STATE] || '').trim() || 'N/A',
+          assignmentGroup: String(row[PTASK_COL_ASSIGNMENT_GROUP] || '').trim() || 'N/A'
+        });
+      }
+    };
+    addTasksFromSheet('PTASK_RCA', 'RCA');
+    addTasksFromSheet('PTASK_IMP', 'Implementação');
+
+    base.forEach(inc => {
+      const ref = refMap[inc.id] || {};
+      inc.changeInfo = ref.changeRequest ? (changeDetailMap[ref.changeRequest] || null) : null;
+      inc.problemInfo = ref.problem ? (problemDetailMap[ref.problem] || null) : null;
+      inc.problemTasks = ref.problem ? (tasksByProblem[ref.problem] || []) : [];
+    });
+
+    return base;
+  } catch (e) {
+    return { error: e.toString() };
+  }
+}
+
 /**
  * Constrói um mapa { ticketId -> severidade ('Sev0'/'Sev1'/'Outro') } varrendo todas as abas
  * MajorIncidentes{ano} disponíveis. Usado para descobrir a Severidade de um Problema via o(s)

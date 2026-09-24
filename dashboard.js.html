@@ -1506,8 +1506,69 @@
                         <p class="text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100 leading-relaxed text-xs">${inc.solucao}</p>
                     </div>
                 </div>
+                ${buildIncidentFullContextHtml(inc)}
             </div>
         `;
+    }
+
+    // Item 6: seções extras de contexto (Mudança / Problema / Tarefas do Problema, cada uma com seu
+    // Grupo Responsável), presentes apenas quando o card vem de getIncidentFullContext (pop-up de
+    // Qualidade de RCA). Nos demais modais (que usam getIncidentsByIds simples) essas seções não existem.
+    function buildIncidentFullContextHtml(inc) {
+        if (!inc.changeInfo && !inc.problemInfo && (!inc.problemTasks || !inc.problemTasks.length)) return '';
+
+        let html = `<div class="mt-4 pt-4 border-t border-slate-100 space-y-3">`;
+
+        if (inc.changeInfo) {
+            const c = inc.changeInfo;
+            html += `
+                <div class="bg-natura-orange/5 border border-natura-orange/20 rounded-lg p-3">
+                    <p class="text-[10px] font-bold text-natura-orange uppercase tracking-wider mb-1">Mudança: ${escapeXml(c.number)}</p>
+                    <p class="text-xs text-slate-700 font-medium">${escapeXml(c.shortDescription)}</p>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2 text-[10px] text-slate-500">
+                        <span><span class="font-bold text-slate-600">Tipo:</span> ${escapeXml(c.type)}</span>
+                        <span><span class="font-bold text-slate-600">Estado:</span> ${escapeXml(c.state)}</span>
+                        <span><span class="font-bold text-slate-600">Service:</span> ${escapeXml(c.service)}</span>
+                        <span><span class="font-bold text-slate-600">Grupo:</span> ${escapeXml(c.assignmentGroup)}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        if (inc.problemInfo) {
+            const p = inc.problemInfo;
+            html += `
+                <div class="bg-natura-blue-profundo/5 border border-natura-blue-profundo/20 rounded-lg p-3">
+                    <p class="text-[10px] font-bold text-natura-blue-profundo uppercase tracking-wider mb-1">Problema: ${escapeXml(p.number)}</p>
+                    <p class="text-xs text-slate-700 font-medium">${escapeXml(p.statement)}</p>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2 text-[10px] text-slate-500">
+                        <span><span class="font-bold text-slate-600">Prioridade:</span> ${escapeXml(p.priority)}</span>
+                        <span><span class="font-bold text-slate-600">Estado:</span> ${escapeXml(p.state)}</span>
+                        <span><span class="font-bold text-slate-600">Grupo:</span> ${escapeXml(p.assignmentGroup)}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        if (inc.problemTasks && inc.problemTasks.length) {
+            html += `
+                <div class="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Tarefas do Problema (${inc.problemTasks.length})</p>
+                    <div class="space-y-1.5">
+                        ${inc.problemTasks.map(t => `
+                            <div class="flex items-center justify-between text-[10px] bg-white border border-slate-100 rounded px-2 py-1.5">
+                                <span class="font-bold text-slate-600">${escapeXml(t.number)} <span class="font-normal text-slate-400">(${escapeXml(t.type)})</span></span>
+                                <span class="text-slate-500 truncate mx-2 flex-1" title="${escapeXml(t.shortDescription)}">${escapeXml(t.shortDescription)}</span>
+                                <span class="text-slate-400 flex-none">${escapeXml(t.state)} · ${escapeXml(t.assignmentGroup)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+        return html;
     }
 
     // Drill-down: ao clicar numa Causa Raiz ou Processo de Origem recorrente, mostra o período e os
@@ -1563,7 +1624,7 @@
                 listEl.classList.remove('hidden');
                 listEl.innerHTML = `<div class="text-sm text-red-600 p-4 text-center">Falha na comunicação: ${e.message}</div>`;
             })
-            .getIncidentsByIds(ids);
+            .getIncidentFullContext(ids);
     }
 
     function closeQualidadeDrillModal() {
