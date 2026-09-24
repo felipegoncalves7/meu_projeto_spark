@@ -138,11 +138,14 @@ function buildCallerMap(ss) {
 const MSN_COL_ASSIGNMENT_GROUP = 12; // M
 const MSN_COL_SERVICE = 18;          // S
 const MSN_COL_SERVICE_OFFERING = 19; // T
+const MSN_COL_OPENED = 2;            // C
 
 /**
- * Monta um mapa Number -> {assignmentGroup, service, serviceOffering} a partir da aba Major_ServiceNow,
- * usado para enriquecer listas de Incidentes (ex: fora do OLA, divergências Sev x Prioridade) com o
- * Grupo Responsável, Service e Service Offering cadastrados no ServiceNow.
+ * Monta um mapa Number -> {assignmentGroup, service, serviceOffering, opened} a partir da aba
+ * Major_ServiceNow, usado para enriquecer listas de Incidentes (ex: fora do OLA, divergências Sev x
+ * Prioridade) com o Grupo Responsável, Service e Service Offering cadastrados no ServiceNow, e para
+ * o MTTD "versão ServiceNow" (item 2), que usa a data de abertura do TICKET no ServiceNow em vez da
+ * data de abertura registrada na base de Majors (podem divergir).
  */
 function buildServiceNowInfoMap(ss) {
   const map = {};
@@ -157,7 +160,8 @@ function buildServiceNowInfoMap(ss) {
     map[number] = {
       assignmentGroup: String(row[MSN_COL_ASSIGNMENT_GROUP] || '').trim() || 'N/A',
       service: String(row[MSN_COL_SERVICE] || '').trim() || 'N/A',
-      serviceOffering: String(row[MSN_COL_SERVICE_OFFERING] || '').trim() || 'N/A'
+      serviceOffering: String(row[MSN_COL_SERVICE_OFFERING] || '').trim() || 'N/A',
+      opened: row[MSN_COL_OPENED] instanceof Date ? row[MSN_COL_OPENED] : null
     };
   }
   return map;
@@ -899,6 +903,84 @@ function getInitialConfig() {
   return { lastUpdated, periodFilters, availableYears };
 }
 
+// Bucket no mesmo formato usado pelos cards de Jornada/País/Origem: Volume+MTTR geral, por
+// Severidade (com OLA), e a distribuição de Origem da Detecção. Reaproveitado nos cards de Mudança
+// (item 1), tanto para o total Geral quanto por Tipo de Mudança (Deploy/Tradicional).
+function makeMudancaCardBucket() {
+  return {
+    count: 0, durationMin: 0,
+    sev0Count: 0, sev0DurationMin: 0, sev0DentroOLA: 0,
+    sev1Count: 0, sev1DurationMin: 0, sev1DentroOLA: 0,
+    origemBreakdown: {}
+  };
+}
+function bumpMudancaCardBucket(bucket, durMin, isSev0, isSev1, origemDeteccao) {
+  bucket.count++;
+  bucket.durationMin += durMin;
+  if (isSev0) {
+    bucket.sev0Count++;
+    bucket.sev0DurationMin += durMin;
+    if (durMin <= OLA_TARGET_SEV0_MIN) bucket.sev0DentroOLA++;
+  } else if (isSev1) {
+    bucket.sev1Count++;
+    bucket.sev1DurationMin += durMin;
+    if (durMin <= OLA_TARGET_SEV1_MIN) bucket.sev1DentroOLA++;
+  }
+  if (origemDeteccao) bucket.origemBreakdown[origemDeteccao] = (bucket.origemBreakdown[origemDeteccao] || 0) + 1;
+}
+
+// Bucket de MTTD com soma/contagem geral + por Severidade, usado nos 3 recortes (Geral/Deploy/
+// Tradicional) de cada combinação Início|Término x Majors|ServiceNow (item 2).
+function makeMttdBucket() {
+  return { soma: 0, count: 0, sev0Soma: 0, sev0Count: 0, sev1Soma: 0, sev1Count: 0 };
+}
+function makeMttdBucketSet() {
+  return { geral: makeMttdBucket(), deploy: makeMttdBucket(), tradicional: makeMttdBucket() };
+}
+function bumpMttdBucket(bucket, hours, isSev0, isSev1) {
+  bucket.soma += hours;
+  bucket.count++;
+  if (isSev0) { bucket.sev0Soma += hours; bucket.sev0Count++; }
+  else if (isSev1) { bucket.sev1Soma += hours; bucket.sev1Count++; }
+}
+// Bumpa um valor de MTTD (Início ou Término) nos 3 recortes de uma vez: Geral sempre, e o
+// recorte por Tipo (Deploy/Tradicional) correspondente.
+function bumpMttdBucketSet(bucketSet, tipoBucket, hours, isSev0, isSev1) {
+  bumpMttdBucket(bucketSet.geral, hours, isSev0, isSev1);
+  bumpMttdBucket(bucketSet[tipoBucket], hours, isSev0, isSev1);
+}
+
+// Formata um bucket de card de Mudança (soma/contagem) em médias/porcentagens prontas para a UI,
+// no mesmo formato já usado pelos cards de Jornada/País/Origem no frontend.
+function formatMudancaCardBucket(bucket) {
+  return {
+    count: bucket.count,
+    durationMin: bucket.durationMin,
+    sev0Count: bucket.sev0Count, sev0DurationMin: bucket.sev0DurationMin, sev0DentroOLA: bucket.sev0DentroOLA,
+    sev1Count: bucket.sev1Count, sev1DurationMin: bucket.sev1DurationMin, sev1DentroOLA: bucket.sev1DentroOLA,
+    origemBreakdown: bucket.origemBreakdown
+  };
+}
+
+function formatMttdBucket(b) {
+  const round1 = (v) => Math.round(v * 10) / 10;
+  return {
+    avgHoras: b.count > 0 ? round1(b.soma / b.count) : null,
+    count: b.count,
+    sev0AvgHoras: b.sev0Count > 0 ? round1(b.sev0Soma / b.sev0Count) : null,
+    sev0Count: b.sev0Count,
+    sev1AvgHoras: b.sev1Count > 0 ? round1(b.sev1Soma / b.sev1Count) : null,
+    sev1Count: b.sev1Count
+  };
+}
+function formatMttdBucketSet(bucketSet) {
+  return {
+    geral: formatMttdBucket(bucketSet.geral),
+    deploy: formatMttdBucket(bucketSet.deploy),
+    tradicional: formatMttdBucket(bucketSet.tradicional)
+  };
+}
+
 /**
  * Busca Dados Filtrados
  */
@@ -967,7 +1049,16 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
              weekly: { metrics: {}, mttr: {} },
              quarterly: { metrics: {}, mttr: {} }
            },
-           mudancaPorTipoEvolutionData: { monthly: {}, weekly: {}, quarterly: {} }
+           mudancaPorTipoEvolutionData: { monthly: {}, weekly: {}, quarterly: {} },
+           mudancaCards: {
+             geral: formatMudancaCardBucket(makeMudancaCardBucket()),
+             deploy: formatMudancaCardBucket(makeMudancaCardBucket()),
+             tradicional: formatMudancaCardBucket(makeMudancaCardBucket())
+           },
+           mttdMatrix: {
+             majors: { inicio: formatMttdBucketSet(makeMttdBucketSet()), termino: formatMttdBucketSet(makeMttdBucketSet()) },
+             servicenow: { inicio: formatMttdBucketSet(makeMttdBucketSet()), termino: formatMttdBucketSet(makeMttdBucketSet()) }
+           }
         };
     }
 
@@ -1000,9 +1091,19 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         incidentesMudanca: 0,
         mttdInicioSomaHoras: 0, mttdInicioCount: 0,
         mttdTerminoSomaHoras: 0, mttdTerminoCount: 0,
+        // Cards de Mudança (item 1), no mesmo formato usado em Jornada/País/Origem: Volume, MTTR,
+        // OLA por Severidade e Origem da Detecção — um para o total Geral e um por Tipo (Deploy/Tradicional).
+        mudancaGeral: makeMudancaCardBucket(),
         mudancaPorTipo: {
-            deploy: { count: 0, mttdInicioSoma: 0, mttdInicioCount: 0, mttdTerminoSoma: 0, mttdTerminoCount: 0 },
-            tradicional: { count: 0, mttdInicioSoma: 0, mttdInicioCount: 0, mttdTerminoSoma: 0, mttdTerminoCount: 0 }
+            deploy: makeMudancaCardBucket(),
+            tradicional: makeMudancaCardBucket()
+        },
+        // MTTD (item 2): Início e Término, cada um com 2 fontes de data de abertura do Incidente
+        // (base de Majors x ticket no ServiceNow) e 3 recortes (Geral/Deploy/Tradicional), cada um
+        // com Severidade própria.
+        mttdStats: {
+            majors: { inicio: makeMttdBucketSet(), termino: makeMttdBucketSet() },
+            servicenow: { inicio: makeMttdBucketSet(), termino: makeMttdBucketSet() }
         },
         mttdVsMttrDispersao: [],
         mttdTerminoVsMttrDispersao: [],
@@ -1291,7 +1392,10 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             const tipoSm = String(row[COL_TYPE_SM]).trim().toUpperCase();
             const isDeploy = tipoSm === 'DEPLOY';
             const tipoBucket = isDeploy ? 'deploy' : 'tradicional';
-            metrics.mudancaPorTipo[tipoBucket].count++;
+
+            // Cards de Mudança (item 1): Volume/MTTR/OLA por Severidade + Origem da Detecção, Geral e por Tipo
+            bumpMudancaCardBucket(metrics.mudancaGeral, durMin, isSev0, isSev1, origemDeteccao);
+            bumpMudancaCardBucket(metrics.mudancaPorTipo[tipoBucket], durMin, isSev0, isSev1, origemDeteccao);
 
             // Evolução por Tipo de Mudança (Deploy x Tradicional), nos 3 agrupamentos temporais
             bumpBreakdown(metrics.mudancaMonthlyPorTipo, mes, tipoBucket);
@@ -1322,22 +1426,36 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
                 }
             }
 
-            if (chg && openDate) {
-                if (chg.plannedStart) {
-                    const diffInicioH = (openDate.getTime() - chg.plannedStart.getTime()) / (1000 * 60 * 60);
-                    if (diffInicioH >= 0) {
-                        metrics.mttdInicioSomaHoras += diffInicioH;
-                        metrics.mttdInicioCount++;
-                        metrics.mudancaPorTipo[tipoBucket].mttdInicioSoma += diffInicioH;
-                        metrics.mudancaPorTipo[tipoBucket].mttdInicioCount++;
+            // MTTD (item 2): calculado a partir de DUAS fontes de data de abertura do Incidente — a
+            // registrada na base de Majors (openDate) e a do ticket correspondente no ServiceNow
+            // (snOpenDate, via Major_ServiceNow), que podem divergir. Ambas alimentam Início e Término,
+            // no total Geral e por Tipo, com Severidade própria em cada uma.
+            const snInfo = serviceNowInfoMap[ticketId];
+            const snOpenDate = snInfo ? snInfo.opened : null;
 
-                        // Dispersão MTTD (Início) x MTTR, por Incidente causado por Mudança
-                        metrics.mttdVsMttrDispersao.push({
-                            id: String(row[0] || '').trim(),
-                            mttdHoras: Math.round(diffInicioH * 10) / 10,
-                            mttrHoras: Math.round((durMin / 60) * 10) / 10,
-                            tipo: tipoBucket
-                        });
+            if (chg) {
+                if (chg.plannedStart) {
+                    if (openDate) {
+                        const diffInicioH = (openDate.getTime() - chg.plannedStart.getTime()) / (1000 * 60 * 60);
+                        if (diffInicioH >= 0) {
+                            metrics.mttdInicioSomaHoras += diffInicioH;
+                            metrics.mttdInicioCount++;
+                            bumpMttdBucketSet(metrics.mttdStats.majors.inicio, tipoBucket, diffInicioH, isSev0, isSev1);
+
+                            // Dispersão MTTD (Início) x MTTR, por Incidente causado por Mudança
+                            metrics.mttdVsMttrDispersao.push({
+                                id: ticketId,
+                                mttdHoras: Math.round(diffInicioH * 10) / 10,
+                                mttrHoras: Math.round((durMin / 60) * 10) / 10,
+                                tipo: tipoBucket
+                            });
+                        }
+                    }
+                    if (snOpenDate) {
+                        const diffInicioSnH = (snOpenDate.getTime() - chg.plannedStart.getTime()) / (1000 * 60 * 60);
+                        if (diffInicioSnH >= 0) {
+                            bumpMttdBucketSet(metrics.mttdStats.servicenow.inicio, tipoBucket, diffInicioSnH, isSev0, isSev1);
+                        }
                     }
                 }
                 if (chg.plannedEnd) {
@@ -1345,19 +1463,24 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
                     // Mudança (detectado durante a execução, ainda dentro da janela). Isso é um dado real e
                     // relevante (detecção precoce), então não é descartado — nem do cálculo da média nem
                     // da dispersão no Plano Cartesiano.
-                    const diffTerminoH = (openDate.getTime() - chg.plannedEnd.getTime()) / (1000 * 60 * 60);
-                    metrics.mttdTerminoSomaHoras += diffTerminoH;
-                    metrics.mttdTerminoCount++;
-                    metrics.mudancaPorTipo[tipoBucket].mttdTerminoSoma += diffTerminoH;
-                    metrics.mudancaPorTipo[tipoBucket].mttdTerminoCount++;
+                    if (openDate) {
+                        const diffTerminoH = (openDate.getTime() - chg.plannedEnd.getTime()) / (1000 * 60 * 60);
+                        metrics.mttdTerminoSomaHoras += diffTerminoH;
+                        metrics.mttdTerminoCount++;
+                        bumpMttdBucketSet(metrics.mttdStats.majors.termino, tipoBucket, diffTerminoH, isSev0, isSev1);
 
-                    // Dispersão MTTD (Término) x MTTR, por Incidente causado por Mudança
-                    metrics.mttdTerminoVsMttrDispersao.push({
-                        id: String(row[0] || '').trim(),
-                        mttdHoras: Math.round(diffTerminoH * 10) / 10,
-                        mttrHoras: Math.round((durMin / 60) * 10) / 10,
-                        tipo: tipoBucket
-                    });
+                        // Dispersão MTTD (Término) x MTTR, por Incidente causado por Mudança
+                        metrics.mttdTerminoVsMttrDispersao.push({
+                            id: ticketId,
+                            mttdHoras: Math.round(diffTerminoH * 10) / 10,
+                            mttrHoras: Math.round((durMin / 60) * 10) / 10,
+                            tipo: tipoBucket
+                        });
+                    }
+                    if (snOpenDate) {
+                        const diffTerminoSnH = (snOpenDate.getTime() - chg.plannedEnd.getTime()) / (1000 * 60 * 60);
+                        bumpMttdBucketSet(metrics.mttdStats.servicenow.termino, tipoBucket, diffTerminoSnH, isSev0, isSev1);
+                    }
                 }
             }
         }
@@ -1476,10 +1599,25 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
 
     const deployBucket = metrics.mudancaPorTipo.deploy;
     const tradicionalBucket = metrics.mudancaPorTipo.tradicional;
-    const mttdInicioDeploy = deployBucket.mttdInicioCount > 0 ? deployBucket.mttdInicioSoma / deployBucket.mttdInicioCount : null;
-    const mttdInicioTradicional = tradicionalBucket.mttdInicioCount > 0 ? tradicionalBucket.mttdInicioSoma / tradicionalBucket.mttdInicioCount : null;
-    const mttdTerminoDeploy = deployBucket.mttdTerminoCount > 0 ? deployBucket.mttdTerminoSoma / deployBucket.mttdTerminoCount : null;
-    const mttdTerminoTradicional = tradicionalBucket.mttdTerminoCount > 0 ? tradicionalBucket.mttdTerminoSoma / tradicionalBucket.mttdTerminoCount : null;
+
+    // Item 1: Cards de Mudança (Geral + por Tipo), no formato já usado por Jornada/País/Origem
+    const mudancaCards = {
+        geral: formatMudancaCardBucket(metrics.mudancaGeral),
+        deploy: formatMudancaCardBucket(deployBucket),
+        tradicional: formatMudancaCardBucket(tradicionalBucket)
+    };
+
+    // Item 2: matriz completa de MTTD — Início/Término x Majors/ServiceNow x Geral/Deploy/Tradicional x Severidade
+    const mttdMatrix = {
+        majors: {
+            inicio: formatMttdBucketSet(metrics.mttdStats.majors.inicio),
+            termino: formatMttdBucketSet(metrics.mttdStats.majors.termino)
+        },
+        servicenow: {
+            inicio: formatMttdBucketSet(metrics.mttdStats.servicenow.inicio),
+            termino: formatMttdBucketSet(metrics.mttdStats.servicenow.termino)
+        }
+    };
 
     const aderenciaSevPrio = metrics.sevPrioBase > 0 ? (metrics.sevPrioAderente / metrics.sevPrioBase) * 100 : null;
     const aderenciaSevPrioSev0 = metrics.sev0PrioBase > 0 ? (metrics.sev0PrioAderente / metrics.sev0PrioBase) * 100 : null;
@@ -1582,14 +1720,16 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         aderenciaOLASev1: Math.round(aderenciaOLASev1 * 10) / 10,
         incidentesMudanca: metrics.incidentesMudanca,
         pctMudanca: Math.round(pctMudanca * 10) / 10,
+        // Campos "legado" (mantidos para compatibilidade com os cards já existentes na Visão Geral),
+        // derivados da nova matriz mttdMatrix (fonte Majors, que é a mesma usada antes deste item 2).
         mttdInicioMedioHoras: mttdInicioMedio !== null ? Math.round(mttdInicioMedio * 10) / 10 : null,
         mttdTerminoMedioHoras: mttdTerminoMedio !== null ? Math.round(mttdTerminoMedio * 10) / 10 : null,
         incidentesMudancaDeploy: deployBucket.count,
         incidentesMudancaTradicional: tradicionalBucket.count,
-        mttdInicioMedioHorasDeploy: mttdInicioDeploy !== null ? Math.round(mttdInicioDeploy * 10) / 10 : null,
-        mttdInicioMedioHorasTradicional: mttdInicioTradicional !== null ? Math.round(mttdInicioTradicional * 10) / 10 : null,
-        mttdTerminoMedioHorasDeploy: mttdTerminoDeploy !== null ? Math.round(mttdTerminoDeploy * 10) / 10 : null,
-        mttdTerminoMedioHorasTradicional: mttdTerminoTradicional !== null ? Math.round(mttdTerminoTradicional * 10) / 10 : null,
+        mttdInicioMedioHorasDeploy: mttdMatrix.majors.inicio.deploy.avgHoras,
+        mttdInicioMedioHorasTradicional: mttdMatrix.majors.inicio.tradicional.avgHoras,
+        mttdTerminoMedioHorasDeploy: mttdMatrix.majors.termino.deploy.avgHoras,
+        mttdTerminoMedioHorasTradicional: mttdMatrix.majors.termino.tradicional.avgHoras,
         // Governança: Aderência Sev x Prioridade
         aderenciaSevPrio: aderenciaSevPrio !== null ? Math.round(aderenciaSevPrio * 10) / 10 : null,
         aderenciaSevPrioBase: metrics.sevPrioBase,
@@ -1599,6 +1739,9 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         aderenciaSevPrioSev1Base: metrics.sev1PrioBase,
         divergenciasSevPrioCount: metrics.divergenciasSevPrio.length
         },
+        // Item 1/2: cards estendidos de Mudança e matriz completa de MTTD
+        mudancaCards: mudancaCards,
+        mttdMatrix: mttdMatrix,
         divergenciasSevPrio: metrics.divergenciasSevPrio,
         incidentesForaOLA: metrics.incidentesForaOLA,
         monthlyMetrics: metrics.monthlyMetrics,
