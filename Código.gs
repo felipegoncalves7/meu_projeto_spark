@@ -383,6 +383,7 @@ function getIncidentsByIds(ids) {
           dataEncerramento: formatDate(row[3]),
           ttr: durRaw,
           jornada: String(row[5] || '').trim() || "N/A",
+          techImpactada: String(row[COL_TECH_IMPACTADA] || '').trim() || "N/A",
           ano: match[1]
         });
       });
@@ -764,9 +765,9 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
            jornadaMetrics: {},
            paisMetrics: {},
            origemDeteccao: {
-             'End-users': { count: 0, mttr: "00:00" },
-             'Monitoração': { count: 0, mttr: "00:00" },
-             'Experiências': { count: 0, mttr: "00:00" },
+             'End-users': { count: 0, mttr: "00:00", sev0Count: 0, sev1Count: 0, sev0DurationMin: 0, sev1DurationMin: 0, sev0DentroOLA: 0, sev1DentroOLA: 0, callerRanking: [], incidentIds: [] },
+             'Monitoração': { count: 0, mttr: "00:00", sev0Count: 0, sev1Count: 0, sev0DurationMin: 0, sev1DurationMin: 0, sev0DentroOLA: 0, sev1DentroOLA: 0, callerRanking: [], incidentIds: [] },
+             'Experiências': { count: 0, mttr: "00:00", sev0Count: 0, sev1Count: 0, sev0DurationMin: 0, sev1DurationMin: 0, sev0DentroOLA: 0, sev1DentroOLA: 0, callerRanking: [], incidentIds: [] },
              base: 0
            },
            gruposResponsaveis: { deploy: [], tradicional: [] },
@@ -830,9 +831,9 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         incidentesForaOLA: [],
         // Origem da Detecção (Caller do ServiceNow)
         origemDeteccao: {
-            'End-users': { count: 0, durationMin: 0 },
-            'Monitoração': { count: 0, durationMin: 0 },
-            'Experiências': { count: 0, durationMin: 0 }
+            'End-users': { count: 0, durationMin: 0, sev0Count: 0, sev1Count: 0, sev0DurationMin: 0, sev1DurationMin: 0, sev0DentroOLA: 0, sev1DentroOLA: 0, callerBreakdown: {}, incidentIds: [] },
+            'Monitoração': { count: 0, durationMin: 0, sev0Count: 0, sev1Count: 0, sev0DurationMin: 0, sev1DurationMin: 0, sev0DentroOLA: 0, sev1DentroOLA: 0, callerBreakdown: {}, incidentIds: [] },
+            'Experiências': { count: 0, durationMin: 0, sev0Count: 0, sev1Count: 0, sev0DurationMin: 0, sev1DurationMin: 0, sev0DentroOLA: 0, sev1DentroOLA: 0, callerBreakdown: {}, incidentIds: [] }
         },
         origemDeteccaoBase: 0,
         // Top Grupos/Serviços Responsáveis por Incidentes causados por Mudança (com detalhe por Tecnologia, p/ Sankey)
@@ -992,9 +993,24 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         const origemDeteccao = (isSev0 || isSev1) ? classifyCaller(callerMap[ticketId]) : null;
         if (isSev0 || isSev1) {
             if (origemDeteccao) {
-                metrics.origemDeteccao[origemDeteccao].count++;
-                metrics.origemDeteccao[origemDeteccao].durationMin += durMin;
+                const od = metrics.origemDeteccao[origemDeteccao];
+                od.count++;
+                od.durationMin += durMin;
                 metrics.origemDeteccaoBase++;
+
+                if (isSev0) {
+                    od.sev0Count++;
+                    od.sev0DurationMin += durMin;
+                    if (durMin <= OLA_TARGET_SEV0_MIN) od.sev0DentroOLA++;
+                } else if (isSev1) {
+                    od.sev1Count++;
+                    od.sev1DurationMin += durMin;
+                    if (durMin <= OLA_TARGET_SEV1_MIN) od.sev1DentroOLA++;
+                }
+
+                const rawCaller = String(callerMap[ticketId] || '').trim() || 'N/A';
+                od.callerBreakdown[rawCaller] = (od.callerBreakdown[rawCaller] || 0) + 1;
+                od.incidentIds.push(ticketId);
 
                 if (!metrics.monthlyByOrigem[mes]) metrics.monthlyByOrigem[mes] = { 'End-users': 0, 'Monitoração': 0, 'Experiências': 0 };
                 metrics.monthlyByOrigem[mes][origemDeteccao]++;
@@ -1323,13 +1339,24 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
     const sankeyTradicional = Object.keys(grupoServiceCounts).map(k => grupoServiceCounts[k])
         .concat(Object.keys(serviceTechCounts).map(k => serviceTechCounts[k]));
 
-    // Origem da Detecção: formata contagem + MTTR por origem
+    // Origem da Detecção: formata contagem + MTTR por origem, incluindo o detalhamento por
+    // Severidade/OLA e o ranking de Caller bruto (usado no pop-up de drill-down dos cards)
     const origemDeteccaoFormatted = {};
     ['End-users', 'Monitoração', 'Experiências'].forEach(k => {
         const item = metrics.origemDeteccao[k];
         origemDeteccaoFormatted[k] = {
             count: item.count,
-            mttr: calculateMTTR(item.durationMin, item.count)
+            mttr: calculateMTTR(item.durationMin, item.count),
+            sev0Count: item.sev0Count,
+            sev1Count: item.sev1Count,
+            sev0DurationMin: item.sev0DurationMin,
+            sev1DurationMin: item.sev1DurationMin,
+            sev0DentroOLA: item.sev0DentroOLA,
+            sev1DentroOLA: item.sev1DentroOLA,
+            callerRanking: Object.entries(item.callerBreakdown)
+                .map(([name, count]) => ({ name, count }))
+                .sort((a, b) => b.count - a.count),
+            incidentIds: item.incidentIds
         };
     });
 
