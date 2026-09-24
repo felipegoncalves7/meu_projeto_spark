@@ -693,10 +693,6 @@
                                 de país. Um Incidente pode impactar mais de um país simultaneamente.</span>
                         </span>
                     </div>
-                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-4">
-                        <h3 class="text-sm font-bold text-slate-700 mb-4">Mapa de Proporção por País</h3>
-                        <div id="pais-bubble-map" class="relative w-full" style="aspect-ratio: 16/9; max-height: 420px;"></div>
-                    </div>
                     <div id="pais-cards-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
                 </div>
                 </section>
@@ -710,49 +706,22 @@
                     <span class="text-xs text-slate-400 font-medium">Como os Incidentes Críticos são detectados</span>
                 </div>
 
-                <!-- Volume por Origem da Detecção (Semanal/Mensal/Trimestral) + MTTR geral desta seção -->
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col">
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                        <div class="flex items-center gap-2">
-                            <h3 id="origem-evolution-title" class="text-base font-bold text-slate-800">Incidentes por
-                                Origem — Mensal</h3>
-                            <span id="delta-badge-origem" class="hidden text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
-                        </div>
-                        <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100"
-                            id="origem-evolution-toggle">
-                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white"
-                                data-group="weekly">Semanal</button>
-                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all bg-white text-natura-green-cerrado shadow-sm border border-slate-200"
-                                data-group="monthly">Mensal</button>
-                            <button class="px-3 py-1 text-xs font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white"
-                                data-group="quarterly">Trimestral</button>
-                        </div>
-                    </div>
-                    <div class="relative w-full h-72"><canvas id="origem-evolution-chart"></canvas></div>
-                </div>
-
                 <!-- Origem da Detecção do Incidente -->
                 <div class="pt-2">
                     <div class="flex items-center gap-2 mb-3">
                         <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Origem da Detecção</h2>
+                        <span class="info-tooltip" tabindex="0">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span class="tooltip-bubble">Classificação do campo Caller (Major_ServiceNow):
+                                Monitoração = contém "Integração"; Experiências = contém "Experiência"; demais
+                                (nomes de pessoas) = End-users.</span>
+                        </span>
                     </div>
-                    <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
-                        <div class="flex items-center justify-between mb-3">
-                            <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">Volumetria e MTTR por
-                                Origem</p>
-                            <span class="info-tooltip" tabindex="0">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <span class="tooltip-bubble">Classificação do campo Caller (Major_ServiceNow):
-                                    Monitoração = contém "Integração"; Experiências = contém "Experiência"; demais
-                                    (nomes de pessoas) = End-users.</span>
-                            </span>
-                        </div>
-                        <div id="origem-deteccao-list" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
-                    </div>
+                    <div id="origem-cards-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
                 </div>
 
                 </section>
