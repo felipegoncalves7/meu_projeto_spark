@@ -175,6 +175,7 @@
         thead.innerHTML = `<tr>${opts.columns.map(c => `<th class="text-left font-bold text-slate-500 uppercase tracking-wider text-[10px] px-3 py-2 border-b border-slate-200">${c.label}</th>`).join('')}</tr>`;
 
         const items = opts.items || [];
+        registerExport('tabular-incidents', items, opts.columns, `${opts.title || 'Incidentes'}.xlsx`);
         if (!items.length) {
             tbody.innerHTML = `<tr><td colspan="${opts.columns.length}" class="text-center text-slate-300 italic py-6">Nenhum registro encontrado no período filtrado.</td></tr>`;
         } else {
@@ -1524,6 +1525,7 @@
                     ? `Período: ${oldest.dataDefinicao.split(' ')[0]} a ${newest.dataDefinicao.split(' ')[0]}`
                     : '';
                 subtitleEl.textContent = `${kindLabel} · Universo ${universoLabel} · ${incidents.length} incidente(s) · ${periodText}`;
+                registerExport('qualidade-drill', incidents, STANDARD_INCIDENT_COLUMNS, `${label}.xlsx`);
 
                 listEl.innerHTML = incidents.map(inc => buildIncidentCardHtml(inc)).join('');
             })
@@ -1597,12 +1599,9 @@
         setText('val-aderencia-ola-sev0', (kpis.aderenciaOLASev0 != null ? kpis.aderenciaOLASev0 : 0) + '%');
         setText('val-aderencia-ola-sev1', (kpis.aderenciaOLASev1 != null ? kpis.aderenciaOLASev1 : 0) + '%');
 
-        // Item 1: badge "semáforo" de cumprimento de Meta (distinto das cores de Severidade)
+        // Item 1: badge "semáforo" de cumprimento de Meta (distinto das cores de Severidade). Só Sev0
+        // (>= 70%) e Sev1 (>= 80%) têm meta oficial definida; "Geral" é informativo (não tem meta própria).
         const setBadge = (id, ok) => { const el = document.getElementById(id); if (el) el.innerHTML = buildMetaBadge(ok); };
-        const sev0Total = kpis.incidentesSev0 || 0;
-        const sev1Total = kpis.incidentesSev1 || 0;
-        const olaGeralMeta = (sev0Total + sev1Total) > 0 ? ((sev0Total * 70 + sev1Total * 80) / (sev0Total + sev1Total)) : 75;
-        setBadge('ola-meta-badge-geral', (kpis.aderenciaOLA || 0) >= olaGeralMeta);
         setBadge('ola-meta-badge-sev0', (kpis.aderenciaOLASev0 || 0) >= 70);
         setBadge('ola-meta-badge-sev1', (kpis.aderenciaOLASev1 || 0) >= 80);
 
@@ -1704,6 +1703,63 @@
 
     function escapeXml(str) {
         return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Exportação para Excel (item 4): usa a biblioteca SheetJS (xlsx.full.min.js, já carregada no
+    // <head>) para gerar um .xlsx real a partir de uma lista de itens + colunas {key,label}.
+    // EXPORT_REGISTRY guarda o dataset mais recente de cada lista/modal exportável, atualizado
+    // sempre que a lista é (re)renderizada; os botões "Exportar Excel" leem daqui na hora do clique.
+    const EXPORT_REGISTRY = {};
+    function registerExport(registryKey, items, columns, filename) {
+        EXPORT_REGISTRY[registryKey] = { items: items || [], columns: columns, filename: filename };
+    }
+    function exportRegistered(registryKey) {
+        const ctx = EXPORT_REGISTRY[registryKey];
+        if (!ctx || !ctx.items.length) { alert('Não há dados para exportar.'); return; }
+        exportItemsToExcel(ctx.items, ctx.columns, ctx.filename);
+    }
+    function exportItemsToExcel(items, columns, filename) {
+        if (typeof XLSX === 'undefined') { alert('Biblioteca de exportação indisponível no momento.'); return; }
+        if (!items || !items.length) { alert('Não há dados para exportar.'); return; }
+        const rows = items.map(item => {
+            const row = {};
+            columns.forEach(c => { row[c.label] = item[c.key] != null ? item[c.key] : ''; });
+            return row;
+        });
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Incidentes');
+        XLSX.writeFile(wb, filename);
+    }
+
+    // Colunas padrão para as listas de Incidentes em formato "card" (Detalhes dos Incidentes,
+    // Análise de Mudança, Qualidade de RCA drill-down), todas construídas a partir de getIncidentsByIds
+    // ou de ALL_DATA.rawIncidents, que compartilham o mesmo formato de campos.
+    const STANDARD_INCIDENT_COLUMNS = [
+        { key: 'id', label: 'Número' },
+        { key: 'severidade', label: 'Severidade' },
+        { key: 'dataDefinicao', label: 'Abertura do Incidente' },
+        { key: 'dataEncerramento', label: 'Fim do Impacto' },
+        { key: 'ttr', label: 'TTR' },
+        { key: 'abrangencia', label: 'Países Impactados' },
+        { key: 'jornada', label: 'Jornadas Impactadas' },
+        { key: 'offender', label: 'Ofensor' },
+        { key: 'descImpacto', label: 'Descrição do Impacto' },
+        { key: 'descOfensor', label: 'Descrição do Ofensor' },
+        { key: 'solucao', label: 'Solução Aplicada' }
+    ];
+
+    // Botão "Exportar Excel" reutilizado em todo pop-up que lista Incidentes (item 4)
+    function buildExportButtonHtml(registryKey, extraClass) {
+        return `
+            <button type="button" onclick="exportRegistered('${registryKey}')"
+                class="inline-flex items-center gap-1.5 text-xs font-bold text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors rounded-full px-3 py-1.5 ${extraClass || ''}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Exportar Excel
+            </button>
+        `;
     }
 
     // Diagrama de Sankey leve, desenhado em SVG puro (sem depender de nenhuma biblioteca externa de gráficos,
@@ -1898,6 +1954,12 @@
         });
         document.getElementById('origem-drill-panel-ranking').classList.toggle('hidden', tab !== 'ranking');
         document.getElementById('origem-drill-panel-incidents').classList.toggle('hidden', tab !== 'incidents');
+
+        const exportBtn = document.getElementById('btn-export-origem-drill');
+        if (exportBtn) {
+            const hasData = EXPORT_REGISTRY['origem-drill'] && EXPORT_REGISTRY['origem-drill'].items.length;
+            exportBtn.classList.toggle('hidden', tab !== 'incidents' || !hasData);
+        }
     }
 
     function openOrigemDrillModal(key) {
@@ -1937,7 +1999,7 @@
         const tbody = document.getElementById('origem-drill-incidents-tbody');
         const columns = [
             { key: 'id', label: 'Número' },
-            { key: 'descImpacto', label: 'Definição' },
+            { key: 'dataDefinicao', label: 'Abertura do Incidente' },
             { key: 'dataEncerramento', label: 'Fim do Impacto' },
             { key: 'ttr', label: 'TTR' },
             { key: 'offender', label: 'Ofensor' },
@@ -1947,7 +2009,11 @@
         ];
         thead.innerHTML = `<tr>${columns.map(c => `<th class="text-left font-bold text-slate-500 uppercase tracking-wider text-[10px] px-3 py-2 border-b border-slate-200">${c.label}</th>`).join('')}</tr>`;
 
+        const exportBtn = document.getElementById('btn-export-origem-drill');
+        if (exportBtn) exportBtn.classList.add('hidden');
+
         if (origemDrillIncidentsCache[key]) {
+            registerExport('origem-drill', origemDrillIncidentsCache[key], columns, `Origem - ${key}.xlsx`);
             renderOrigemDrillIncidentsTable(origemDrillIncidentsCache[key], columns, tbody);
             return;
         }
@@ -1960,6 +2026,12 @@
                     return;
                 }
                 origemDrillIncidentsCache[key] = incidents;
+                registerExport('origem-drill', incidents, columns, `Origem - ${key}.xlsx`);
+                const exportBtnNow = document.getElementById('btn-export-origem-drill');
+                if (exportBtnNow) {
+                    const incidentsTabActive = document.getElementById('origem-drill-tab-incidents').classList.contains('text-natura-green-cerrado');
+                    exportBtnNow.classList.toggle('hidden', !incidentsTabActive);
+                }
                 renderOrigemDrillIncidentsTable(incidents, columns, tbody);
             })
             .withFailureHandler(e => {
@@ -2121,17 +2193,13 @@
         const olaGeralTotal = sev0Count + sev1Count;
         const olaGeralDentro = (item.sev0DentroOLA || 0) + (item.sev1DentroOLA || 0);
         const olaGeralPct = olaGeralTotal > 0 ? Math.round((olaGeralDentro / olaGeralTotal) * 1000) / 10 : 0;
-        // Meta Geral: usa a média ponderada das metas de Sev0 (70%) e Sev1 (80%) pela proporção de cada severidade
-        const olaGeralMeta = olaGeralTotal > 0 ? ((sev0Count * 70 + sev1Count * 80) / olaGeralTotal) : 75;
-        const olaGeralOk = olaGeralPct >= olaGeralMeta;
 
+        // "Geral" (Sev0+Sev1) não tem meta oficial própria — é informativo. O semáforo de Meta só
+        // se aplica a Sev0 (>= 70%) e Sev1 (>= 80%) individualmente, abaixo.
         return `
             <div class="flex items-center justify-between pt-3 mt-3 border-t border-slate-100">
                 <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">OLA Geral (Sev0+Sev1)</span>
-                <span class="flex items-center gap-1.5">
-                    <span class="text-xs font-extrabold text-slate-700">${olaGeralTotal > 0 ? olaGeralPct + '%' : '—'}</span>
-                    ${olaGeralTotal > 0 ? buildMetaBadge(olaGeralOk) : ''}
-                </span>
+                <span class="text-xs font-extrabold text-slate-700">${olaGeralTotal > 0 ? olaGeralPct + '%' : '—'}</span>
             </div>
             <div class="grid grid-cols-2 gap-2 mt-2">
                 <div class="bg-natura-red-buriti/5 rounded-lg p-2">
@@ -3426,76 +3494,18 @@
         }, 300);
     }
 
-    // Emoji de bandeira Unicode NÃO funciona no Windows (a Microsoft nunca implementou o rendering colorido
-    // dos Regional Indicator Symbols — eles caem para as letras do código, ex: "BR" em vez da bandeira).
-    // Para funcionar em qualquer SO/rede, desenhamos bandeiras simplificadas (faixas de cor) em SVG inline,
-    // sem nenhuma dependência externa (nem CDN de imagem, nem fonte de emoji).
-    const FLAG_PATTERNS = {
-        'BR': { type: 'diamond', bg: '#009739', fg: '#FEDD00' },
-        'MX': { type: 'vertical', colors: ['#006847', '#FFFFFF', '#CE1126'] },
-        'CL': { type: 'chile' },
-        'CO': { type: 'horizontal-weighted', colors: ['#FCD116', '#003893', '#CE1126'], weights: [0.5, 0.25, 0.25] },
-        'PE': { type: 'vertical', colors: ['#D91023', '#FFFFFF', '#D91023'] },
-        'EC': { type: 'horizontal-weighted', colors: ['#FFDD00', '#0072CE', '#EF3340'], weights: [0.5, 0.25, 0.25] },
-        'EQ': { type: 'horizontal-weighted', colors: ['#FFDD00', '#0072CE', '#EF3340'], weights: [0.5, 0.25, 0.25] },
-        'AR': { type: 'horizontal', colors: ['#74ACDF', '#FFFFFF', '#74ACDF'] },
-        'SV': { type: 'horizontal', colors: ['#0047AB', '#FFFFFF', '#0047AB'] },
-        'HN': { type: 'horizontal', colors: ['#0073CF', '#FFFFFF', '#0073CF'] },
-        'DO': { type: 'dominican-republic' },
-        'GT': { type: 'vertical', colors: ['#4997D0', '#FFFFFF', '#4997D0'] },
-        'PA': { type: 'quadrants', colors: ['#FFFFFF', '#DA121A', '#0033A0', '#FFFFFF'] },
-        'NI': { type: 'horizontal', colors: ['#0067C6', '#FFFFFF', '#0067C6'] },
-        'UY': { type: 'uruguay' },
-        'UR': { type: 'uruguay' }
-    };
+    // Bandeiras via biblioteca flag-icons (CDN, ver <link rel="stylesheet"> no <head> de Index.html):
+    // sprites reais com brasão/detalhes, em vez das formas geométricas simplificadas desenhadas à mão.
+    // Alguns códigos usados na planilha não são ISO 3166-1 alpha-2 padrão; mapeamos para o equivalente.
+    const FLAG_CODE_ALIASES = { 'EQ': 'ec', 'UR': 'uy' };
 
     function buildFlagSvg(code, w, h) {
         w = w || 22; h = h || 15;
-        const spec = FLAG_PATTERNS[code];
-        let inner = '';
-        if (!spec) {
-            inner = `<rect width="${w}" height="${h}" fill="#cbd5e1"/>`;
-        } else if (spec.type === 'horizontal') {
-            const n = spec.colors.length;
-            spec.colors.forEach((c, i) => { inner += `<rect x="0" y="${(h / n) * i}" width="${w}" height="${h / n}" fill="${c}"/>`; });
-        } else if (spec.type === 'vertical') {
-            const n = spec.colors.length;
-            spec.colors.forEach((c, i) => { inner += `<rect x="${(w / n) * i}" y="0" width="${w / n}" height="${h}" fill="${c}"/>`; });
-        } else if (spec.type === 'horizontal-weighted') {
-            let y = 0;
-            spec.colors.forEach((c, i) => {
-                const bandH = h * spec.weights[i];
-                inner += `<rect x="0" y="${y.toFixed(1)}" width="${w}" height="${bandH.toFixed(1)}" fill="${c}"/>`;
-                y += bandH;
-            });
-        } else if (spec.type === 'diamond') {
-            inner += `<rect width="${w}" height="${h}" fill="${spec.bg}"/>`;
-            inner += `<polygon points="${w / 2},2 ${w - 3},${h / 2} ${w / 2},${h - 2} 3,${h / 2}" fill="${spec.fg}"/>`;
-        } else if (spec.type === 'quadrants') {
-            inner += `<rect x="0" y="0" width="${w / 2}" height="${h / 2}" fill="${spec.colors[0]}"/>`;
-            inner += `<rect x="${w / 2}" y="0" width="${w / 2}" height="${h / 2}" fill="${spec.colors[1]}"/>`;
-            inner += `<rect x="0" y="${h / 2}" width="${w / 2}" height="${h / 2}" fill="${spec.colors[2]}"/>`;
-            inner += `<rect x="${w / 2}" y="${h / 2}" width="${w / 2}" height="${h / 2}" fill="${spec.colors[3]}"/>`;
-        } else if (spec.type === 'dominican-republic') {
-            // Cruz branca dividindo a bandeira em 4 quadrantes: azul (TL/BR) e vermelho (TR/BL)
-            const crossW = Math.max(1.5, h * 0.18);
-            inner += `<rect x="0" y="0" width="${w / 2 - crossW / 2}" height="${h / 2 - crossW / 2}" fill="#002D62"/>`;
-            inner += `<rect x="${w / 2 + crossW / 2}" y="0" width="${w / 2 - crossW / 2}" height="${h / 2 - crossW / 2}" fill="#CE1126"/>`;
-            inner += `<rect x="0" y="${h / 2 + crossW / 2}" width="${w / 2 - crossW / 2}" height="${h / 2 - crossW / 2}" fill="#CE1126"/>`;
-            inner += `<rect x="${w / 2 + crossW / 2}" y="${h / 2 + crossW / 2}" width="${w / 2 - crossW / 2}" height="${h / 2 - crossW / 2}" fill="#002D62"/>`;
-            inner += `<rect x="${w / 2 - crossW / 2}" y="0" width="${crossW}" height="${h}" fill="#FFFFFF"/>`;
-            inner += `<rect x="0" y="${h / 2 - crossW / 2}" width="${w}" height="${crossW}" fill="#FFFFFF"/>`;
-        } else if (spec.type === 'chile') {
-            inner += `<rect x="0" y="0" width="${w}" height="${h / 2}" fill="#FFFFFF"/>`;
-            inner += `<rect x="0" y="${h / 2}" width="${w}" height="${h / 2}" fill="#D52B1E"/>`;
-            inner += `<rect x="0" y="0" width="${w / 3}" height="${h / 2}" fill="#0039A6"/>`;
-            inner += `<polygon points="${w / 6},${h * 0.12} ${w / 6 + 2},${h * 0.22} ${w / 6 - 2},${h * 0.22}" fill="#FFFFFF"/>`;
-        } else if (spec.type === 'uruguay') {
-            inner += `<rect width="${w}" height="${h}" fill="#FFFFFF"/>`;
-            for (let i = 0; i < 4; i++) { inner += `<rect x="0" y="${(h / 9) * (i * 2 + 1)}" width="${w}" height="${h / 9}" fill="#0038A8"/>`; }
-            inner += `<rect x="0" y="0" width="${w * 0.4}" height="${h * 0.5}" fill="#FCD116"/>`;
+        const iso = (FLAG_CODE_ALIASES[code] || code || '').toLowerCase().trim();
+        if (!iso) {
+            return `<span style="display:inline-block;width:${w}px;height:${h}px;background:#cbd5e1;border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,0.12);flex-shrink:0;vertical-align:middle;"></span>`;
         }
-        return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,0.12);flex-shrink:0;display:inline-block;vertical-align:middle">${inner}</svg>`;
+        return `<span class="fi fi-${iso}" title="${escapeXml(code)}" style="width:${w}px;height:${h}px;background-size:cover;background-position:center;border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,0.12);display:inline-block;vertical-align:middle;flex-shrink:0;"></span>`;
     }
 
     function renderFlags(abrangenciaStr) {
@@ -3572,6 +3582,7 @@
         listEl.innerHTML = '';
 
         filtered.sort((a, b) => b.dataAberturaTimestamp - a.dataAberturaTimestamp);
+        registerExport('incidents-details', filtered, STANDARD_INCIDENT_COLUMNS, `${displayTitle}.xlsx`);
 
         if (filtered.length === 0) {
             listEl.innerHTML = `<div class="text-sm text-slate-500 italic p-4 text-center">Nenhum incidente encontrado para este filtro.</div>`;
@@ -3701,6 +3712,9 @@
         document.getElementById('tab-content-mudanca-analytics').classList.add('hidden');
         document.getElementById('tab-content-mudanca-analytics').classList.remove('block');
 
+        const exportBtn = document.getElementById('btn-export-mudanca-detalhes');
+        if (exportBtn) exportBtn.classList.toggle('hidden', tabName !== 'detalhes');
+
         if (tabName === 'detalhes') {
             document.getElementById('tab-content-mudanca-detalhes').classList.add('block');
             document.getElementById('tab-content-mudanca-detalhes').classList.remove('hidden');
@@ -3747,6 +3761,7 @@
         });
 
         filtered.sort((a, b) => b.dataAberturaTimestamp - a.dataAberturaTimestamp);
+        registerExport('mudanca-detalhes', filtered, STANDARD_INCIDENT_COLUMNS, 'Incidentes por Mudanca.xlsx');
 
         if (filtered.length === 0) {
             listEl.innerHTML = `<div class="col-span-full text-sm text-slate-500 italic p-4 text-center">Nenhum incidente de mudança encontrado.</div>`;

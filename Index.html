@@ -11,6 +11,7 @@
     <script
         src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/css/flag-icons.min.css">
 
     <script>
         tailwind.config = {
@@ -477,7 +478,7 @@
                                 </span>
                             </div>
                             <p id="val-aderencia-ola" class="text-3xl font-extrabold text-natura-green-cerrado">0%</p>
-                            <span id="ola-meta-badge-geral" class="inline-block mt-2"></span>
+                            <p class="text-[10px] text-slate-400 mt-1">Sem meta própria &mdash; informativo (combina Sev0 + Sev1)</p>
                             <span id="delta-badge-ola" class="hidden inline-block mt-2 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
                         </div>
                         <!-- Aderência OLA Sev0 -->
@@ -1999,19 +2000,28 @@
                 class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
                 <div
                     class="bg-white rounded-2xl shadow-xl w-full max-w-5xl max-h-[85vh] overflow-hidden flex flex-col">
-                    <div class="bg-natura-green-cerrado p-5 flex justify-between items-center text-white flex-none">
-                        <div>
+                    <div class="bg-natura-green-cerrado p-5 flex justify-between items-center text-white flex-none gap-3">
+                        <div class="min-w-0">
                             <h2 id="tabular-incidents-title" class="text-xl font-bold leading-none">Incidentes</h2>
                             <p id="tabular-incidents-subtitle" class="text-xs text-natura-gray-light/80 mt-1"></p>
                         </div>
-                        <button id="btn-close-tabular-incidents"
-                            class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                        <div class="flex items-center gap-2 flex-none">
+                            <button type="button" onclick="exportRegistered('tabular-incidents')"
+                                class="inline-flex items-center gap-1.5 text-xs font-bold text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors rounded-full px-3 py-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Exportar Excel
+                            </button>
+                            <button id="btn-close-tabular-incidents"
+                                class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                     <div class="overflow-auto p-4">
                         <table class="w-full text-xs border-collapse">
@@ -2028,19 +2038,28 @@
             <div id="origem-drill-modal"
                 class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
                 <div class="bg-white rounded-2xl shadow-xl w-full max-w-5xl max-h-[85vh] overflow-hidden flex flex-col">
-                    <div class="bg-natura-green-cerrado p-5 flex justify-between items-center text-white flex-none">
-                        <div>
+                    <div class="bg-natura-green-cerrado p-5 flex justify-between items-center text-white flex-none gap-3">
+                        <div class="min-w-0">
                             <h2 id="origem-drill-title" class="text-xl font-bold leading-none">Origem da Detecção</h2>
                             <p id="origem-drill-subtitle" class="text-xs text-natura-gray-light/80 mt-1"></p>
                         </div>
-                        <button id="btn-close-origem-drill"
-                            class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                        <div class="flex items-center gap-2 flex-none">
+                            <button type="button" id="btn-export-origem-drill" onclick="exportRegistered('origem-drill')"
+                                class="hidden items-center gap-1.5 text-xs font-bold text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors rounded-full px-3 py-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Exportar Excel
+                            </button>
+                            <button id="btn-close-origem-drill"
+                                class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                     <div class="flex items-center gap-1 px-4 pt-3 border-b border-slate-100 flex-none">
                         <button type="button" id="origem-drill-tab-ranking" data-tab="ranking"
@@ -2128,19 +2147,28 @@
                 <div
                     class="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col transform transition-all scale-100">
                     <!-- Header -->
-                    <div class="bg-natura-green-cerrado p-5 flex justify-between items-center text-white">
-                        <div class="flex items-center gap-3">
+                    <div class="bg-natura-green-cerrado p-5 flex justify-between items-center text-white gap-3">
+                        <div class="flex items-center gap-3 min-w-0">
                             <h2 id="incidents-modal-title" class="text-xl font-bold leading-none">Detalhes dos
                                 Incidentes</h2>
                         </div>
-                        <button onclick="closeIncidentsModal()"
-                            class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                        <div class="flex items-center gap-2 flex-none">
+                            <button type="button" onclick="exportRegistered('incidents-details')"
+                                class="inline-flex items-center gap-1.5 text-xs font-bold text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors rounded-full px-3 py-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Exportar Excel
+                            </button>
+                            <button onclick="closeIncidentsModal()"
+                                class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Content -->
@@ -2158,19 +2186,28 @@
                 <div
                     class="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col transform transition-all scale-100">
                     <!-- Header -->
-                    <div class="bg-natura-green-cerrado p-5 flex justify-between items-center text-white">
-                        <div>
+                    <div class="bg-natura-green-cerrado p-5 flex justify-between items-center text-white gap-3">
+                        <div class="min-w-0">
                             <h2 id="qualidade-drill-title" class="text-xl font-bold leading-none">Detalhes</h2>
                             <p id="qualidade-drill-subtitle" class="text-xs text-white/80 mt-1"></p>
                         </div>
-                        <button onclick="closeQualidadeDrillModal()"
-                            class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                        <div class="flex items-center gap-2 flex-none">
+                            <button type="button" onclick="exportRegistered('qualidade-drill')"
+                                class="inline-flex items-center gap-1.5 text-xs font-bold text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors rounded-full px-3 py-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Exportar Excel
+                            </button>
+                            <button onclick="closeQualidadeDrillModal()"
+                                class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Content -->
@@ -2193,18 +2230,27 @@
             <div
                 class="bg-white rounded-2xl shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col transform transition-all scale-100 overflow-hidden">
                 <!-- Header -->
-                <div class="bg-natura-green-cerrado p-5 flex justify-between items-center text-white shrink-0">
-                    <div class="flex items-center gap-3">
+                <div class="bg-natura-green-cerrado p-5 flex justify-between items-center text-white shrink-0 gap-3">
+                    <div class="flex items-center gap-3 min-w-0">
                         <h2 class="text-xl font-bold leading-none">Análise de Incidentes - Mudança</h2>
                     </div>
-                    <button onclick="closeMudancaModal()"
-                        class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
+                    <div class="flex items-center gap-2 flex-none">
+                        <button type="button" id="btn-export-mudanca-detalhes" onclick="exportRegistered('mudanca-detalhes')"
+                            class="inline-flex items-center gap-1.5 text-xs font-bold text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors rounded-full px-3 py-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Exportar Excel
+                        </button>
+                        <button onclick="closeMudancaModal()"
+                            class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Tabs Navigation -->
