@@ -63,6 +63,7 @@
         setupSectionNav();
         setupFiltersToggle();
         setupTabularIncidentsButtons();
+        setupOrigemDrillModal();
         setupMetodologiaModal();
         loadInitialConfig();
         const yearSelect = document.getElementById('year-select');
@@ -633,7 +634,7 @@
         renderIncidentesForaOLA(data.incidentesForaOLA);
         renderGruposResponsaveis(data.gruposResponsaveis);
         renderSankeyMudanca(data.sankeyMudanca);
-        renderOrigemDeteccao(data.origemDeteccao);
+        renderOrigemCards(data.origemDeteccao, data.kpis.incidentesTotal);
         renderMttdVsMttrChart(data.mttdVsMttrDispersao);
         renderMttdTerminoVsMttrChart(data.mttdTerminoVsMttrDispersao);
         renderJornadaCards(data.jornadaMetrics, data.kpis.incidentesTotal);
@@ -1596,6 +1597,15 @@
         setText('val-aderencia-ola-sev0', (kpis.aderenciaOLASev0 != null ? kpis.aderenciaOLASev0 : 0) + '%');
         setText('val-aderencia-ola-sev1', (kpis.aderenciaOLASev1 != null ? kpis.aderenciaOLASev1 : 0) + '%');
 
+        // Item 1: badge "semáforo" de cumprimento de Meta (distinto das cores de Severidade)
+        const setBadge = (id, ok) => { const el = document.getElementById(id); if (el) el.innerHTML = buildMetaBadge(ok); };
+        const sev0Total = kpis.incidentesSev0 || 0;
+        const sev1Total = kpis.incidentesSev1 || 0;
+        const olaGeralMeta = (sev0Total + sev1Total) > 0 ? ((sev0Total * 70 + sev1Total * 80) / (sev0Total + sev1Total)) : 75;
+        setBadge('ola-meta-badge-geral', (kpis.aderenciaOLA || 0) >= olaGeralMeta);
+        setBadge('ola-meta-badge-sev0', (kpis.aderenciaOLASev0 || 0) >= 70);
+        setBadge('ola-meta-badge-sev1', (kpis.aderenciaOLASev1 || 0) >= 80);
+
         // Visão Executiva: Mudança
         setText('val-incidentes-mudanca', kpis.incidentesMudanca || 0);
         setText('val-pct-mudanca', `(${kpis.pctMudanca != null ? kpis.pctMudanca : 0}%)`);
@@ -1820,31 +1830,154 @@
     });
 
     // Origem da Detecção do Incidente (Caller do ServiceNow)
-    function renderOrigemDeteccao(origem) {
-        const listEl = document.getElementById('origem-deteccao-list');
-        if (!listEl) return;
-        const empty = { count: 0, mttr: '00:00' };
-        const o = origem || { 'End-users': empty, 'Monitoração': empty, 'Experiências': empty, base: 0 };
-        const base = o.base || 0;
-        const items = [
-            { label: 'End-users', data: o['End-users'] || empty, icon: '👤', color: 'text-natura-blue-profundo' },
-            { label: 'Monitoração', data: o['Monitoração'] || empty, icon: '🖥️', color: 'text-natura-green-cerrado' },
-            { label: 'Experiências', data: o['Experiências'] || empty, icon: '✨', color: 'text-natura-orange' }
-        ];
-        listEl.innerHTML = items.map(it => {
-            const count = it.data.count || 0;
-            const pct = base > 0 ? Math.round((count / base) * 1000) / 10 : 0;
+    const ORIGEM_ICONS = { 'End-users': '👤', 'Monitoração': '🖥️', 'Experiências': '✨' };
+    let ORIGEM_CARDS_DATA = {}; // guarda o último payload, usado pelo pop-up de drill-down (item 9)
+
+    // Cards de Origem da Detecção (End-users/Monitoração/Experiências), com Volume/%, OLA Geral,
+    // Severidade e um botão que abre o pop-up de drill-down (ranking de Caller + lista de Incidentes).
+    function renderOrigemCards(origem, totalIncidentes) {
+        const gridEl = document.getElementById('origem-cards-grid');
+        if (!gridEl) return;
+        const empty = { count: 0, mttr: '00:00', sev0Count: 0, sev1Count: 0, sev0DurationMin: 0, sev1DurationMin: 0, sev0DentroOLA: 0, sev1DentroOLA: 0, callerRanking: [], incidentIds: [] };
+        const o = origem || {};
+        ORIGEM_CARDS_DATA = o;
+        const keys = ['End-users', 'Monitoração', 'Experiências'];
+
+        gridEl.innerHTML = keys.map(key => {
+            const item = o[key] || empty;
+            const pct = totalIncidentes > 0 ? Math.round((item.count / totalIncidentes) * 1000) / 10 : 0;
+
             return `
-                <div class="flex items-center justify-between py-2 px-3 border border-slate-100 rounded-lg bg-slate-50/50">
-                    <span class="flex items-center gap-2 text-xs font-bold text-slate-700"><span>${it.icon}</span>${it.label}</span>
-                    <span class="text-right">
-                        <span class="font-black text-sm ${it.color}">${count}</span>
-                        <span class="text-[10px] text-slate-400 ml-1">(${pct}%)</span>
-                        <span class="block text-[9px] text-slate-400 font-semibold">MTTR: ${it.data.mttr || '00:00'}</span>
-                    </span>
+                <div class="kpi-card rounded-2xl p-4 border border-slate-200 bg-white">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="flex items-center gap-2">
+                            <span class="text-xl">${ORIGEM_ICONS[key] || '🔹'}</span>
+                            <p class="text-xs font-bold text-slate-700 leading-tight">${key}</p>
+                        </span>
+                        <span class="inline-block w-2.5 h-2.5 rounded-full" style="background:${ORIGEM_COLORS[key] || '#94a3b8'}"></span>
+                    </div>
+                    <p class="text-2xl font-extrabold text-natura-green-cerrado">${item.count} <span class="text-xs font-semibold text-slate-400">(${pct}%)</span></p>
+                    <p class="text-[10px] text-slate-400 mt-1">MTTR médio ${item.mttr || '00:00'}</p>
+                    ${buildOlaSevBlockHtml(item)}
+                    <button type="button" data-origem-key="${escapeXml(key)}" onclick="openOrigemDrillModal('${escapeXml(key)}')"
+                        class="mt-3 w-full inline-flex items-center justify-center gap-2 text-xs font-bold text-natura-blue-profundo hover:text-natura-green-cerrado transition-colors py-2 border-t border-slate-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                        </svg>
+                        Ver Detalhamento
+                    </button>
                 </div>
             `;
-        }).join('') + `<p class="text-[9px] text-slate-400 mt-1">Base: ${base} incidente(s) com Caller encontrado.</p>`;
+        }).join('');
+    }
+
+    // Pop-up de drill-down de um card de Origem da Detecção (item 9): aba de Ranking por Caller
+    // (ex: "1º Zabbix") e aba de Lista de Incidentes com as principais informações.
+    let origemDrillIncidentsCache = {}; // key -> incidentes já buscados, evita refetch ao trocar de aba
+
+    function setupOrigemDrillModal() {
+        const modal = document.getElementById('origem-drill-modal');
+        const closeBtn = document.getElementById('btn-close-origem-drill');
+        if (closeBtn && modal) {
+            closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+            modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+        }
+
+        document.querySelectorAll('.origem-drill-tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => switchOrigemDrillTab(btn.dataset.tab));
+        });
+    }
+
+    function switchOrigemDrillTab(tab) {
+        document.querySelectorAll('.origem-drill-tab-btn').forEach(btn => {
+            const isActive = btn.dataset.tab === tab;
+            btn.classList.toggle('text-natura-green-cerrado', isActive);
+            btn.classList.toggle('bg-white', isActive);
+            btn.classList.toggle('border-slate-200', isActive);
+            btn.classList.toggle('text-slate-400', !isActive);
+        });
+        document.getElementById('origem-drill-panel-ranking').classList.toggle('hidden', tab !== 'ranking');
+        document.getElementById('origem-drill-panel-incidents').classList.toggle('hidden', tab !== 'incidents');
+    }
+
+    function openOrigemDrillModal(key) {
+        const modal = document.getElementById('origem-drill-modal');
+        const item = ORIGEM_CARDS_DATA[key];
+        if (!modal || !item) return;
+
+        document.getElementById('origem-drill-title').textContent = key;
+        document.getElementById('origem-drill-subtitle').textContent = `${item.count} incidente(s) · MTTR médio ${item.mttr || '00:00'}`;
+
+        const ranking = item.callerRanking || [];
+        const rankingEl = document.getElementById('origem-drill-panel-ranking');
+        if (!ranking.length) {
+            rankingEl.innerHTML = `<div class="text-center text-slate-300 italic py-8">Nenhum dado de Caller encontrado.</div>`;
+        } else {
+            rankingEl.innerHTML = ranking.map((r, idx) => {
+                const pct = item.count > 0 ? Math.round((r.count / item.count) * 1000) / 10 : 0;
+                return `
+                    <div class="flex justify-between items-center py-2.5 px-3 border-b border-slate-50 last:border-0 hover:bg-slate-50 rounded-lg transition-colors">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <span class="flex-none w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 text-[10px] font-bold border border-slate-200">${idx + 1}º</span>
+                            <span class="font-bold text-slate-700 text-xs truncate" title="${escapeXml(r.name)}">${escapeXml(r.name)}</span>
+                        </div>
+                        <span class="flex-none text-right">
+                            <span class="font-black text-sm text-natura-orange">${r.count}</span>
+                            <span class="text-[10px] text-slate-400 ml-1">(${pct}%)</span>
+                        </span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        switchOrigemDrillTab('ranking');
+        modal.classList.remove('hidden');
+
+        const thead = document.getElementById('origem-drill-incidents-thead');
+        const tbody = document.getElementById('origem-drill-incidents-tbody');
+        const columns = [
+            { key: 'id', label: 'Número' },
+            { key: 'descImpacto', label: 'Definição' },
+            { key: 'dataEncerramento', label: 'Fim do Impacto' },
+            { key: 'ttr', label: 'TTR' },
+            { key: 'offender', label: 'Ofensor' },
+            { key: 'techImpactada', label: 'Tecnologia Impactada' },
+            { key: 'abrangencia', label: 'Países Impactados' },
+            { key: 'jornada', label: 'Jornadas Impactadas' }
+        ];
+        thead.innerHTML = `<tr>${columns.map(c => `<th class="text-left font-bold text-slate-500 uppercase tracking-wider text-[10px] px-3 py-2 border-b border-slate-200">${c.label}</th>`).join('')}</tr>`;
+
+        if (origemDrillIncidentsCache[key]) {
+            renderOrigemDrillIncidentsTable(origemDrillIncidentsCache[key], columns, tbody);
+            return;
+        }
+
+        tbody.innerHTML = `<tr><td colspan="${columns.length}" class="text-center text-slate-300 italic py-6">Carregando...</td></tr>`;
+        google.script.run
+            .withSuccessHandler(incidents => {
+                if (!incidents || incidents.error) {
+                    tbody.innerHTML = `<tr><td colspan="${columns.length}" class="text-center text-red-400 italic py-6">Erro ao buscar os incidentes.</td></tr>`;
+                    return;
+                }
+                origemDrillIncidentsCache[key] = incidents;
+                renderOrigemDrillIncidentsTable(incidents, columns, tbody);
+            })
+            .withFailureHandler(e => {
+                tbody.innerHTML = `<tr><td colspan="${columns.length}" class="text-center text-red-400 italic py-6">Falha na comunicação: ${e.message}</td></tr>`;
+            })
+            .getIncidentsByIds(item.incidentIds || []);
+    }
+
+    function renderOrigemDrillIncidentsTable(incidents, columns, tbody) {
+        if (!incidents.length) {
+            tbody.innerHTML = `<tr><td colspan="${columns.length}" class="text-center text-slate-300 italic py-6">Nenhum incidente encontrado.</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = incidents.map(inc => `
+            <tr class="hover:bg-slate-50">
+                ${columns.map(c => `<td class="px-3 py-2 text-slate-600 whitespace-nowrap">${escapeXml(inc[c.key] != null ? inc[c.key] : 'N/A')}</td>`).join('')}
+            </tr>
+        `).join('');
     }
 
     // Dispersão MTTD x MTTR para Incidentes causados por Mudança
@@ -1972,15 +2105,18 @@
 
     // Bloco Sev0/Sev1 + OLA Geral + Origem da Detecção (com mini-rosca), reutilizado nos cards
     // estendidos de Jornada e País.
-    function buildSevBreakdownHtml(item, donutCanvasId) {
+    // Bloco OLA Geral (Sev0+Sev1) + volumetria/MTTR/OLA por Severidade, reutilizado nos cards
+    // estendidos de Jornada, País e Origem da Detecção.
+    function buildOlaSevBlockHtml(item) {
         const sev0Count = item.sev0Count || 0;
         const sev1Count = item.sev1Count || 0;
         const sev0MTTR = sev0Count > 0 ? item.sev0DurationMin / sev0Count : 0;
         const sev1MTTR = sev1Count > 0 ? item.sev1DurationMin / sev1Count : 0;
         const sev0OLA = sev0Count > 0 ? Math.round((item.sev0DentroOLA / sev0Count) * 1000) / 10 : 0;
         const sev1OLA = sev1Count > 0 ? Math.round((item.sev1DentroOLA / sev1Count) * 1000) / 10 : 0;
-        const sev0Pct = item.count > 0 ? Math.round((sev0Count / item.count) * 1000) / 10 : 0;
-        const sev1Pct = item.count > 0 ? Math.round((sev1Count / item.count) * 1000) / 10 : 0;
+        const base = item.count || (sev0Count + sev1Count);
+        const sev0Pct = base > 0 ? Math.round((sev0Count / base) * 1000) / 10 : 0;
+        const sev1Pct = base > 0 ? Math.round((sev1Count / base) * 1000) / 10 : 0;
 
         const olaGeralTotal = sev0Count + sev1Count;
         const olaGeralDentro = (item.sev0DentroOLA || 0) + (item.sev1DentroOLA || 0);
@@ -1988,8 +2124,6 @@
         // Meta Geral: usa a média ponderada das metas de Sev0 (70%) e Sev1 (80%) pela proporção de cada severidade
         const olaGeralMeta = olaGeralTotal > 0 ? ((sev0Count * 70 + sev1Count * 80) / olaGeralTotal) : 75;
         const olaGeralOk = olaGeralPct >= olaGeralMeta;
-
-        const origemBase = Object.values(item.origemBreakdown || {}).reduce((a, b) => a + b, 0);
 
         return `
             <div class="flex items-center justify-between pt-3 mt-3 border-t border-slate-100">
@@ -2013,6 +2147,13 @@
                     <div class="mt-1">${sev1Count > 0 ? `<span class="text-[9px] font-bold text-slate-600 mr-1">${sev1OLA}% OLA</span>${buildMetaBadge(sev1OLA >= 80)}` : '<span class="text-[9px] text-slate-300">—</span>'}</div>
                 </div>
             </div>
+        `;
+    }
+
+    // Bloco Origem da Detecção com mini-rosca, reutilizado nos cards estendidos de Jornada e País
+    function buildOrigemDonutBlockHtml(item, donutCanvasId) {
+        const origemBase = Object.values(item.origemBreakdown || {}).reduce((a, b) => a + b, 0);
+        return `
             <div class="mt-2 pt-2 border-t border-slate-50">
                 <p class="text-[9px] text-slate-400 uppercase font-bold mb-1.5">Origem da Detecção</p>
                 <div class="flex items-center gap-3">
@@ -2021,6 +2162,11 @@
                 </div>
             </div>
         `;
+    }
+
+    // Composição usada nos cards de Jornada/País: OLA+Severidade seguido de Origem com mini-rosca
+    function buildSevBreakdownHtml(item, donutCanvasId) {
+        return buildOlaSevBlockHtml(item) + buildOrigemDonutBlockHtml(item, donutCanvasId);
     }
 
     // Cards de Incidentes por Jornada Impactada, com ícones

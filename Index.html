@@ -477,6 +477,7 @@
                                 </span>
                             </div>
                             <p id="val-aderencia-ola" class="text-3xl font-extrabold text-natura-green-cerrado">0%</p>
+                            <span id="ola-meta-badge-geral" class="inline-block mt-2"></span>
                             <span id="delta-badge-ola" class="hidden inline-block mt-2 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
                         </div>
                         <!-- Aderência OLA Sev0 -->
@@ -498,6 +499,7 @@
                             <p id="val-aderencia-ola-sev0" class="text-3xl font-extrabold" style="color:#e94839;">0%
                             </p>
                             <p class="text-[10px] text-slate-400 mt-1">Meta: <span class="font-bold" style="color:#e94839;">≥ 70%</span></p>
+                            <span id="ola-meta-badge-sev0" class="inline-block mt-2"></span>
                             <span id="delta-badge-ola-sev0" class="hidden inline-block mt-2 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
                         </div>
                         <!-- Aderência OLA Sev1 -->
@@ -518,6 +520,7 @@
                             </div>
                             <p id="val-aderencia-ola-sev1" class="text-3xl font-extrabold text-natura-orange">0%</p>
                             <p class="text-[10px] text-slate-400 mt-1">Meta: <span class="font-bold text-natura-orange">≥ 80%</span></p>
+                            <span id="ola-meta-badge-sev1" class="inline-block mt-2"></span>
                             <span id="delta-badge-ola-sev1" class="hidden inline-block mt-2 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
                         </div>
                     </div>
@@ -2017,6 +2020,46 @@
                             <tbody id="tabular-incidents-tbody" class="divide-y divide-slate-100">
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pop-up de Drill-down dos cards de Origem da Detecção (item 9): Ranking por Caller + Lista de Incidentes -->
+            <div id="origem-drill-modal"
+                class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+                <div class="bg-white rounded-2xl shadow-xl w-full max-w-5xl max-h-[85vh] overflow-hidden flex flex-col">
+                    <div class="bg-natura-green-cerrado p-5 flex justify-between items-center text-white flex-none">
+                        <div>
+                            <h2 id="origem-drill-title" class="text-xl font-bold leading-none">Origem da Detecção</h2>
+                            <p id="origem-drill-subtitle" class="text-xs text-natura-gray-light/80 mt-1"></p>
+                        </div>
+                        <button id="btn-close-origem-drill"
+                            class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-1 px-4 pt-3 border-b border-slate-100 flex-none">
+                        <button type="button" id="origem-drill-tab-ranking" data-tab="ranking"
+                            class="origem-drill-tab-btn px-4 py-2 text-xs font-bold rounded-t-lg border border-b-0 border-transparent text-natura-green-cerrado bg-white border-slate-200">
+                            Ranking por Origem
+                        </button>
+                        <button type="button" id="origem-drill-tab-incidents" data-tab="incidents"
+                            class="origem-drill-tab-btn px-4 py-2 text-xs font-bold rounded-t-lg border border-b-0 border-transparent text-slate-400 hover:text-natura-green-cerrado">
+                            Lista de Incidentes
+                        </button>
+                    </div>
+                    <div class="overflow-auto p-4">
+                        <div id="origem-drill-panel-ranking"></div>
+                        <div id="origem-drill-panel-incidents" class="hidden">
+                            <table class="w-full text-xs border-collapse">
+                                <thead id="origem-drill-incidents-thead" class="sticky top-0 bg-white"></thead>
+                                <tbody id="origem-drill-incidents-tbody" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
