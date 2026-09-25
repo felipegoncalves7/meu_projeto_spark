@@ -1704,6 +1704,10 @@
         setText('val-aderencia-sevprio', kpis.aderenciaSevPrio != null ? `${kpis.aderenciaSevPrio}%` : '—');
         setText('val-aderencia-sevprio-sev0', kpis.aderenciaSevPrioSev0 != null ? `${kpis.aderenciaSevPrioSev0}%` : '—');
         setText('val-aderencia-sevprio-sev1', kpis.aderenciaSevPrioSev1 != null ? `${kpis.aderenciaSevPrioSev1}%` : '—');
+        // Item 1: badge de Meta (farol) também na Governança Sev x Prioridade (meta única: >= 80%)
+        if (kpis.aderenciaSevPrio != null) setBadge('sevprio-meta-badge-geral', kpis.aderenciaSevPrio >= 80);
+        if (kpis.aderenciaSevPrioSev0 != null) setBadge('sevprio-meta-badge-sev0', kpis.aderenciaSevPrioSev0 >= 80);
+        if (kpis.aderenciaSevPrioSev1 != null) setBadge('sevprio-meta-badge-sev1', kpis.aderenciaSevPrioSev1 >= 80);
     }
 
     // Lista de incidentes com divergência entre Severidade técnica e Priority do ServiceNow
