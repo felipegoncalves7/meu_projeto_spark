@@ -56,37 +56,34 @@ function buildChangeMap(ss) {
   return map;
 }
 
+// Mapeamento da aba Change_Exe (Range A1:Z, ~46mil SMs executadas — todas, não só as que causaram
+// Incidentes). Não existe coluna própria de resultado/close_code nesta aba; por isso a "falha" de uma
+// SM é definida como: causou um Major Incident (o Number bate com uma SM Number vinculada a um
+// Incidente no período filtrado) — ver buildChangeExeGroupStats.
+const CHGEXE_COL_NUMBER = 0;            // A
+const CHGEXE_COL_ASSIGNMENT_GROUP = 11; // L
+
 /**
- * Monta um mapa Grupo -> { executed, failed } a partir da aba Change_Exe (todas as SMs executadas,
- * não só as que causaram Incidentes), usado para calcular a Taxa de Falha de cada Grupo nos cards
- * de Top Grupos (item 5). Detecta as colunas de Grupo Responsável e de resultado da execução pelo
- * NOME do cabeçalho (linha 1), em vez de índice fixo, já que o layout exato desta aba não foi
- * documentado ainda — evita quebrar caso as colunas mudem de posição.
+ * Monta um mapa Grupo -> { executed, failed } a partir da aba Change_Exe (todas as SMs executadas
+ * por aquele grupo, não só as que causaram Incidentes). Como a aba não tem uma coluna própria de
+ * resultado/close_code, "falha" é definida como: a SM causou um Major Incident no período filtrado
+ * (seu Number está em smNumbersCausandoIncidentes, coletado durante o mesmo loop que monta os
+ * grupos de Deploy/Tradicional). Usado na Taxa de Falha dos cards de Top Grupos (item 5/8).
  */
-function buildChangeExeGroupStats(ss) {
+function buildChangeExeGroupStats(ss, smNumbersCausandoIncidentes) {
   const stats = {};
   const sheet = ss.getSheetByName('Change_Exe');
   if (!sheet) return stats;
 
   const values = sheet.getDataRange().getValues();
-  if (values.length < 2) return stats;
-
-  const header = values[0].map(h => String(h || '').trim().toLowerCase());
-  const findCol = (patterns) => header.findIndex(h => patterns.some(p => p.test(h)));
-
-  const groupCol = findCol([/assignment.*group/, /grupo.*respons/, /^grupo$/]);
-  const outcomeCol = findCol([/close.*code/, /result/, /resultado/, /outcome/, /status.*execu/]);
-  if (groupCol === -1 || outcomeCol === -1) return stats; // layout não reconhecido: sem dados de falha
-
-  const isFailure = (v) => /unsuccessful|fail|falh|insucesso|reprovad/i.test(String(v || ''));
-
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
-    const group = String(row[groupCol] || '').trim();
-    if (!group) continue;
+    const number = String(row[CHGEXE_COL_NUMBER] || '').trim();
+    const group = String(row[CHGEXE_COL_ASSIGNMENT_GROUP] || '').trim();
+    if (!number || !group) continue;
     if (!stats[group]) stats[group] = { executed: 0, failed: 0 };
     stats[group].executed++;
-    if (isFailure(row[outcomeCol])) stats[group].failed++;
+    if (smNumbersCausandoIncidentes.has(number)) stats[group].failed++;
   }
   return stats;
 }
@@ -1036,6 +1033,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
              base: 0
            },
            gruposResponsaveis: { deploy: [], tradicional: [] },
+           gruposResponsaveisPorTaxaFalha: { deploy: [], tradicional: [] },
            sankeyMudanca: { deploy: [], tradicional: [] },
            mttdVsMttrDispersao: [],
            mttdTerminoVsMttrDispersao: [],
@@ -1069,7 +1067,6 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
     if (end) end.setHours(23, 59, 59, 999);
 
     const changeMap = buildChangeMap(ss);
-    const changeExeGroupStats = buildChangeExeGroupStats(ss);
     const priorityMap = buildPriorityMap(ss);
     const callerMap = buildCallerMap(ss);
     const serviceNowInfoMap = buildServiceNowInfoMap(ss);
@@ -1091,6 +1088,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         incidentesMudanca: 0,
         mttdInicioSomaHoras: 0, mttdInicioCount: 0,
         mttdTerminoSomaHoras: 0, mttdTerminoCount: 0,
+        smNumbersCausandoIncidentes: new Set(),
         // Cards de Mudança (item 1), no mesmo formato usado em Jornada/País/Origem: Volume, MTTR,
         // OLA por Severidade e Origem da Detecção — um para o total Geral e um por Tipo (Deploy/Tradicional).
         mudancaGeral: makeMudancaCardBucket(),
@@ -1404,6 +1402,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
 
             const numSm = String(row[COL_SM_NUMBER]).trim();
             const chg = numSm ? changeMap[numSm] : null;
+            // Coletado para a Taxa de Falha (item 5/8): toda SM que causou um Major Incident neste período filtrado
+            if (numSm) metrics.smNumbersCausandoIncidentes.add(numSm);
 
             // Top Grupos/Serviços Responsáveis (contagem por Tecnologia, usada no ranking e no Diagrama de Sankey).
             // Deploy também é agrupado por Grupo Ofensor (assignmentGroup), igual à Tradicional, para o
@@ -1626,6 +1626,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
     // Top Grupos Responsáveis (item 5): ranking agregado por GRUPO apenas (independente de terem sido
     // em Service Offerings/CHG Services diferentes), com a Taxa de Falha do grupo (SMs executadas vs
     // SMs que falharam, via Change_Exe) anexada a cada card.
+    const changeExeGroupStats = buildChangeExeGroupStats(ss, metrics.smNumbersCausandoIncidentes);
     const attachFailureRate = (grupo) => {
         const stats = changeExeGroupStats[grupo];
         if (!stats || stats.executed === 0) return { smsExecutadas: null, smsFalhas: null, taxaFalhaPct: null };
@@ -1636,6 +1637,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         };
     };
 
+    // Item 8: dois rankings por Universo — um por Volumetria de Incidentes Causados, outro por Taxa
+    // de Falha do Grupo (SMs executadas x SMs que causaram Incidente, via Change_Exe).
     const buildGroupRanking = (gruposObj) => {
         const byGrupo = {};
         Object.keys(gruposObj).forEach(key => {
@@ -1646,18 +1649,25 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
                 byGrupo[g.grupo].tecnologias[tech] = (byGrupo[g.grupo].tecnologias[tech] || 0) + g.tecnologias[tech];
             });
         });
-        return Object.keys(byGrupo).map(grupo => {
+        const list = Object.keys(byGrupo).map(grupo => {
             const g = byGrupo[grupo];
             return Object.assign({
                 grupo: g.grupo,
                 count: g.count,
                 tecnologias: Object.keys(g.tecnologias)
             }, attachFailureRate(g.grupo));
-        }).sort((a, b) => b.count - a.count);
+        });
+        const porVolume = list.slice().sort((a, b) => b.count - a.count);
+        const porTaxaFalha = list.slice()
+            .filter(item => item.taxaFalhaPct !== null)
+            .sort((a, b) => b.taxaFalhaPct - a.taxaFalhaPct);
+        return { porVolume, porTaxaFalha };
     };
 
-    const gruposDeployList = buildGroupRanking(metrics.gruposDeploy);
-    const gruposTradicionalList = buildGroupRanking(metrics.gruposTradicional);
+    const gruposDeployRanking = buildGroupRanking(metrics.gruposDeploy);
+    const gruposTradicionalRanking = buildGroupRanking(metrics.gruposTradicional);
+    const gruposDeployList = gruposDeployRanking.porVolume;
+    const gruposTradicionalList = gruposTradicionalRanking.porVolume;
 
     // Diagrama de Sankey: Deploy e Tradicional são ambos 3 estágios (Grupo -> Service Offering/CHG
     // Service -> Tecnologia), agregando por par em cada estágio.
@@ -1763,6 +1773,10 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         gruposResponsaveis: {
             deploy: gruposDeployList,
             tradicional: gruposTradicionalList
+        },
+        gruposResponsaveisPorTaxaFalha: {
+            deploy: gruposDeployRanking.porTaxaFalha,
+            tradicional: gruposTradicionalRanking.porTaxaFalha
         },
         sankeyMudanca: {
             deploy: sankeyDeploy,

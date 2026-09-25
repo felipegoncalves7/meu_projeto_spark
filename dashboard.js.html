@@ -634,7 +634,7 @@
         renderKpiCards(data.kpis);
         renderDivergenciasSevPrio(data.divergenciasSevPrio);
         renderIncidentesForaOLA(data.incidentesForaOLA);
-        renderGruposResponsaveis(data.gruposResponsaveis);
+        renderGruposResponsaveis({ volume: data.gruposResponsaveis, falha: data.gruposResponsaveisPorTaxaFalha });
         renderSankeyMudanca(data.sankeyMudanca);
         renderOrigemCards(data.origemDeteccao, data.kpis.incidentesTotal);
         renderMttdVsMttrChart(data.mttdVsMttrDispersao);
@@ -1734,14 +1734,21 @@
         return `<span class="text-[9px] font-bold ${color}">Taxa de Falha: ${item.taxaFalhaPct}% <span class="text-slate-400 font-normal">(${item.smsFalhas}/${item.smsExecutadas} SMs)</span></span>`;
     }
 
+    // Item 8: dois rankings por Universo (Volumetria x Taxa de Falha), alternados por um toggle;
+    // guarda o último payload para re-renderizar ao trocar o modo sem precisar recarregar do servidor.
+    let LAST_GRUPOS_DATA = { volume: { deploy: [], tradicional: [] }, falha: { deploy: [], tradicional: [] } };
+    const GRUPOS_RANKING_MODE = { deploy: 'volume', tradicional: 'volume' };
+
     function renderGruposResponsaveis(grupos) {
         const tradEl = document.getElementById('grupos-tradicional-list');
         const deployEl = document.getElementById('grupos-deploy-list');
         if (!tradEl || !deployEl) return;
 
-        const g = grupos || { deploy: [], tradicional: [] };
+        LAST_GRUPOS_DATA = grupos || LAST_GRUPOS_DATA;
+        const volume = LAST_GRUPOS_DATA.volume || { deploy: [], tradicional: [] };
+        const falha = LAST_GRUPOS_DATA.falha || { deploy: [], tradicional: [] };
 
-        const buildRow = (item, idx) => `
+        const buildRow = (item, idx, mode) => `
             <div class="flex items-start justify-between gap-2 py-2 px-3 border border-slate-100 rounded-lg bg-slate-50/50">
                 <div class="flex items-start gap-2 min-w-0">
                     <div class="flex-none w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 text-[10px] font-bold border border-slate-200 mt-0.5">${idx + 1}</div>
@@ -1751,21 +1758,22 @@
                         <div class="mt-1">${buildFailureRateBadgeHtml(item)}</div>
                     </div>
                 </div>
-                <span class="flex-none font-black text-natura-orange text-sm">${item.count}</span>
+                <span class="flex-none font-black text-natura-orange text-sm">${mode === 'falha' ? item.taxaFalhaPct + '%' : item.count}</span>
             </div>
         `;
 
-        if (!g.tradicional || !g.tradicional.length) {
-            tradEl.innerHTML = `<p class="text-xs text-slate-300 italic py-2">Nenhum Incidente de Mudança Tradicional no período filtrado.</p>`;
-        } else {
-            tradEl.innerHTML = g.tradicional.slice(0, 10).map(buildRow).join('');
-        }
+        const renderList = (el, universo, emptyMsg) => {
+            const mode = GRUPOS_RANKING_MODE[universo];
+            const list = (mode === 'falha' ? falha[universo] : volume[universo]) || [];
+            if (!list.length) {
+                el.innerHTML = `<p class="text-xs text-slate-300 italic py-2">${mode === 'falha' ? 'Nenhum dado de Taxa de Falha disponível (verifique a aba Change_Exe).' : emptyMsg}</p>`;
+                return;
+            }
+            el.innerHTML = list.slice(0, 10).map((item, idx) => buildRow(item, idx, mode)).join('');
+        };
 
-        if (!g.deploy || !g.deploy.length) {
-            deployEl.innerHTML = `<p class="text-xs text-slate-300 italic py-2">Nenhum Incidente de Deploy no período filtrado.</p>`;
-        } else {
-            deployEl.innerHTML = g.deploy.slice(0, 10).map(buildRow).join('');
-        }
+        renderList(tradEl, 'tradicional', 'Nenhum Incidente de Mudança Tradicional no período filtrado.');
+        renderList(deployEl, 'deploy', 'Nenhum Incidente de Deploy no período filtrado.');
     }
 
     // Diagrama de Sankey: Top Grupos/Serviços Responsáveis por Incidentes de Mudança
@@ -1953,16 +1961,36 @@
         container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" class="w-full h-full" preserveAspectRatio="xMidYMid meet">${linksSvg}${nodesSvg}</svg>`;
     }
 
-    // Botões "Ver ranking detalhado" que expandem/colapsam as listas por trás dos Sankeys
+    // Botões "Ver ranking detalhado" que expandem/colapsam as listas por trás dos Sankeys, e o
+    // toggle Volumetria/Taxa de Falha (item 8) dentro de cada painel
     document.addEventListener('DOMContentLoaded', () => {
-        const wireToggle = (btnId, listId) => {
+        const wireToggle = (btnId, panelId) => {
             const btn = document.getElementById(btnId);
-            const list = document.getElementById(listId);
-            if (!btn || !list) return;
-            btn.addEventListener('click', () => list.classList.toggle('hidden'));
+            const panel = document.getElementById(panelId);
+            if (!btn || !panel) return;
+            btn.addEventListener('click', () => panel.classList.toggle('hidden'));
         };
-        wireToggle('btn-toggle-grupos-tradicional', 'grupos-tradicional-list');
-        wireToggle('btn-toggle-grupos-deploy', 'grupos-deploy-list');
+        wireToggle('btn-toggle-grupos-tradicional', 'grupos-tradicional-panel');
+        wireToggle('btn-toggle-grupos-deploy', 'grupos-deploy-panel');
+
+        const wireRankingModeToggle = (toggleId, universo) => {
+            const container = document.getElementById(toggleId);
+            if (!container) return;
+            container.querySelectorAll('.grupos-ranking-toggle-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    GRUPOS_RANKING_MODE[universo] = btn.dataset.mode;
+                    container.querySelectorAll('.grupos-ranking-toggle-btn').forEach(b => {
+                        b.classList.remove('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
+                        b.classList.add('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
+                    });
+                    btn.classList.remove('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
+                    btn.classList.add('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
+                    renderGruposResponsaveis(LAST_GRUPOS_DATA);
+                });
+            });
+        };
+        wireRankingModeToggle('grupos-tradicional-ranking-toggle', 'tradicional');
+        wireRankingModeToggle('grupos-deploy-ranking-toggle', 'deploy');
     });
 
     // Origem da Detecção do Incidente (Caller do ServiceNow)

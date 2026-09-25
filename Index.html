@@ -1066,7 +1066,13 @@
                                         d="M19 9l-7 7-7-7" />
                                 </svg>
                             </button>
-                            <div id="grupos-tradicional-list" class="hidden space-y-2 mt-3"></div>
+                            <div id="grupos-tradicional-panel" class="hidden mt-3">
+                                <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100 w-fit mb-2" id="grupos-tradicional-ranking-toggle">
+                                    <button type="button" data-mode="volume" class="grupos-ranking-toggle-btn px-3 py-1 text-[10px] font-bold rounded-md transition-all bg-white text-natura-green-cerrado shadow-sm border border-slate-200">Por Volumetria</button>
+                                    <button type="button" data-mode="falha" class="grupos-ranking-toggle-btn px-3 py-1 text-[10px] font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white">Por Taxa de Falha</button>
+                                </div>
+                                <div id="grupos-tradicional-list" class="space-y-2"></div>
+                            </div>
                         </div>
                         <!-- Deploys: Sankey Grupo -> Service Offering -> Tecnologia -->
                         <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
@@ -1082,7 +1088,13 @@
                                         d="M19 9l-7 7-7-7" />
                                 </svg>
                             </button>
-                            <div id="grupos-deploy-list" class="hidden space-y-2 mt-3"></div>
+                            <div id="grupos-deploy-panel" class="hidden mt-3">
+                                <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100 w-fit mb-2" id="grupos-deploy-ranking-toggle">
+                                    <button type="button" data-mode="volume" class="grupos-ranking-toggle-btn px-3 py-1 text-[10px] font-bold rounded-md transition-all bg-white text-natura-green-cerrado shadow-sm border border-slate-200">Por Volumetria</button>
+                                    <button type="button" data-mode="falha" class="grupos-ranking-toggle-btn px-3 py-1 text-[10px] font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white">Por Taxa de Falha</button>
+                                </div>
+                                <div id="grupos-deploy-list" class="space-y-2"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
