@@ -64,6 +64,7 @@
         setupFiltersToggle();
         setupTabularIncidentsButtons();
         setupOrigemDrillModal();
+        setupImpactoMultiploModal();
         setupMetodologiaModal();
         loadInitialConfig();
         const yearSelect = document.getElementById('year-select');
@@ -2025,6 +2026,156 @@
                 </div>
             `;
         }).join('');
+    }
+
+    // Item 2: pop-up "Mais Detalhes" de Jornadas & Países — quebra os Incidentes filtrados em
+    // "impacto único" (1 só Jornada/País) x "impacto múltiplo" (2+ simultâneos), a partir de
+    // ALL_DATA.rawIncidents (já reflete os filtros aplicados), sem precisar de nova chamada ao servidor.
+    function computeImpactoBreakdown(fieldName, isCountry) {
+        const single = {};  // label -> { count, ids }
+        const multi = {};   // comboKey -> { labels: [...], count, ids }
+
+        (ALL_DATA.rawIncidents || []).forEach(inc => {
+            const raw = inc[fieldName];
+            if (!raw || raw === 'N/A') return;
+            let parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+            if (isCountry) parts = parts.map(p => p.toUpperCase());
+            const unique = Array.from(new Set(parts));
+            if (!unique.length) return;
+
+            if (unique.length === 1) {
+                const key = unique[0];
+                if (!single[key]) single[key] = { count: 0, ids: [] };
+                single[key].count++;
+                single[key].ids.push(inc.id);
+            } else {
+                const sorted = unique.slice().sort();
+                const comboKey = sorted.join(', ');
+                if (!multi[comboKey]) multi[comboKey] = { labels: sorted, count: 0, ids: [] };
+                multi[comboKey].count++;
+                multi[comboKey].ids.push(inc.id);
+            }
+        });
+
+        const singleList = Object.keys(single).map(label => ({ label, count: single[label].count, ids: single[label].ids }))
+            .sort((a, b) => b.count - a.count);
+        const multiList = Object.keys(multi).map(key => multi[key]).sort((a, b) => b.count - a.count);
+        const totalIncidentesUnicos = singleList.reduce((sum, x) => sum + x.count, 0);
+        const totalIncidentesMultiplos = multiList.reduce((sum, x) => sum + x.count, 0);
+        const totalImpactosMultiplos = multiList.reduce((sum, x) => sum + x.count * x.labels.length, 0);
+
+        return { singleList, multiList, totalIncidentesUnicos, totalIncidentesMultiplos, totalImpactosMultiplos };
+    }
+
+    function buildImpactoBreakdownHtml(breakdown, dimensionLabel, isCountry) {
+        const labelHtml = (label) => isCountry
+            ? `<span class="inline-flex items-center gap-1.5">${buildFlagSvg(label, 16, 11)} ${escapeXml(label)}</span>`
+            : escapeXml(label);
+
+        const singleRows = breakdown.singleList.map(item => `
+            <div class="flex items-center justify-between text-xs py-1.5 border-b border-slate-50 last:border-0">
+                <span class="font-semibold text-slate-700">${labelHtml(item.label)}</span>
+                <span class="font-bold text-slate-500">${item.count} incidente(s)</span>
+            </div>
+        `).join('') || `<p class="text-xs text-slate-300 italic py-2">Nenhum ${dimensionLabel} único registrado.</p>`;
+
+        const multiRows = breakdown.multiList.map(item => `
+            <div class="flex items-center justify-between text-xs py-1.5 border-b border-slate-50 last:border-0 gap-3">
+                <span class="font-semibold text-slate-700 min-w-0">${item.labels.map(labelHtml).join(', ')}</span>
+                <span class="font-bold text-slate-500 flex-none text-right whitespace-nowrap">${item.count} incidente(s)
+                    <span class="block text-[9px] font-normal text-slate-400">impactam ${item.labels.length} ${dimensionLabel}s cada = ${item.count * item.labels.length} impactos</span>
+                </span>
+            </div>
+        `).join('') || `<p class="text-xs text-slate-300 italic py-2">Nenhum Incidente com múltiplas ${dimensionLabel}s.</p>`;
+
+        return `
+            <div class="mb-5">
+                <h3 class="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">${dimensionLabel.charAt(0).toUpperCase() + dimensionLabel.slice(1)} Única (${breakdown.totalIncidentesUnicos} incidentes)</h3>
+                <div class="bg-slate-50 rounded-lg border border-slate-100 px-3">${singleRows}</div>
+            </div>
+            <div>
+                <h3 class="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Múltiplas ${dimensionLabel.charAt(0).toUpperCase() + dimensionLabel.slice(1)}s (${breakdown.totalIncidentesMultiplos} incidentes que geram ${breakdown.totalImpactosMultiplos} impactos)</h3>
+                <div class="bg-slate-50 rounded-lg border border-slate-100 px-3">${multiRows}</div>
+            </div>
+        `;
+    }
+
+    function switchImpactoMultiploTab(tab) {
+        document.querySelectorAll('.impacto-multiplo-tab-btn').forEach(btn => {
+            const isActive = btn.dataset.tab === tab;
+            btn.classList.toggle('text-natura-green-cerrado', isActive);
+            btn.classList.toggle('bg-white', isActive);
+            btn.classList.toggle('border-slate-200', isActive);
+            btn.classList.toggle('text-slate-400', !isActive);
+        });
+        document.getElementById('impacto-multiplo-panel-jornada').classList.toggle('hidden', tab !== 'jornada');
+        document.getElementById('impacto-multiplo-panel-pais').classList.toggle('hidden', tab !== 'pais');
+        registerExportForImpactoTab(tab);
+    }
+
+    function registerExportForImpactoTab(tab) {
+        const fieldName = tab === 'pais' ? 'abrangencia' : 'jornada';
+        const isCountry = tab === 'pais';
+
+        const rows = (ALL_DATA.rawIncidents || [])
+            .filter(inc => inc[fieldName] && inc[fieldName] !== 'N/A')
+            .map(inc => {
+                let parts = inc[fieldName].split(',').map(s => s.trim()).filter(Boolean);
+                if (isCountry) parts = parts.map(p => p.toUpperCase());
+                const unique = Array.from(new Set(parts));
+                return {
+                    id: inc.id,
+                    severidade: inc.severidade,
+                    valores: unique.join(', '),
+                    quantidade: unique.length,
+                    tipoImpacto: unique.length === 1 ? 'Único' : 'Múltiplo',
+                    dataDefinicao: inc.dataDefinicao,
+                    dataEncerramento: inc.dataEncerramento,
+                    ttr: inc.ttr,
+                    offender: inc.offender
+                };
+            });
+
+        const columns = [
+            { key: 'id', label: 'Número' },
+            { key: 'severidade', label: 'Severidade' },
+            { key: 'valores', label: tab === 'pais' ? 'Países Impactados' : 'Jornadas Impactadas' },
+            { key: 'quantidade', label: tab === 'pais' ? 'Qtd Países' : 'Qtd Jornadas' },
+            { key: 'tipoImpacto', label: 'Tipo de Impacto' },
+            { key: 'dataDefinicao', label: 'Abertura' },
+            { key: 'dataEncerramento', label: 'Encerramento' },
+            { key: 'ttr', label: 'TTR' },
+            { key: 'offender', label: 'Ofensor' }
+        ];
+        registerExport('impacto-multiplo', rows, columns, `Impacto por ${tab === 'pais' ? 'Pais' : 'Jornada'}.xlsx`);
+    }
+
+    function openImpactoMultiploModal() {
+        const modal = document.getElementById('impacto-multiplo-modal');
+        if (!modal) return;
+
+        const jornadaBreakdown = computeImpactoBreakdown('jornada', false);
+        document.getElementById('impacto-multiplo-panel-jornada').innerHTML = buildImpactoBreakdownHtml(jornadaBreakdown, 'jornada', false);
+
+        const paisBreakdown = computeImpactoBreakdown('abrangencia', true);
+        document.getElementById('impacto-multiplo-panel-pais').innerHTML = buildImpactoBreakdownHtml(paisBreakdown, 'país', true);
+
+        switchImpactoMultiploTab('jornada');
+        modal.classList.remove('hidden');
+    }
+
+    function setupImpactoMultiploModal() {
+        const openBtn = document.getElementById('btn-open-impacto-multiplo');
+        const closeBtn = document.getElementById('btn-close-impacto-multiplo');
+        const modal = document.getElementById('impacto-multiplo-modal');
+        if (openBtn) openBtn.addEventListener('click', openImpactoMultiploModal);
+        if (closeBtn && modal) {
+            closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+            modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.add('hidden'); });
+        }
+        document.querySelectorAll('.impacto-multiplo-tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => switchImpactoMultiploTab(btn.dataset.tab));
+        });
     }
 
     // Pop-up de drill-down de um card de Origem da Detecção (item 9): aba de Ranking por Caller
