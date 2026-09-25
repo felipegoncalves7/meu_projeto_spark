@@ -384,6 +384,7 @@
         // 3. Engajamento por Equipe: gráficos de Dispersão (Aging x Volume de Tarefas)
         MP_SCATTER_DATA = data.scatterData || { rca: { backlog: [], resolved: [] }, implementation: { backlog: [], resolved: [] } };
         wireTaskTypeToggle();
+        wireTeamFilter();
         renderScatterCharts(MP_SCATTER_ACTIVE_TYPE);
 
         hideLoader();
@@ -392,6 +393,7 @@
     let MP_SCATTER_DATA = { rca: { backlog: [], resolved: [] }, implementation: { backlog: [], resolved: [] } };
     let MP_SCATTER_ACTIVE_TYPE = 'rca';
     let MP_TASK_TYPE_TOGGLE_WIRED = false;
+    let MP_TEAM_FILTER = '';
 
     function wireTaskTypeToggle() {
         const toggle = document.getElementById('mp-task-type-toggle');
@@ -418,10 +420,51 @@
         });
     }
 
+    function wireTeamFilter() {
+        const input = document.getElementById('mp-team-filter');
+        if (!input || input.dataset.wired) return;
+        input.dataset.wired = 'true';
+        input.addEventListener('input', () => {
+            MP_TEAM_FILTER = input.value.trim().toLowerCase();
+            renderScatterCharts(MP_SCATTER_ACTIVE_TYPE);
+        });
+    }
+
+    function filterTeamPoints(points) {
+        if (!MP_TEAM_FILTER) return points || [];
+        return (points || []).filter(p => (p.name || '').toLowerCase().includes(MP_TEAM_FILTER));
+    }
+
     function renderScatterCharts(type) {
         const dataset = MP_SCATTER_DATA[type] || { backlog: [], resolved: [] };
-        drawTeamScatterChart('mpScatterBacklog', 'backlogScatterChartInstance', dataset.backlog, '#B54708', 'Tarefas em Backlog');
-        drawTeamScatterChart('mpScatterResolved', 'resolvedScatterChartInstance', dataset.resolved, '#045473', 'Tarefas Resolvidas');
+        const backlogPoints = filterTeamPoints(dataset.backlog);
+        const resolvedPoints = filterTeamPoints(dataset.resolved);
+        drawTeamScatterChart('mpScatterBacklog', 'backlogScatterChartInstance', backlogPoints, '#B54708', 'Tarefas em Backlog');
+        drawTeamScatterChart('mpScatterResolved', 'resolvedScatterChartInstance', resolvedPoints, '#045473', 'Tarefas Resolvidas');
+        renderTeamRanking('mp-rank-backlog', backlogPoints, false);
+        renderTeamRanking('mp-rank-resolved', resolvedPoints, true);
+    }
+
+    function renderTeamRanking(containerId, list, showCoverage) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        if (!list || list.length === 0) {
+            container.innerHTML = `<div class="text-[11px] text-slate-400 italic py-2 px-2">Nenhum dado encontrado.</div>`;
+            return;
+        }
+        const sorted = [...list].sort((a, b) => b.count - a.count);
+        container.innerHTML = sorted.map(item => {
+            const coverageBadge = (showCoverage && item.rcaCoveragePct !== undefined && item.rcaCoveragePct !== null)
+                ? `<span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full bg-natura-green-cerrado/10 text-natura-green-cerrado text-[9px] font-black whitespace-nowrap">${item.rcaCoveragePct}% Causa Raiz</span>`
+                : '';
+            return `<div class="flex flex-wrap justify-between items-center gap-y-1 text-[11px] py-1.5 border-b border-slate-50 last:border-0 hover:bg-slate-50 px-2 rounded transition-colors">
+                <span class="font-medium text-slate-700 truncate pr-2 uppercase" title="${item.name}">${item.name}</span>
+                <span class="flex-none text-slate-500 whitespace-nowrap flex items-center">
+                    <span class="font-bold text-natura-orange">${item.count}</span>&nbsp;tarefas |
+                    <span class="font-bold text-natura-blue-profundo">${item.aging}</span>&nbsp;dias${coverageBadge}
+                </span>
+            </div>`;
+        }).join('');
     }
 
     function drawTeamScatterChart(canvasId, instanceKey, points, color, seriesLabel) {
