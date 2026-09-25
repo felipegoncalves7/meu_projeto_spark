@@ -293,9 +293,6 @@
         setupTechOfensorFilterDropdowns();
         setupEvolutionToggle();
         setupEvolutionDimensionSelect();
-        setupLocalEvolutionToggle('jornadas-paises', 'jp-evolution-toggle', 'jp-evolution-chart', 'jpChartInstance', 'jp-evolution-title', 'Incidentes');
-        setupJpDimensionToggle('jp-dimension-toggle', 'jp-evolution-chart', 'jpChartInstance', 'jp-evolution-title', 'Incidentes');
-        setupJpWeekNav('jp-week-prev', 'jp-week-next', 'jp-evolution-chart', 'jpChartInstance', 'jp-evolution-title', 'Incidentes');
         setupLocalEvolutionToggle('mudancas', 'mudanca-evolution-toggle', 'mudanca-evolution-chart', 'mudancaEvChartInstance', 'mudanca-evolution-title', 'Incidentes por Mudança');
         loadQualidadeMudancaData();
 
@@ -665,8 +662,7 @@
 
         renderEvolutionByCurrentDimension();
 
-        // Gráficos de barras agrupadas + MTTR das seções Jornadas & Países, Origem da Detecção e Mudanças
-        renderLocalEvolutionChart('jornadas-paises', 'jp-evolution-chart', 'jpChartInstance', 'jp-evolution-title', 'Incidentes');
+        // Gráfico de barras agrupadas + MTTR da seção Mudanças
         renderLocalEvolutionChart('mudancas', 'mudanca-evolution-chart', 'mudancaEvChartInstance', 'mudanca-evolution-title', 'Incidentes por Mudança');
 
         // Render Technology & Offender charts in the same flow
@@ -1162,8 +1158,7 @@
     function updateComparisonDisplay() {
         const badgeIds = ['delta-badge-total', 'delta-badge-sev0', 'delta-badge-sev1',
             'delta-badge-mttr-total', 'delta-badge-mttr-sev0', 'delta-badge-mttr-sev1',
-            'delta-badge-ola', 'delta-badge-ola-sev0', 'delta-badge-ola-sev1',
-            'delta-badge-jp', 'delta-badge-origem'];
+            'delta-badge-ola', 'delta-badge-ola-sev0', 'delta-badge-ola-sev1'];
 
         if (CURRENT_FILTERS.comparisonMode !== 'previous' || !ALL_DATA.currentKpis) {
             badgeIds.forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
@@ -1189,9 +1184,6 @@
                 applyDeltaBadge('delta-badge-ola', cur.aderenciaOLA, prev.aderenciaOLA, { isPercentagePoints: true });
                 applyDeltaBadge('delta-badge-ola-sev0', cur.aderenciaOLASev0, prev.aderenciaOLASev0, { isPercentagePoints: true });
                 applyDeltaBadge('delta-badge-ola-sev1', cur.aderenciaOLASev1, prev.aderenciaOLASev1, { isPercentagePoints: true });
-                // Jornadas & Países e Origem da Detecção mostram a volumetria geral de Incidentes: reaproveita a mesma comparação
-                applyDeltaBadge('delta-badge-jp', cur.incidentesTotal, prev.incidentesTotal);
-                applyDeltaBadge('delta-badge-origem', cur.incidentesTotal, prev.incidentesTotal);
             })
             .withFailureHandler(e => {
                 logDebug("getComparisonData FAILED: " + e.message);
@@ -3009,7 +3001,15 @@
                 scales: scales,
                 plugins: {
                     legend: legendEl ? { display: false } : { display: true, position: 'bottom', labels: { boxWidth: 12, padding: 15, font: { size: 11 } } },
-                    tooltip: { mode: 'index', intersect: false }
+                    tooltip: {
+                        mode: 'index', intersect: false,
+                        callbacks: {
+                            // Item 4: MTTR no tooltip em HH:mm, igual ao resto do site (o dataset guarda horas decimais só para o eixo)
+                            label: (ctx) => ctx.dataset.label === 'MTTR (h)'
+                                ? `MTTR: ${formatDecimalHoursToHHMM(Number(ctx.raw))}`
+                                : `${ctx.dataset.label}: ${ctx.raw}`
+                        }
+                    }
                 }
             }
         });
@@ -3134,14 +3134,10 @@
         });
     }
 
-    // ---- Gráficos de barras agrupadas por categoria + linha de MTTR, para Jornadas & Países,
-    // Origem da Detecção e Mudanças (Deploy x Tradicional) ----
-    // Cada seção guarda seu próprio agrupamento (Mensal/Semanal/Trimestral) e desenha de forma independente.
+    // ---- Gráfico de barras agrupadas por categoria + linha de MTTR, para Mudanças (Deploy x Tradicional) ----
     const LOCAL_EVOLUTION_STATE = {
-        'jornadas-paises': { grouping: 'monthly', dimension: 'jornada', weekOffset: 0 },
         'mudancas': { grouping: 'monthly', dimension: 'mudanca-tipo' }
     };
-    const WEEK_WINDOW_SIZE = 5; // semana atual + 4 anteriores
 
     // Séries fixas por dimensão (cores/labels definidos); Jornada e País ficam de fora de propósito —
     // suas categorias são descobertas dinamicamente a partir dos dados (Top 6 + "Outros").
@@ -3175,68 +3171,14 @@
         });
     }
 
-    // Seção "Jornadas & Países" tem 2 dimensões possíveis no mesmo gráfico: um pequeno seletor alterna entre elas.
-    function setupJpDimensionToggle(containerId, canvasId, chartKey, titleElId, titlePrefix) {
-        const container = document.getElementById(containerId);
-        if (!container || container.dataset.wired) return;
-        container.dataset.wired = 'true';
-
-        container.querySelectorAll('button').forEach(btn => {
-            btn.addEventListener('click', () => {
-                LOCAL_EVOLUTION_STATE['jornadas-paises'].dimension = btn.dataset.dimension;
-
-                container.querySelectorAll('button').forEach(b => {
-                    b.classList.remove('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
-                    b.classList.add('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
-                });
-                btn.classList.remove('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
-                btn.classList.add('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
-
-                renderLocalEvolutionChart('jornadas-paises', canvasId, chartKey, titleElId, titlePrefix);
-            });
-        });
-    }
-
-    // Item 2: setas de navegação da janela de semanas (5 por vez) no gráfico de Jornadas & Países
-    function setupJpWeekNav(prevId, nextId, canvasId, chartKey, titleElId, titlePrefix) {
-        const prevBtn = document.getElementById(prevId);
-        const nextBtn = document.getElementById(nextId);
-        if (!prevBtn || !nextBtn || prevBtn.dataset.wired) return;
-        prevBtn.dataset.wired = 'true';
-
-        prevBtn.addEventListener('click', () => {
-            LOCAL_EVOLUTION_STATE['jornadas-paises'].weekOffset = (LOCAL_EVOLUTION_STATE['jornadas-paises'].weekOffset || 0) + WEEK_WINDOW_SIZE;
-            renderLocalEvolutionChart('jornadas-paises', canvasId, chartKey, titleElId, titlePrefix);
-        });
-        nextBtn.addEventListener('click', () => {
-            LOCAL_EVOLUTION_STATE['jornadas-paises'].weekOffset = Math.max(0, (LOCAL_EVOLUTION_STATE['jornadas-paises'].weekOffset || 0) - WEEK_WINDOW_SIZE);
-            renderLocalEvolutionChart('jornadas-paises', canvasId, chartKey, titleElId, titlePrefix);
-        });
-    }
-
     function renderLocalEvolutionChart(sectionKey, canvasId, chartKey, titleElId, titlePrefix) {
         const state = LOCAL_EVOLUTION_STATE[sectionKey];
         const GROUP_LABEL = { monthly: 'Mensal', weekly: 'Semanal', quarterly: 'Trimestral' };
-        const DIMENSION_LABEL = { jornada: 'por Jornada', pais: 'por País', 'mudanca-tipo': '' };
-        const dimLabel = DIMENSION_LABEL[state.dimension] || '';
-        const title = `${titlePrefix}${dimLabel ? ' ' + dimLabel : ''} — ${GROUP_LABEL[state.grouping]}`;
+        const title = `${titlePrefix} — ${GROUP_LABEL[state.grouping]}`;
 
-        let breakdownByPeriod = {};
-        let mttrData = {};
-
-        if (state.dimension === 'jornada' || state.dimension === 'pais') {
-            const breakdown = ALL_DATA.dimensionBreakdowns ? ALL_DATA.dimensionBreakdowns[state.dimension] : null;
-            breakdownByPeriod = (breakdown && breakdown[state.grouping]) || {};
-            const evo = ALL_DATA.evolutionData ? ALL_DATA.evolutionData[state.grouping] : null;
-            mttrData = (evo && evo.mttr) || {};
-        } else if (state.dimension === 'mudanca-tipo') {
-            breakdownByPeriod = (ALL_DATA.mudancaPorTipoEvolutionData && ALL_DATA.mudancaPorTipoEvolutionData[state.grouping]) || {};
-            const evo = ALL_DATA.mudancaEvolutionData ? ALL_DATA.mudancaEvolutionData[state.grouping] : null;
-            mttrData = (evo && evo.mttr) || {};
-        }
-
-        const isPais = sectionKey === 'jornadas-paises' && state.dimension === 'pais';
-        const weekNavEl = document.getElementById('jp-week-nav');
+        const breakdownByPeriod = (ALL_DATA.mudancaPorTipoEvolutionData && ALL_DATA.mudancaPorTipoEvolutionData[state.grouping]) || {};
+        const evo = ALL_DATA.mudancaEvolutionData ? ALL_DATA.mudancaEvolutionData[state.grouping] : null;
+        const mttrData = (evo && evo.mttr) || {};
 
         drawGenericGroupedChart({
             canvasId: canvasId,
@@ -3247,27 +3189,8 @@
             title: title,
             group: state.grouping,
             mttrData: mttrData,
-            updateSideStats: false,
-            noOthersCap: isPais,
-            legendContainerId: isPais ? 'jp-evolution-legend' : null,
-            legendWithFlags: isPais,
-            weekWindow: (sectionKey === 'jornadas-paises' && state.grouping === 'weekly') ? {
-                size: WEEK_WINDOW_SIZE,
-                offset: state.weekOffset || 0,
-                onBoundsComputed: (bounds) => {
-                    if (!weekNavEl) return;
-                    weekNavEl.classList.remove('hidden');
-                    const prevBtn = document.getElementById('jp-week-prev');
-                    const nextBtn = document.getElementById('jp-week-next');
-                    if (prevBtn) prevBtn.disabled = bounds.offset >= bounds.maxOffset;
-                    if (nextBtn) nextBtn.disabled = bounds.offset <= 0;
-                }
-            } : null
+            updateSideStats: false
         });
-
-        if (weekNavEl && !(sectionKey === 'jornadas-paises' && state.grouping === 'weekly')) {
-            weekNavEl.classList.add('hidden');
-        }
     }
 
     function initDataStory() {
