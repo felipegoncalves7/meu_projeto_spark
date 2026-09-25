@@ -294,7 +294,6 @@
         setupTechOfensorFilterDropdowns();
         setupEvolutionToggle();
         setupEvolutionDimensionSelect();
-        setupLocalEvolutionToggle('mudancas', 'mudanca-evolution-toggle', 'mudanca-evolution-chart', 'mudancaEvChartInstance', 'mudanca-evolution-title', 'Incidentes por Mudança');
         loadQualidadeMudancaData();
 
         logDebug("Initial setup complete. Loading page data...");
@@ -721,13 +720,7 @@
             jornada: { monthly: data.monthlyByJornada || {}, weekly: data.weeklyByJornada || {}, quarterly: data.quarterlyByJornada || {} },
             pais: { monthly: data.monthlyByPais || {}, weekly: data.weeklyByPais || {}, quarterly: data.quarterlyByPais || {} }
         };
-        ALL_DATA.mudancaEvolutionData = data.mudancaEvolutionData || { monthly: {}, weekly: {}, quarterly: {} };
-        ALL_DATA.mudancaPorTipoEvolutionData = data.mudancaPorTipoEvolutionData || { monthly: {}, weekly: {}, quarterly: {} };
-
         renderEvolutionByCurrentDimension();
-
-        // Gráfico de barras agrupadas + MTTR da seção Mudanças
-        renderLocalEvolutionChart('mudancas', 'mudanca-evolution-chart', 'mudancaEvChartInstance', 'mudanca-evolution-title', 'Incidentes por Mudança');
 
         // Render Technology & Offender charts in the same flow
         if (data.techMetrics) {
@@ -3345,65 +3338,6 @@
                     }
                 }
             }
-        });
-    }
-
-    // ---- Gráfico de barras agrupadas por categoria + linha de MTTR, para Mudanças (Deploy x Tradicional) ----
-    const LOCAL_EVOLUTION_STATE = {
-        'mudancas': { grouping: 'monthly', dimension: 'mudanca-tipo' }
-    };
-
-    // Séries fixas por dimensão (cores/labels definidos); Jornada e País ficam de fora de propósito —
-    // suas categorias são descobertas dinamicamente a partir dos dados (Top 6 + "Outros").
-    const LOCAL_DIMENSION_SERIES = {
-        'mudanca-tipo': [
-            { key: 'deploy', label: 'Deploy', color: '#045473' },
-            { key: 'tradicional', label: 'Tradicional', color: '#FF6600' }
-        ]
-    };
-
-    function setupLocalEvolutionToggle(sectionKey, containerId, canvasId, chartKey, titleElId, titlePrefix) {
-        const container = document.getElementById(containerId);
-        if (!container || container.dataset.wired) return;
-        container.dataset.wired = 'true';
-
-        container.querySelectorAll('button').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const group = btn.dataset.group;
-                LOCAL_EVOLUTION_STATE[sectionKey].grouping = group;
-                LOCAL_EVOLUTION_STATE[sectionKey].weekOffset = 0;
-
-                container.querySelectorAll('button').forEach(b => {
-                    b.classList.remove('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
-                    b.classList.add('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
-                });
-                btn.classList.remove('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
-                btn.classList.add('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
-
-                renderLocalEvolutionChart(sectionKey, canvasId, chartKey, titleElId, titlePrefix);
-            });
-        });
-    }
-
-    function renderLocalEvolutionChart(sectionKey, canvasId, chartKey, titleElId, titlePrefix) {
-        const state = LOCAL_EVOLUTION_STATE[sectionKey];
-        const GROUP_LABEL = { monthly: 'Mensal', weekly: 'Semanal', quarterly: 'Trimestral' };
-        const title = `${titlePrefix} — ${GROUP_LABEL[state.grouping]}`;
-
-        const breakdownByPeriod = (ALL_DATA.mudancaPorTipoEvolutionData && ALL_DATA.mudancaPorTipoEvolutionData[state.grouping]) || {};
-        const evo = ALL_DATA.mudancaEvolutionData ? ALL_DATA.mudancaEvolutionData[state.grouping] : null;
-        const mttrData = (evo && evo.mttr) || {};
-
-        drawGenericGroupedChart({
-            canvasId: canvasId,
-            chartKey: chartKey,
-            titleElId: titleElId,
-            breakdownByPeriod: breakdownByPeriod,
-            seriesConfig: LOCAL_DIMENSION_SERIES[state.dimension] || null,
-            title: title,
-            group: state.grouping,
-            mttrData: mttrData,
-            updateSideStats: false
         });
     }
 
