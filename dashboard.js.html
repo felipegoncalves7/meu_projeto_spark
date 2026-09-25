@@ -382,29 +382,103 @@
         drawMonthlyYTDChart(data.monthlyYTD);
         drawWeeklyWTDChart(data.weeklyWTD);
 
-        // 3. Rankings
-        const renderRank = (id, list) => {
-            const container = document.getElementById(id);
-            if (!container) return;
-            if (!list || list.length === 0) {
-                container.innerHTML = `<div class="text-[11px] text-slate-400 italic py-2 px-2">Nenhum dado encontrado.</div>`;
-                return;
-            }
-            container.innerHTML = list.map(item => {
-                return `<div class="flex justify-between items-center text-[11px] py-1.5 border-b border-slate-50 last:border-0 hover:bg-slate-50 px-2 rounded transition-colors">
-                    <span class="font-medium text-slate-700 truncate pr-2 uppercase" title="${item.name}">${item.name}</span>
-                    <span class="flex-none text-slate-500 whitespace-nowrap">
-                        <span class="font-bold text-natura-orange">${item.count}</span> RCAs | 
-                        <span class="font-bold text-natura-blue-profundo">${item.avgAging} Dias</span>
-                    </span>
-                </div>`;
-            }).join('');
-        };
-
-        renderRank('mp-top-backlog-list', data.topBacklogTeams);
-        renderRank('mp-top-resolved-list', data.topResolvedTeams);
+        // 3. Engajamento por Equipe: gráficos de Dispersão (Aging x Volume de Tarefas)
+        MP_SCATTER_DATA = data.scatterData || { rca: { backlog: [], resolved: [] }, implementation: { backlog: [], resolved: [] } };
+        wireTaskTypeToggle();
+        renderScatterCharts(MP_SCATTER_ACTIVE_TYPE);
 
         hideLoader();
+    }
+
+    let MP_SCATTER_DATA = { rca: { backlog: [], resolved: [] }, implementation: { backlog: [], resolved: [] } };
+    let MP_SCATTER_ACTIVE_TYPE = 'rca';
+    let MP_TASK_TYPE_TOGGLE_WIRED = false;
+
+    function wireTaskTypeToggle() {
+        const toggle = document.getElementById('mp-task-type-toggle');
+        if (!toggle) return;
+        updateTaskTypeToggleUI();
+        if (MP_TASK_TYPE_TOGGLE_WIRED) return;
+        MP_TASK_TYPE_TOGGLE_WIRED = true;
+        toggle.querySelectorAll('.mp-task-type-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const type = btn.getAttribute('data-task-type');
+                if (type === MP_SCATTER_ACTIVE_TYPE) return;
+                MP_SCATTER_ACTIVE_TYPE = type;
+                updateTaskTypeToggleUI();
+                renderScatterCharts(MP_SCATTER_ACTIVE_TYPE);
+            });
+        });
+    }
+
+    function updateTaskTypeToggleUI() {
+        const toggle = document.getElementById('mp-task-type-toggle');
+        if (!toggle) return;
+        toggle.querySelectorAll('.mp-task-type-btn').forEach(btn => {
+            btn.classList.toggle('mp-task-type-btn-active', btn.getAttribute('data-task-type') === MP_SCATTER_ACTIVE_TYPE);
+        });
+    }
+
+    function renderScatterCharts(type) {
+        const dataset = MP_SCATTER_DATA[type] || { backlog: [], resolved: [] };
+        drawTeamScatterChart('mpScatterBacklog', 'backlogScatterChartInstance', dataset.backlog, '#B54708', 'Tarefas em Backlog');
+        drawTeamScatterChart('mpScatterResolved', 'resolvedScatterChartInstance', dataset.resolved, '#045473', 'Tarefas Resolvidas');
+    }
+
+    function drawTeamScatterChart(canvasId, instanceKey, points, color, seriesLabel) {
+        const canvasEl = document.getElementById(canvasId);
+        if (!canvasEl) return;
+        const ctx = canvasEl.getContext('2d');
+        if (window[instanceKey]) window[instanceKey].destroy();
+
+        if (!points || points.length === 0) {
+            window[instanceKey] = null;
+            ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+            return;
+        }
+
+        const chartData = points.map(p => ({ x: p.aging, y: p.count, name: p.name }));
+
+        window[instanceKey] = new Chart(ctx, {
+            type: 'scatter',
+            data: {
+                datasets: [{
+                    label: seriesLabel,
+                    data: chartData,
+                    backgroundColor: color,
+                    borderColor: color,
+                    pointRadius: 7,
+                    pointHoverRadius: 9
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Aging Médio (Dias)' }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Nº de Tarefas' },
+                        ticks: { precision: 0 }
+                    }
+                },
+                plugins: {
+                    datalabels: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => {
+                                const p = context.raw;
+                                return `${p.name}: ${p.y} tarefas, ${p.x} dias de aging`;
+                            }
+                        }
+                    },
+                    legend: { display: false }
+                }
+            }
+        });
     }
 
     function drawMonthlyYTDChart(ytdData) {

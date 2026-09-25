@@ -1459,39 +1459,63 @@
                     </div>
                 </div>
 
-                <!-- TOP 5 Ranking Lists -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
-                    <!-- Top 5 Backlog -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                        <div class="flex items-center gap-3 mb-4">
-                            <div
-                                class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 text-xs font-bold border border-slate-100">
-                                01</div>
-                            <div>
-                                <h3 class="text-sm font-bold text-slate-800">TOP 5 Áreas Responsáveis com Maior Backlog
-                                </h3>
-                                <p class="text-[10px] text-slate-400">RCAs pendentes e média de envelhecimento.</p>
+                <!-- Engajamento por Equipe: Aging x Volume de Tarefas (RCA / Implementação) -->
+                <div
+                    class="rounded-3xl border border-natura-orange/15 bg-natura-orange/[0.03] p-4 sm:p-6 space-y-5 mt-8">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="h-2.5 w-2.5 rounded-full bg-natura-orange"></span>
+                                <h3 class="text-[11px] font-black text-slate-500 uppercase tracking-[0.15em]">
+                                    Engajamento por Equipe</h3>
                             </div>
+                            <p class="text-xs text-slate-400 mt-1">Cada ponto é uma equipe: eixo X mostra o Aging
+                                médio (dias) e eixo Y o volume de tarefas.</p>
                         </div>
-                        <div id="mp-top-backlog-list" class="space-y-2">
-                            <div class="text-[11px] text-slate-300 italic py-2">Carregando rankings...</div>
+                        <!-- Toggle: Tarefas de RCA / Tarefas de Implementação -->
+                        <div id="mp-task-type-toggle"
+                            class="inline-flex rounded-full bg-white border border-slate-200 p-1 shadow-sm self-start sm:self-auto">
+                            <button type="button" data-task-type="rca"
+                                class="mp-task-type-btn flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round" class="w-3.5 h-3.5 flex-none">
+                                    <circle cx="11" cy="11" r="7"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                Tarefas de RCA
+                            </button>
+                            <button type="button" data-task-type="implementation"
+                                class="mp-task-type-btn flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round" class="w-3.5 h-3.5 flex-none">
+                                    <path
+                                        d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z">
+                                    </path>
+                                </svg>
+                                Tarefas de Implementação
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Top 5 Resolved -->
-                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                        <div class="flex items-center gap-3 mb-4">
-                            <div
-                                class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 text-xs font-bold border border-slate-100">
-                                02</div>
-                            <div>
-                                <h3 class="text-sm font-bold text-slate-800">TOP 5 Áreas Responsáveis em Resolução de
-                                    RCAs</h3>
-                                <p class="text-[10px] text-slate-400">As áreas que mais resolveram RCAs no período.</p>
-                            </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Scatter: Aging de Backlog x Tarefas em Backlog -->
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                            <h3 class="text-sm font-bold text-slate-800">Aging de Backlog &times; Tarefas em Backlog
+                            </h3>
+                            <p class="text-[10px] text-slate-400 mb-3">Equipes com tarefas ainda não concluídas:
+                                envelhecimento médio vs. volume pendente.</p>
+                            <div class="relative w-full h-72 sm:h-80"><canvas id="mpScatterBacklog"></canvas></div>
                         </div>
-                        <div id="mp-top-resolved-list" class="space-y-2">
-                            <div class="text-[11px] text-slate-300 italic py-2">Carregando rankings...</div>
+
+                        <!-- Scatter: Aging de Resolução x Tarefas Resolvidas -->
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                            <h3 class="text-sm font-bold text-slate-800">Aging de Resolução &times; Tarefas Resolvidas
+                            </h3>
+                            <p class="text-[10px] text-slate-400 mb-3">Equipes com tarefas concluídas: tempo médio
+                                até o fechamento vs. volume resolvido.</p>
+                            <div class="relative w-full h-72 sm:h-80"><canvas id="mpScatterResolved"></canvas></div>
                         </div>
                     </div>
                 </div>

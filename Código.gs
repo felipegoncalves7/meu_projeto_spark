@@ -2012,6 +2012,12 @@ function getMajorProblemsData(year) {
          areaBacklog: {},
          areaResolved: {},
 
+         // Aging x Volume de Tarefas, por Equipe, segmentado por tipo de tarefa (RCA / Implementação)
+         taskAging: {
+             rca: { backlog: {}, resolved: {} },
+             implementation: { backlog: {}, resolved: {} }
+         },
+
          monthly: {},
          monthlyYTD: {},
          weeklyWTD: {}
@@ -2178,14 +2184,17 @@ function getMajorProblemsData(year) {
               const closedAt = parseDate(row[3]); // Column D: closed_at
               const group = String(row[6] || "N/A").trim(); // Column G: assignment_group
               const taskType = String(row[10] || "").trim().toLowerCase(); // Column K: problem_task_type
-              
-              if (taskType !== 'root cause analysis') return;
+
+              const isRCA = taskType === 'root cause analysis';
+              const isImplementation = taskType.indexOf('implement') !== -1;
+              if (!isRCA && !isImplementation) return;
+              const typeKey = isRCA ? 'rca' : 'implementation';
 
                // Filter by year based on opened_at (or closed_at for resolved)
                if (openedAt && year && openedAt.getFullYear() !== year) return;
 
-              // Logic for MTTRC (Already existing, keeping it)
-              if (status === 'closed' && openedAt && closedAt) {
+              // Logic for MTTRC (Mean Time To Root Cause: apenas tarefas de RCA)
+              if (isRCA && status === 'closed' && openedAt && closedAt) {
                   const diffHours = (closedAt.getTime() - openedAt.getTime()) / (1000 * 60 * 60);
                   if (diffHours >= 0) {
                       metrics.sumMTTRC += diffHours;
@@ -2203,16 +2212,25 @@ function getMajorProblemsData(year) {
                   agingDays = Math.max(0, Math.floor((targetEndDate - openedAt) / (1000 * 60 * 60 * 24)));
               }
 
-                if (status !== 'closed') {
-                    // TOP 5 Backlog - Qualquer status que não seja estritamente 'closed' entra no backlog
-                    if (!metrics.areaBacklog[group]) metrics.areaBacklog[group] = { count: 0, totalAging: 0 };
-                    metrics.areaBacklog[group].count++;
-                    metrics.areaBacklog[group].totalAging += agingDays;
-                } else {
-                    // TOP 5 Resolved - Apenas status 'closed'
-                    if (!metrics.areaResolved[group]) metrics.areaResolved[group] = { count: 0, totalAging: 0 };
-                    metrics.areaResolved[group].count++;
-                    metrics.areaResolved[group].totalAging += agingDays;
+                const bucket = status !== 'closed'
+                    ? metrics.taskAging[typeKey].backlog
+                    : metrics.taskAging[typeKey].resolved;
+                if (!bucket[group]) bucket[group] = { count: 0, totalAging: 0 };
+                bucket[group].count++;
+                bucket[group].totalAging += agingDays;
+
+                if (isRCA) {
+                    if (status !== 'closed') {
+                        // TOP 5 Backlog - Qualquer status que não seja estritamente 'closed' entra no backlog
+                        if (!metrics.areaBacklog[group]) metrics.areaBacklog[group] = { count: 0, totalAging: 0 };
+                        metrics.areaBacklog[group].count++;
+                        metrics.areaBacklog[group].totalAging += agingDays;
+                    } else {
+                        // TOP 5 Resolved - Apenas status 'closed'
+                        if (!metrics.areaResolved[group]) metrics.areaResolved[group] = { count: 0, totalAging: 0 };
+                        metrics.areaResolved[group].count++;
+                        metrics.areaResolved[group].totalAging += agingDays;
+                    }
                 }
           });
       }
@@ -2262,6 +2280,22 @@ function getMajorProblemsData(year) {
             .map(([name, d]) => ({ name, count: d.count, avgAging: Math.round(d.totalAging / d.count) }))
             .sort((a, b) => b.count - a.count)
             .slice(0, 5),
+          // Aging x Volume de Tarefas por Equipe, para os gráficos de Dispersão (RCA / Implementação)
+          scatterData: (() => {
+            const buildPoints = (bucket) => Object.entries(bucket)
+              .map(([name, d]) => ({ name, count: d.count, aging: d.count > 0 ? Math.round(d.totalAging / d.count) : 0 }))
+              .sort((a, b) => b.count - a.count);
+            return {
+              rca: {
+                backlog: buildPoints(metrics.taskAging.rca.backlog),
+                resolved: buildPoints(metrics.taskAging.rca.resolved)
+              },
+              implementation: {
+                backlog: buildPoints(metrics.taskAging.implementation.backlog),
+                resolved: buildPoints(metrics.taskAging.implementation.resolved)
+              }
+            };
+          })(),
           monthly: metrics.monthly,
           monthlyYTD: metrics.monthlyYTD,
           weeklyWTD: metrics.weeklyWTD
