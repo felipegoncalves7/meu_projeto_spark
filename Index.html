@@ -1471,18 +1471,25 @@
                             <p class="text-xs text-slate-400 mt-1">Cada ponto é uma equipe: eixo X mostra o Aging
                                 médio (dias) e eixo Y o volume de tarefas.</p>
                         </div>
-                        <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-                            <!-- Filtro por Equipe -->
-                            <div class="relative flex-none">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                                    stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                                    <circle cx="11" cy="11" r="7"></circle>
-                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                                </svg>
-                                <input type="text" id="mp-team-filter" placeholder="Filtrar por equipe..."
-                                    class="pl-8 pr-3 py-1.5 text-[11px] font-medium text-slate-700 bg-white border border-slate-200 rounded-full focus:ring-1 focus:ring-natura-orange focus:border-natura-orange outline-none w-full sm:w-52">
+                        <div class="flex flex-col sm:flex-row sm:items-start gap-2">
+                            <!-- Filtro por Equipe (múltipla escolha, com autocomplete) -->
+                            <div class="relative flex-none w-full sm:w-64" id="mp-team-filter-wrapper">
+                                <div class="relative">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                                        <circle cx="11" cy="11" r="7"></circle>
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                    </svg>
+                                    <input type="text" id="mp-team-filter" placeholder="Filtrar por equipe..."
+                                        autocomplete="off"
+                                        class="pl-8 pr-3 py-1.5 text-[11px] font-medium text-slate-700 bg-white border border-slate-200 rounded-full focus:ring-1 focus:ring-natura-orange focus:border-natura-orange outline-none w-full">
+                                    <div id="mp-team-filter-dropdown"
+                                        class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-20 max-h-48 overflow-y-auto py-1">
+                                    </div>
+                                </div>
+                                <div id="mp-team-filter-chips" class="flex flex-wrap gap-1 mt-1.5"></div>
                             </div>
                             <!-- Toggle: Tarefas de RCA / Tarefas de Implementação -->
                             <div id="mp-task-type-toggle"
@@ -1558,20 +1565,31 @@
                             <div class="relative w-full h-72 sm:h-80"><canvas id="mpScatterResolved"></canvas></div>
 
                             <div class="mt-4 pt-4 border-t border-slate-100">
-                                <div class="flex items-center justify-between mb-2">
-                                    <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ranking
-                                        por Equipe</p>
-                                    <span class="info-tooltip" tabindex="0">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-slate-400"
-                                            fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        <span class="tooltip-bubble">% Causa Raiz = do total de Incidentes
-                                            registrados no período, quantos tiveram a Causa Raiz identificada por
-                                            RCAs concluídas desta equipe (1 Problema pode reunir vários Incidentes e
-                                            várias Tarefas).</span>
-                                    </span>
+                                <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+                                    <div class="flex items-center gap-1">
+                                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                            Ranking por Equipe</p>
+                                        <span class="info-tooltip" tabindex="0">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-slate-400"
+                                                fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            <span class="tooltip-bubble">% Causa Raiz = do total de Incidentes
+                                                registrados no período, quantos tiveram a Causa Raiz identificada por
+                                                RCAs concluídas desta equipe (1 Problema pode reunir vários
+                                                Incidentes e várias Tarefas).</span>
+                                        </span>
+                                    </div>
+                                    <!-- Ordenar ranking: por Volume (tarefas + aging) ou por % de Causa Raiz -->
+                                    <div id="mp-resolved-rank-sort-toggle"
+                                        class="inline-flex rounded-full bg-slate-50 border border-slate-200 p-0.5">
+                                        <button type="button" data-sort="volume"
+                                            class="mp-resolved-sort-btn px-2 py-1 rounded-full text-[9px] font-bold transition-colors">Volume</button>
+                                        <button type="button" data-sort="coverage"
+                                            class="mp-resolved-sort-btn px-2 py-1 rounded-full text-[9px] font-bold transition-colors">%
+                                            Causa Raiz</button>
+                                    </div>
                                 </div>
                                 <div id="mp-rank-resolved" class="space-y-1.5 max-h-72 overflow-y-auto pr-1">
                                     <div class="text-[11px] text-slate-300 italic py-2">Carregando rankings...</div>

@@ -1590,9 +1590,11 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
 
     const sev0Sev1Total = metrics.sev0Incidentes + metrics.sev1Incidentes;
     const dentroOLATotal = metrics.sev0DentroOLA + metrics.sev1DentroOLA;
-    const aderenciaOLA = sev0Sev1Total > 0 ? (dentroOLATotal / sev0Sev1Total) * 100 : 0;
-    const aderenciaOLASev0 = metrics.sev0Incidentes > 0 ? (metrics.sev0DentroOLA / metrics.sev0Incidentes) * 100 : 0;
-    const aderenciaOLASev1 = metrics.sev1Incidentes > 0 ? (metrics.sev1DentroOLA / metrics.sev1Incidentes) * 100 : 0;
+    // Item 1: null (não 0) quando não há Incidentes da Severidade no período/filtro — 0% sugeriria
+    // "fora da meta", quando na verdade não há dado algum para avaliar a meta.
+    const aderenciaOLA = sev0Sev1Total > 0 ? (dentroOLATotal / sev0Sev1Total) * 100 : null;
+    const aderenciaOLASev0 = metrics.sev0Incidentes > 0 ? (metrics.sev0DentroOLA / metrics.sev0Incidentes) * 100 : null;
+    const aderenciaOLASev1 = metrics.sev1Incidentes > 0 ? (metrics.sev1DentroOLA / metrics.sev1Incidentes) * 100 : null;
     const pctMudanca = metrics.incidentesTotal > 0 ? (metrics.incidentesMudanca / metrics.incidentesTotal) * 100 : 0;
     const mttdInicioMedio = metrics.mttdInicioCount > 0 ? metrics.mttdInicioSomaHoras / metrics.mttdInicioCount : null;
     const mttdTerminoMedio = metrics.mttdTerminoCount > 0 ? metrics.mttdTerminoSomaHoras / metrics.mttdTerminoCount : null;
@@ -1724,10 +1726,10 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         incidentesSev1: metrics.sev1Incidentes,
         mttrSev1: calculateMTTR(metrics.sev1DuracaoMinutos, metrics.sev1Incidentes),
         // Visão Executiva
-        aderenciaOLA: Math.round(aderenciaOLA * 10) / 10,
+        aderenciaOLA: aderenciaOLA !== null ? Math.round(aderenciaOLA * 10) / 10 : null,
         aderenciaOLABase: sev0Sev1Total,
-        aderenciaOLASev0: Math.round(aderenciaOLASev0 * 10) / 10,
-        aderenciaOLASev1: Math.round(aderenciaOLASev1 * 10) / 10,
+        aderenciaOLASev0: aderenciaOLASev0 !== null ? Math.round(aderenciaOLASev0 * 10) / 10 : null,
+        aderenciaOLASev1: aderenciaOLASev1 !== null ? Math.round(aderenciaOLASev1 * 10) / 10 : null,
         incidentesMudanca: metrics.incidentesMudanca,
         pctMudanca: Math.round(pctMudanca * 10) / 10,
         // Campos "legado" (mantidos para compatibilidade com os cards já existentes na Visão Geral),
@@ -1843,7 +1845,7 @@ function getPeriodKpisOnly(year, startDate, endDate) {
             incidentesTotal: 0, mttrTotal: "00:00",
             incidentesSev0: 0, mttrSev0: "00:00",
             incidentesSev1: 0, mttrSev1: "00:00",
-            aderenciaOLA: 0, aderenciaOLASev0: 0, aderenciaOLASev1: 0
+            aderenciaOLA: null, aderenciaOLASev0: null, aderenciaOLASev1: null
         };
     }
 
@@ -1890,9 +1892,9 @@ function getPeriodKpisOnly(year, startDate, endDate) {
         mttrSev0: calcMTTR(sev0Dur, sev0),
         incidentesSev1: sev1,
         mttrSev1: calcMTTR(sev1Dur, sev1),
-        aderenciaOLA: sev0Sev1Total > 0 ? Math.round((dentroOLATotal / sev0Sev1Total) * 1000) / 10 : 0,
-        aderenciaOLASev0: sev0 > 0 ? Math.round((sev0OLA / sev0) * 1000) / 10 : 0,
-        aderenciaOLASev1: sev1 > 0 ? Math.round((sev1OLA / sev1) * 1000) / 10 : 0
+        aderenciaOLA: sev0Sev1Total > 0 ? Math.round((dentroOLATotal / sev0Sev1Total) * 1000) / 10 : null,
+        aderenciaOLASev0: sev0 > 0 ? Math.round((sev0OLA / sev0) * 1000) / 10 : null,
+        aderenciaOLASev1: sev1 > 0 ? Math.round((sev1OLA / sev1) * 1000) / 10 : null
     };
 }
 

@@ -385,6 +385,7 @@
         MP_SCATTER_DATA = data.scatterData || { rca: { backlog: [], resolved: [] }, implementation: { backlog: [], resolved: [] } };
         wireTaskTypeToggle();
         wireTeamFilter();
+        wireResolvedRankSortToggle();
         renderScatterCharts(MP_SCATTER_ACTIVE_TYPE);
 
         hideLoader();
@@ -393,7 +394,8 @@
     let MP_SCATTER_DATA = { rca: { backlog: [], resolved: [] }, implementation: { backlog: [], resolved: [] } };
     let MP_SCATTER_ACTIVE_TYPE = 'rca';
     let MP_TASK_TYPE_TOGGLE_WIRED = false;
-    let MP_TEAM_FILTER = '';
+    let MP_TEAM_FILTER_SELECTED = [];
+    let MP_TEAM_FILTER_WIRED = false;
 
     function wireTaskTypeToggle() {
         const toggle = document.getElementById('mp-task-type-toggle');
@@ -420,19 +422,115 @@
         });
     }
 
+    function getAllTeamNames() {
+        const names = new Set();
+        ['rca', 'implementation'].forEach(type => {
+            ['backlog', 'resolved'].forEach(bucket => {
+                ((MP_SCATTER_DATA[type] && MP_SCATTER_DATA[type][bucket]) || []).forEach(p => {
+                    if (p.name) names.add(p.name);
+                });
+            });
+        });
+        return Array.from(names).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    }
+
     function wireTeamFilter() {
         const input = document.getElementById('mp-team-filter');
-        if (!input || input.dataset.wired) return;
-        input.dataset.wired = 'true';
-        input.addEventListener('input', () => {
-            MP_TEAM_FILTER = input.value.trim().toLowerCase();
+        const dropdown = document.getElementById('mp-team-filter-dropdown');
+        const wrapper = document.getElementById('mp-team-filter-wrapper');
+        if (!input || !dropdown || !wrapper) return;
+        renderTeamFilterChips();
+        if (MP_TEAM_FILTER_WIRED) return;
+        MP_TEAM_FILTER_WIRED = true;
+
+        const showSuggestions = () => {
+            const query = input.value.trim().toLowerCase();
+            const available = getAllTeamNames().filter(name => !MP_TEAM_FILTER_SELECTED.includes(name));
+            const matches = (query ? available.filter(name => name.toLowerCase().includes(query)) : available).slice(0, 8);
+            if (matches.length === 0) {
+                dropdown.classList.add('hidden');
+                dropdown.innerHTML = '';
+                return;
+            }
+            dropdown.innerHTML = matches.map(name => `
+                <button type="button" data-team-name="${name}"
+                    class="mp-team-suggestion block w-full text-left px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-natura-orange/10 hover:text-natura-orange transition-colors truncate">${name}</button>
+            `).join('');
+            dropdown.classList.remove('hidden');
+        };
+
+        input.addEventListener('focus', showSuggestions);
+        input.addEventListener('input', showSuggestions);
+
+        dropdown.addEventListener('mousedown', (e) => {
+            const btn = e.target.closest('.mp-team-suggestion');
+            if (!btn) return;
+            e.preventDefault();
+            const name = btn.getAttribute('data-team-name');
+            if (!MP_TEAM_FILTER_SELECTED.includes(name)) MP_TEAM_FILTER_SELECTED.push(name);
+            input.value = '';
+            dropdown.classList.add('hidden');
+            renderTeamFilterChips();
             renderScatterCharts(MP_SCATTER_ACTIVE_TYPE);
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!wrapper.contains(e.target)) dropdown.classList.add('hidden');
+        });
+    }
+
+    function renderTeamFilterChips() {
+        const container = document.getElementById('mp-team-filter-chips');
+        if (!container) return;
+        container.innerHTML = MP_TEAM_FILTER_SELECTED.map(name => `
+            <span class="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-natura-orange/10 text-natura-orange text-[10px] font-bold">
+                ${name}
+                <button type="button" data-remove-team="${name}" class="mp-team-chip-remove w-3.5 h-3.5 flex items-center justify-center rounded-full hover:bg-natura-orange/20 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="w-2 h-2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </span>
+        `).join('');
+        container.querySelectorAll('.mp-team-chip-remove').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const name = btn.getAttribute('data-remove-team');
+                MP_TEAM_FILTER_SELECTED = MP_TEAM_FILTER_SELECTED.filter(n => n !== name);
+                renderTeamFilterChips();
+                renderScatterCharts(MP_SCATTER_ACTIVE_TYPE);
+            });
         });
     }
 
     function filterTeamPoints(points) {
-        if (!MP_TEAM_FILTER) return points || [];
-        return (points || []).filter(p => (p.name || '').toLowerCase().includes(MP_TEAM_FILTER));
+        if (!MP_TEAM_FILTER_SELECTED.length) return points || [];
+        return (points || []).filter(p => MP_TEAM_FILTER_SELECTED.includes(p.name));
+    }
+
+    let MP_RESOLVED_RANK_SORT = 'volume'; // 'volume' | 'coverage'
+    let MP_RESOLVED_SORT_WIRED = false;
+
+    function wireResolvedRankSortToggle() {
+        const toggle = document.getElementById('mp-resolved-rank-sort-toggle');
+        if (!toggle) return;
+        updateResolvedRankSortToggleUI();
+        if (MP_RESOLVED_SORT_WIRED) return;
+        MP_RESOLVED_SORT_WIRED = true;
+        toggle.querySelectorAll('.mp-resolved-sort-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const sort = btn.getAttribute('data-sort');
+                if (sort === MP_RESOLVED_RANK_SORT) return;
+                MP_RESOLVED_RANK_SORT = sort;
+                updateResolvedRankSortToggleUI();
+                renderScatterCharts(MP_SCATTER_ACTIVE_TYPE);
+            });
+        });
+    }
+
+    function updateResolvedRankSortToggleUI() {
+        const toggle = document.getElementById('mp-resolved-rank-sort-toggle');
+        if (!toggle) return;
+        toggle.querySelectorAll('.mp-resolved-sort-btn').forEach(btn => {
+            btn.classList.toggle('mp-resolved-sort-btn-active', btn.getAttribute('data-sort') === MP_RESOLVED_RANK_SORT);
+        });
     }
 
     function renderScatterCharts(type) {
@@ -441,18 +539,20 @@
         const resolvedPoints = filterTeamPoints(dataset.resolved);
         drawTeamScatterChart('mpScatterBacklog', 'backlogScatterChartInstance', backlogPoints, '#B54708', 'Tarefas em Backlog');
         drawTeamScatterChart('mpScatterResolved', 'resolvedScatterChartInstance', resolvedPoints, '#045473', 'Tarefas Resolvidas');
-        renderTeamRanking('mp-rank-backlog', backlogPoints, false);
-        renderTeamRanking('mp-rank-resolved', resolvedPoints, true);
+        renderTeamRanking('mp-rank-backlog', backlogPoints, false, 'count');
+        renderTeamRanking('mp-rank-resolved', resolvedPoints, true, MP_RESOLVED_RANK_SORT === 'coverage' ? 'coverage' : 'count');
     }
 
-    function renderTeamRanking(containerId, list, showCoverage) {
+    function renderTeamRanking(containerId, list, showCoverage, sortBy) {
         const container = document.getElementById(containerId);
         if (!container) return;
         if (!list || list.length === 0) {
             container.innerHTML = `<div class="text-[11px] text-slate-400 italic py-2 px-2">Nenhum dado encontrado.</div>`;
             return;
         }
-        const sorted = [...list].sort((a, b) => b.count - a.count);
+        const sorted = [...list].sort((a, b) => sortBy === 'coverage'
+            ? (b.rcaCoveragePct || 0) - (a.rcaCoveragePct || 0)
+            : b.count - a.count);
         container.innerHTML = sorted.map(item => {
             const coverageBadge = (showCoverage && item.rcaCoveragePct !== undefined && item.rcaCoveragePct !== null)
                 ? `<span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded-full bg-natura-green-cerrado/10 text-natura-green-cerrado text-[9px] font-black whitespace-nowrap">${item.rcaCoveragePct}% Causa Raiz</span>`
@@ -1210,7 +1310,7 @@
         if (!el) return;
         opts = opts || {};
 
-        if (previous === null || previous === undefined || CURRENT_FILTERS.comparisonMode !== 'previous') {
+        if (previous === null || previous === undefined || current === null || current === undefined || CURRENT_FILTERS.comparisonMode !== 'previous') {
             el.classList.add('hidden');
             return;
         }
@@ -1778,16 +1878,18 @@
         setPct('val-sev0-pct', kpis.incidentesSev0);
         setPct('val-sev1-pct', kpis.incidentesSev1);
 
-        // Aderência OLA (Geral + por Severidade)
-        setText('val-aderencia-ola', (kpis.aderenciaOLA != null ? kpis.aderenciaOLA : 0) + '%');
-        setText('val-aderencia-ola-sev0', (kpis.aderenciaOLASev0 != null ? kpis.aderenciaOLASev0 : 0) + '%');
-        setText('val-aderencia-ola-sev1', (kpis.aderenciaOLASev1 != null ? kpis.aderenciaOLASev1 : 0) + '%');
+        // Aderência OLA (Geral + por Severidade). Sem Incidentes daquela Severidade no período/filtro
+        // atual, o backend manda null — exibimos "—" em vez de "0%" (0% sugeriria meta não cumprida).
+        setText('val-aderencia-ola', kpis.aderenciaOLA != null ? kpis.aderenciaOLA + '%' : '—');
+        setText('val-aderencia-ola-sev0', kpis.aderenciaOLASev0 != null ? kpis.aderenciaOLASev0 + '%' : '—');
+        setText('val-aderencia-ola-sev1', kpis.aderenciaOLASev1 != null ? kpis.aderenciaOLASev1 + '%' : '—');
 
         // Item 1: badge "semáforo" de cumprimento de Meta (distinto das cores de Severidade). Só Sev0
         // (>= 70%) e Sev1 (>= 80%) têm meta oficial definida; "Geral" é informativo (não tem meta própria).
+        // Sem Incidentes daquela Severidade, não há o que avaliar: badge neutro em vez de "Fora da Meta".
         const setBadge = (id, ok) => { const el = document.getElementById(id); if (el) el.innerHTML = buildMetaBadge(ok); };
-        setBadge('ola-meta-badge-sev0', (kpis.aderenciaOLASev0 || 0) >= 70);
-        setBadge('ola-meta-badge-sev1', (kpis.aderenciaOLASev1 || 0) >= 80);
+        setBadge('ola-meta-badge-sev0', kpis.aderenciaOLASev0 != null ? kpis.aderenciaOLASev0 >= 70 : null);
+        setBadge('ola-meta-badge-sev1', kpis.aderenciaOLASev1 != null ? kpis.aderenciaOLASev1 >= 80 : null);
 
         // Item 1/2: Cards de Mudança e matriz de MTTD (dados completos vêm em data.mudancaCards/data.mttdMatrix,
         // renderizados por renderMudancaCards/renderMttdMatrix a partir de renderTab1Data)
@@ -1796,10 +1898,11 @@
         setText('val-aderencia-sevprio', kpis.aderenciaSevPrio != null ? `${kpis.aderenciaSevPrio}%` : '—');
         setText('val-aderencia-sevprio-sev0', kpis.aderenciaSevPrioSev0 != null ? `${kpis.aderenciaSevPrioSev0}%` : '—');
         setText('val-aderencia-sevprio-sev1', kpis.aderenciaSevPrioSev1 != null ? `${kpis.aderenciaSevPrioSev1}%` : '—');
-        // Item 1: badge de Meta (farol) também na Governança Sev x Prioridade (meta única: >= 80%)
-        if (kpis.aderenciaSevPrio != null) setBadge('sevprio-meta-badge-geral', kpis.aderenciaSevPrio >= 80);
-        if (kpis.aderenciaSevPrioSev0 != null) setBadge('sevprio-meta-badge-sev0', kpis.aderenciaSevPrioSev0 >= 80);
-        if (kpis.aderenciaSevPrioSev1 != null) setBadge('sevprio-meta-badge-sev1', kpis.aderenciaSevPrioSev1 >= 80);
+        // Item 1: badge de Meta (farol) também na Governança Sev x Prioridade (meta única: >= 80%).
+        // Sem base de dados no período/filtro, badge neutro em vez de "Fora da Meta".
+        setBadge('sevprio-meta-badge-geral', kpis.aderenciaSevPrio != null ? kpis.aderenciaSevPrio >= 80 : null);
+        setBadge('sevprio-meta-badge-sev0', kpis.aderenciaSevPrioSev0 != null ? kpis.aderenciaSevPrioSev0 >= 80 : null);
+        setBadge('sevprio-meta-badge-sev1', kpis.aderenciaSevPrioSev1 != null ? kpis.aderenciaSevPrioSev1 >= 80 : null);
     }
 
     // Lista de incidentes com divergência entre Severidade técnica e Priority do ServiceNow
@@ -2455,6 +2558,12 @@
     function buildMetaBadge(isOk, okLabel, nokLabel) {
         okLabel = okLabel || 'Dentro da Meta';
         nokLabel = nokLabel || 'Fora da Meta';
+        if (isOk === null || isOk === undefined) {
+            return `<span class="inline-flex items-center gap-1 text-[9px] font-bold text-slate-400 bg-slate-100 rounded-full px-1.5 py-0.5 whitespace-nowrap">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5 flex-none" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9 9a1 1 0 012 0v4a1 1 0 11-2 0V9zm1-4a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd"/></svg>
+                Sem Incidentes
+            </span>`;
+        }
         if (isOk) {
             return `<span class="inline-flex items-center gap-1 text-[9px] font-bold text-natura-green-cerrado bg-natura-green-cerrado/10 rounded-full px-1.5 py-0.5 whitespace-nowrap">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5 flex-none" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
