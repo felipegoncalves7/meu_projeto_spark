@@ -941,9 +941,9 @@
                     <div id="mudanca-cards-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
                 </div>
 
-                <!-- Item 2: MTTD (Início/Término) — Geral/Deploy/Tradicional, base Majors x base ServiceNow -->
+                <!-- Item 2/6: MTTD (Início/Término) — Geral/Deploy/Tradicional, base Majors x base ServiceNow -->
                 <div class="pt-2">
-                    <div class="flex items-center gap-2 mb-3">
+                    <div class="flex items-center gap-2 mb-1">
                         <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">MTTD — Início e Término da Mudança</h2>
                         <span class="info-tooltip" tabindex="0">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -951,19 +951,111 @@
                             </svg>
                             <span class="tooltip-bubble">MTTD Início = tempo entre o início planejado da Mudança e a
                                 abertura do Incidente. MTTD Término = idem, mas contra o término planejado (pode ser
-                                negativo: Incidente aberto ainda durante a execução). "Base Majors" usa a data de
-                                abertura registrada na planilha de Incidentes; "Base ServiceNow" usa a data de
-                                abertura do ticket no ServiceNow — podem divergir.</span>
+                                negativo: Incidente aberto ainda durante a execução). "Definição do Incidente NCC"
+                                usa a data de abertura registrada na planilha de Incidentes; "Definição do ticket
+                                ServiceNow" usa a data de abertura do ticket no ServiceNow — podem divergir.</span>
                         </span>
                     </div>
+                    <p class="text-[11px] text-slate-400 mb-4 leading-relaxed">Tempo decorrido entre os marcos
+                        planejados da Mudança (início e término da janela) e o momento em que o Incidente crítico foi
+                        detectado/aberto — quanto menor, mais rápida foi a detecção.</p>
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
                             <p class="text-xs text-slate-500 uppercase tracking-wider font-bold mb-3">MTTD Início CHG <span class="text-slate-400 font-normal">(Meta: ≤ 25h)</span></p>
+                            <!-- Diagrama: caminho do Início da Mudança até a detecção do Incidente -->
+                            <div class="flex items-center gap-2 mb-4 px-1">
+                                <div class="flex flex-col items-center flex-none">
+                                    <span class="text-lg leading-none">🚀</span>
+                                    <span class="text-[8px] font-bold text-slate-500 mt-1 text-center leading-tight">Início<br>da Mudança</span>
+                                </div>
+                                <div class="flex-1 relative h-0.5 bg-natura-blue-profundo/30">
+                                    <span class="absolute -top-3.5 left-1/2 -translate-x-1/2 text-[8px] font-bold text-natura-blue-profundo whitespace-nowrap">MTTD Início</span>
+                                    <span class="absolute right-0 -top-1 w-2 h-2 border-t-2 border-r-2 border-natura-blue-profundo/60 rotate-45"></span>
+                                </div>
+                                <div class="flex flex-col items-center flex-none">
+                                    <span class="text-lg leading-none">🚨</span>
+                                    <span class="text-[8px] font-bold text-slate-500 mt-1 text-center leading-tight">Incidente<br>Detectado</span>
+                                </div>
+                            </div>
                             <div id="mttd-matrix-inicio" class="overflow-x-auto"></div>
                         </div>
                         <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
                             <p class="text-xs text-slate-500 uppercase tracking-wider font-bold mb-3">MTTD Término CHG <span class="text-slate-400 font-normal">(referência Deploy: ≤ 6h)</span></p>
+                            <!-- Diagrama: 2 caminhos possíveis a partir do Término planejado — incidente detectado
+                                 DEPOIS (positivo) ou ainda DURANTE a execução, antes do término (negativo) -->
+                            <div class="mb-4 px-1">
+                                <div class="flex items-center gap-2">
+                                    <div class="flex flex-col items-center flex-none">
+                                        <span class="text-lg leading-none">🏁</span>
+                                        <span class="text-[8px] font-bold text-slate-500 mt-1 text-center leading-tight">Término<br>Planejado</span>
+                                    </div>
+                                    <div class="flex-1 flex flex-col gap-2">
+                                        <div class="flex items-center gap-1.5">
+                                            <div class="flex-1 relative h-0.5 bg-natura-red-buriti/40">
+                                                <span class="absolute right-0 -top-1 w-2 h-2 border-t-2 border-r-2 border-natura-red-buriti/70 rotate-[-135deg]"></span>
+                                            </div>
+                                            <span class="text-sm leading-none flex-none">🚨</span>
+                                            <span class="text-[8px] font-bold text-natura-red-buriti flex-none whitespace-nowrap">Antes (negativo)</span>
+                                        </div>
+                                        <div class="flex items-center gap-1.5">
+                                            <div class="flex-1 relative h-0.5 bg-natura-green-cerrado/40">
+                                                <span class="absolute right-0 -top-1 w-2 h-2 border-t-2 border-r-2 border-natura-green-cerrado/70 rotate-45"></span>
+                                            </div>
+                                            <span class="text-sm leading-none flex-none">🚨</span>
+                                            <span class="text-[8px] font-bold text-natura-green-cerrado flex-none whitespace-nowrap">Depois (positivo)</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p class="text-[8px] text-slate-400 mt-1.5 leading-tight">Incidente detectado ainda
+                                    durante a execução da Mudança (antes do término) gera MTTD Término
+                                    <span class="font-bold text-natura-red-buriti">negativo</span>; detectado após o
+                                    término, gera MTTD <span class="font-bold text-natura-green-cerrado">positivo</span>.</p>
+                            </div>
                             <div id="mttd-matrix-termino" class="overflow-x-auto"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dispersão MTTD x MTTR (item 6: logo abaixo dos cards de MTTD) -->
+                <div class="pt-2">
+                    <div class="flex items-center gap-2 mb-3">
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Dispersão MTTD x MTTR
+                            — Incidentes causados por Mudança</h2>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
+                            <div class="flex items-center justify-between mb-3">
+                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">MTTD Início x
+                                    MTTR</p>
+                                <span class="info-tooltip" tabindex="0">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span class="tooltip-bubble">Cada ponto é um Incidente causado por Mudança. Eixo X
+                                        = MTTD Início (horas até detecção após início planejado da CHG). Eixo Y =
+                                        MTTR (horas até restauração). Azul = Deploy, Laranja = Tradicional.</span>
+                                </span>
+                            </div>
+                            <div class="h-64"><canvas id="mttdVsMttrChart"></canvas></div>
+                        </div>
+                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
+                            <div class="flex items-center justify-between mb-3">
+                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">MTTD Término x
+                                    MTTR</p>
+                                <span class="info-tooltip" tabindex="0">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span class="tooltip-bubble">Cada ponto é um Incidente causado por Mudança. Eixo X
+                                        = MTTD Término (horas até detecção após término planejado da CHG). Eixo Y =
+                                        MTTR (horas até restauração). Azul = Deploy, Laranja = Tradicional.</span>
+                                </span>
+                            </div>
+                            <div class="h-64"><canvas id="mttdTerminoVsMttrChart"></canvas></div>
                         </div>
                     </div>
                 </div>
@@ -1050,51 +1142,6 @@
                     </div>
                 </div>
 
-                <!-- Dispersão MTTD x MTTR -->
-                <div class="pt-2">
-                    <div class="flex items-center gap-2 mb-3">
-                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Dispersão MTTD x MTTR
-                            — Incidentes causados por Mudança</h2>
-                    </div>
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <!-- Dispersão MTTD Início x MTTR -->
-                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
-                            <div class="flex items-center justify-between mb-3">
-                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">MTTD Início x
-                                    MTTR</p>
-                                <span class="info-tooltip" tabindex="0">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <span class="tooltip-bubble">Cada ponto é um Incidente causado por Mudança. Eixo X
-                                        = MTTD Início (horas até detecção após início planejado da CHG). Eixo Y =
-                                        MTTR (horas até restauração). Azul = Deploy, Laranja = Tradicional.</span>
-                                </span>
-                            </div>
-                            <div class="h-64"><canvas id="mttdVsMttrChart"></canvas></div>
-                        </div>
-                        <!-- Dispersão MTTD Término x MTTR -->
-                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
-                            <div class="flex items-center justify-between mb-3">
-                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">MTTD Término x
-                                    MTTR</p>
-                                <span class="info-tooltip" tabindex="0">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <span class="tooltip-bubble">Cada ponto é um Incidente causado por Mudança. Eixo X
-                                        = MTTD Término (horas até detecção após término planejado da CHG). Eixo Y =
-                                        MTTR (horas até restauração). Azul = Deploy, Laranja = Tradicional.</span>
-                                </span>
-                            </div>
-                            <div class="h-64"><canvas id="mttdTerminoVsMttrChart"></canvas></div>
-                        </div>
-                    </div>
-                </div>
                 <!-- Qualidade de RCA por Universo (Deploy / Tradicional) -->
                 <div class="pt-2">
                     <div class="flex items-center gap-2 mb-3">
