@@ -2018,6 +2018,9 @@ function getMajorProblemsData(year) {
              implementation: { backlog: {}, resolved: {} }
          },
 
+         // Incidentes com Causa Raiz identificada, por Equipe (via Tarefas de RCA resolvidas), para o % de cobertura
+         teamRcaIncidentCoverage: {},
+
          monthly: {},
          monthlyYTD: {},
          weeklyWTD: {}
@@ -2153,6 +2156,19 @@ function getMajorProblemsData(year) {
          }
      });
 
+      // Vínculo Tarefa de RCA -> Problema, via aba PTASK_RCA (cruzamento pelo nº da Tarefa),
+      // usado para calcular o % de Incidentes com Causa Raiz identificada por Equipe.
+      const ptaskToProblemMap = {};
+      const ptaskRcaSheet = ss.getSheetByName('PTASK_RCA');
+      if (ptaskRcaSheet) {
+          const ptaskRcaValues = ptaskRcaSheet.getDataRange().getValues();
+          for (let i = 1; i < ptaskRcaValues.length; i++) {
+              const taskNum = String(ptaskRcaValues[i][PTASK_COL_NUMBER] || '').trim();
+              const problemNum = String(ptaskRcaValues[i][PTASK_COL_PROBLEM] || '').trim();
+              if (taskNum && problemNum) ptaskToProblemMap[taskNum] = problemNum;
+          }
+      }
+
       // --- MTTRC and RANKING Calculation from RCATask_List Sheet ---
       const taskSheet = ss.getSheetByName("RCATask_List");
       if (taskSheet) {
@@ -2230,6 +2246,15 @@ function getMajorProblemsData(year) {
                         if (!metrics.areaResolved[group]) metrics.areaResolved[group] = { count: 0, totalAging: 0 };
                         metrics.areaResolved[group].count++;
                         metrics.areaResolved[group].totalAging += agingDays;
+
+                        // % de Causa Raiz por Equipe: união dos Incidentes dos Problemas cujas Tarefas de RCA
+                        // essa Equipe concluiu (1 Problema pode ter vários Incidentes e várias Tarefas).
+                        const problemNum = ptaskToProblemMap[taskNumber];
+                        const problemInfo = problemNum ? uniqueProblemData.get(problemNum) : null;
+                        if (problemInfo && problemInfo.incidents) {
+                            if (!metrics.teamRcaIncidentCoverage[group]) metrics.teamRcaIncidentCoverage[group] = new Set();
+                            problemInfo.incidents.forEach(incId => metrics.teamRcaIncidentCoverage[group].add(incId));
+                        }
                     }
                 }
           });
@@ -2282,17 +2307,28 @@ function getMajorProblemsData(year) {
             .slice(0, 5),
           // Aging x Volume de Tarefas por Equipe, para os gráficos de Dispersão (RCA / Implementação)
           scatterData: (() => {
-            const buildPoints = (bucket) => Object.entries(bucket)
-              .map(([name, d]) => ({ name, count: d.count, aging: d.count > 0 ? Math.round(d.totalAging / d.count) : 0 }))
+            const totalIncidentesPeriodo = metrics.totalIncidentes.size;
+            const rcaCoveragePct = (name) => {
+              const covered = metrics.teamRcaIncidentCoverage[name];
+              if (!covered || totalIncidentesPeriodo === 0) return 0;
+              return Math.round((covered.size / totalIncidentesPeriodo) * 1000) / 10;
+            };
+            const buildPoints = (bucket, withCoverage) => Object.entries(bucket)
+              .map(([name, d]) => ({
+                name,
+                count: d.count,
+                aging: d.count > 0 ? Math.round(d.totalAging / d.count) : 0,
+                ...(withCoverage ? { rcaCoveragePct: rcaCoveragePct(name) } : {})
+              }))
               .sort((a, b) => b.count - a.count);
             return {
               rca: {
-                backlog: buildPoints(metrics.taskAging.rca.backlog),
-                resolved: buildPoints(metrics.taskAging.rca.resolved)
+                backlog: buildPoints(metrics.taskAging.rca.backlog, false),
+                resolved: buildPoints(metrics.taskAging.rca.resolved, true)
               },
               implementation: {
-                backlog: buildPoints(metrics.taskAging.implementation.backlog),
-                resolved: buildPoints(metrics.taskAging.implementation.resolved)
+                backlog: buildPoints(metrics.taskAging.implementation.backlog, false),
+                resolved: buildPoints(metrics.taskAging.implementation.resolved, true)
               }
             };
           })(),
