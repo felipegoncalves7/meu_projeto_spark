@@ -1229,11 +1229,10 @@
             </div>
 
             <!-- ============ SEÇÃO: PROBLEMAS & QUALIDADE (Major Problems + Qualidade de RCA, detalhe) ============ -->
-            <section id="sec-problemas" class="space-y-8 scroll-mt-28">
+            <section id="sec-problemas" class="space-y-8 scroll-mt-28 pt-4">
                 <div class="flex items-center gap-2">
                     <h2 class="text-xl font-black text-natura-green-amazonia">Problemas &amp; Qualidade</h2>
-                    <span class="text-xs text-slate-400 font-medium">Detalhe de Major Problems e da Qualidade de RCA
-                        &mdash; os KPIs principais estão na Visão Geral</span>
+                    <span class="text-xs text-slate-400 font-medium">Detalhe de Major Problems e da Qualidade de RCA</span>
                 </div>
 
                 <!-- Bloco: Problemas -->
@@ -1340,10 +1339,10 @@
                     </div>
                     <!-- 8. MTTRC -->
                     <div class="kpi-card rounded-2xl p-5 border border-slate-200">
-                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">MTTRC (Horas)</p>
+                        <p class="text-xs text-slate-500 mb-1 uppercase tracking-wider font-bold">MTTRC (Dias)</p>
                         <p id="mp-avg-mttrc" class="text-3xl font-extrabold text-[#E29627]">0</p>
                         <p class="text-[10px] text-slate-400 mt-1 leading-tight">
-                            Tempo médio em horas para identificar e documentar as Causas Raízes.
+                            Tempo médio em dias para identificar e documentar as Causas Raízes.
                         </p>
                     </div>
                     <!-- 9. Aging AVG Backlog -->
@@ -1357,62 +1356,6 @@
                     </div>
                 </div>
 
-                <!-- Major Problems: Por Severidade -->
-                <div class="pt-6 border-t border-slate-100">
-                    <h4 class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4">Problemas por Severidade (Sev0 + Sev1)</h4>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <!-- Sev0 -->
-                        <div class="rounded-2xl border border-natura-red-buriti/20 bg-natura-red-buriti/[0.03] p-5">
-                            <div class="flex items-center gap-2 mb-4">
-                                <span class="w-2.5 h-2.5 rounded-full bg-natura-red-buriti"></span>
-                                <h5 class="text-xs font-black text-slate-600 uppercase tracking-wider">Sev0</h5>
-                            </div>
-                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                <div>
-                                    <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Abertos</p>
-                                    <p id="mp-sev0-abertos" class="text-2xl font-extrabold text-natura-red-buriti">0</p>
-                                </div>
-                                <div>
-                                    <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Resolvidos</p>
-                                    <p id="mp-sev0-resolvidos" class="text-2xl font-extrabold text-natura-green-cerrado">0</p>
-                                </div>
-                                <div>
-                                    <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Implementação</p>
-                                    <p id="mp-sev0-impl" class="text-2xl font-extrabold text-natura-yellow-tucuma">0</p>
-                                </div>
-                                <div>
-                                    <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">RCA</p>
-                                    <p id="mp-sev0-rca" class="text-2xl font-extrabold text-natura-blue-profundo">0</p>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Sev1 -->
-                        <div class="rounded-2xl border border-natura-orange/20 bg-natura-orange/[0.03] p-5">
-                            <div class="flex items-center gap-2 mb-4">
-                                <span class="w-2.5 h-2.5 rounded-full bg-natura-orange"></span>
-                                <h5 class="text-xs font-black text-slate-600 uppercase tracking-wider">Sev1</h5>
-                            </div>
-                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                <div>
-                                    <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Abertos</p>
-                                    <p id="mp-sev1-abertos" class="text-2xl font-extrabold text-natura-red-buriti">0</p>
-                                </div>
-                                <div>
-                                    <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Resolvidos</p>
-                                    <p id="mp-sev1-resolvidos" class="text-2xl font-extrabold text-natura-green-cerrado">0</p>
-                                </div>
-                                <div>
-                                    <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Implementação</p>
-                                    <p id="mp-sev1-impl" class="text-2xl font-extrabold text-natura-yellow-tucuma">0</p>
-                                </div>
-                                <div>
-                                    <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">RCA</p>
-                                    <p id="mp-sev1-rca" class="text-2xl font-extrabold text-natura-blue-profundo">0</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
                 </div>
                 <!-- Fim Bloco: Problemas -->
 
@@ -1553,60 +1496,6 @@
                     </div>
                 </div>
 
-                <!-- Qualidade de RCA, Plano de Ação e Governança de Testes (Manual_Info), por Universo -->
-                <div class="pt-2">
-                    <div class="flex items-center gap-2 mb-3">
-                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Qualidade de RCA & Governança
-                            de Testes, por Universo</h2>
-                        <span class="info-tooltip" tabindex="0">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <span class="tooltip-bubble">Dados de avaliação manual feita pela equipe (aba
-                                Manual_Info), escopados ao Ano selecionado. "—" indica que o Problema ainda está em
-                                aberto ou a análise não foi concluída, e é excluído do cálculo do percentual (nunca
-                                contado como 0%). Cada Universo só exibe as perguntas que fazem sentido para ele.</span>
-                        </span>
-                    </div>
-                    <p class="text-[10px] text-slate-400 italic mb-1">Clique num Finding de
-                        Causa ou Processo de Origem para ver os incidentes por trás do número.</p>
-                    <p id="qm-caption-geral" class="text-[10px] text-slate-400 italic mb-4"></p>
-
-                    <div id="qm-notice-geral" class="hidden bg-natura-yellow-balsamo/10 border border-natura-yellow-balsamo/40 rounded-2xl p-6 text-center">
-                        <p class="text-sm font-bold text-slate-600">Dados em apuração para este ano</p>
-                        <p class="text-xs text-slate-400 mt-1">A Qualidade de RCA ainda não foi registrada para os Incidentes deste ano na planilha.</p>
-                    </div>
-                    <div id="qm-content-geral" class="space-y-6">
-                        <!-- Universo: Geral -->
-                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                            <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
-                                <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
-                                    <span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
-                                    Universo Geral
-                                    <span class="text-[10px] font-normal text-slate-400">(Incidentes não causados por
-                                        Mudança Deploy/Tradicional)</span>
-                                </h3>
-                                <span class="text-[10px] text-slate-400 font-semibold">n=<span
-                                        id="qm-geral-n">0</span></span>
-                            </div>
-                            <div id="qm-metrics-geral" class="grid grid-cols-2 gap-4 mb-5"></div>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        Findings de Causa</h4>
-                                    <div id="qm-causaraiz-geral" class="space-y-1.5"></div>
-                                </div>
-                                <div>
-                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        Processos de Origem</h4>
-                                    <div id="qm-processo-geral" class="space-y-1.5"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </section>
             <!-- ============ FIM SEÇÃO: PROBLEMAS ============ -->
 

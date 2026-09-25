@@ -2249,7 +2249,7 @@ function getMajorProblemsData(year) {
               problemasImpl: metrics.problemasImpl,
               rcaPendentes: metrics.rcaPendentes,
               avgAgingResolved: metrics.countResolvedAging > 0 ? Math.round(metrics.sumResolvedAging / metrics.countResolvedAging) : 0,
-              avgMTTRC: metrics.countMTTRC > 0 ? Math.round(metrics.sumMTTRC / metrics.countMTTRC) : 0,
+              avgMTTRC: metrics.countMTTRC > 0 ? Math.round((metrics.sumMTTRC / metrics.countMTTRC / 24) * 10) / 10 : 0,
               avgAgingBacklog: metrics.countBacklogAging > 0 ? Math.round(metrics.sumBacklogAging / metrics.countBacklogAging) : 0,
               mttrcCount: metrics.countMTTRC // Debugging
           },

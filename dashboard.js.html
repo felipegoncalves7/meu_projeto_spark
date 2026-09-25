@@ -374,19 +374,8 @@
 
         // New KPIs
         setText('mp-avg-aging-resolved', data.kpis.avgAgingResolved + " Dias");
-        setText('mp-avg-mttrc', data.kpis.avgMTTRC + " Horas");
+        setText('mp-avg-mttrc', data.kpis.avgMTTRC + " Dias");
         setText('mp-avg-aging-backlog', data.kpis.avgAgingBacklog + " Dias");
-
-        // KPIs por Severidade
-        const bySev = data.kpisBySeveridade || {};
-        ['Sev0', 'Sev1'].forEach(sev => {
-            const d = bySev[sev] || { problemasAbertos: 0, problemasResolvidos: 0, problemasImpl: 0, rcaPendentes: 0 };
-            const prefix = sev.toLowerCase();
-            setText(`mp-${prefix}-abertos`, d.problemasAbertos);
-            setText(`mp-${prefix}-resolvidos`, d.problemasResolvidos);
-            setText(`mp-${prefix}-impl`, d.problemasImpl);
-            setText(`mp-${prefix}-rca`, d.rcaPendentes);
-        });
 
         // 2. Charts
         drawProblemsChart(data.monthly);
