@@ -1568,6 +1568,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             quarterLabel: openDate ? getQuarterLabel(openDate) : "N/A",
             tech: techImpactada,
             offender: ofensor,
+            origem: origemDeteccao || "N/A",
             consideracoes: String(row[24] || "").trim(),
             isConcessao: isConcessao
         });

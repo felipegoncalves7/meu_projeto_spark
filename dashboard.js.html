@@ -852,6 +852,7 @@
         ALL_DATA.currentKpis = data.kpis;
         updateComparisonDisplay();
         ALL_DATA.rawIncidents = data.rawIncidents || [];
+        renderJornadaTechOrigemAnalysis();
         ALL_DATA.evolutionData = {
             monthly: { metrics: data.monthlyMetrics, mttr: data.mttrPorMesEmHoras, title: "Evolução Mensal" },
             weekly: { metrics: data.weeklyMetrics, mttr: data.mttrSemanalEmHoras, title: "Evolução Semanal" },
@@ -2184,6 +2185,24 @@
         wireToggle('btn-toggle-grupos-tradicional', 'grupos-tradicional-panel');
         wireToggle('btn-toggle-grupos-deploy', 'grupos-deploy-panel');
 
+        // Botão com painel oculto por padrão, que alterna o texto do rótulo e a rotação do
+        // chevron ao abrir/fechar (usado pela Governança de Classificação — item 6 — e pela
+        // análise de Tecnologias por Origem na seção Jornada — item 8)
+        const wireLabeledToggle = (btnId, panelId, labelId, iconId, showLabel, hideLabel) => {
+            const btn = document.getElementById(btnId);
+            const panel = document.getElementById(panelId);
+            const label = document.getElementById(labelId);
+            const icon = document.getElementById(iconId);
+            if (!btn || !panel) return;
+            btn.addEventListener('click', () => {
+                const nowHidden = panel.classList.toggle('hidden');
+                if (label) label.textContent = nowHidden ? showLabel : hideLabel;
+                if (icon) icon.classList.toggle('rotate-180', !nowHidden);
+            });
+        };
+        wireLabeledToggle('btn-toggle-governanca', 'governanca-sevprio-panel', 'btn-toggle-governanca-label', 'btn-toggle-governanca-icon', 'Ver Governança de Classificação', 'Ocultar Governança de Classificação');
+        wireLabeledToggle('btn-toggle-jornada-tech-origem', 'jornada-tech-origem-panel', 'btn-toggle-jornada-tech-origem-label', 'btn-toggle-jornada-tech-origem-icon', 'Ver Tecnologias com Detecção via End-User/Experiências', 'Ocultar Tecnologias com Detecção via End-User/Experiências');
+
         const wireRankingModeToggle = (toggleId, universo) => {
             const container = document.getElementById(toggleId);
             if (!container) return;
@@ -2731,7 +2750,6 @@
             const keyMatch = Object.keys(JORNADA_MAP).find(k => k.toLowerCase() === key.toLowerCase());
             const mapped = keyMatch ? JORNADA_MAP[keyMatch] : { label: key, color: 'bg-slate-50 text-slate-700 border-slate-200', icon: '🔹' };
             const item = metrics[key];
-            const pct = totalIncidentes > 0 ? Math.round((item.count / totalIncidentes) * 1000) / 10 : 0;
             const avgMin = item.count > 0 ? item.durationMin / item.count : 0;
             const donutId = `jornada-donut-${key.replace(/[^a-zA-Z0-9]/g, '_')}`;
 
@@ -2742,7 +2760,7 @@
                         <p class="text-xs font-bold text-slate-700 leading-tight">${mapped.label}</p>
                     </div>
                     <p class="text-2xl font-extrabold text-natura-green-cerrado">${item.count}</p>
-                    <p class="text-[10px] text-slate-400 mt-1">${pct}% dos Incidentes · MTTR médio ${formatMinutesToHHMM(avgMin)}</p>
+                    <p class="text-[10px] text-slate-400 mt-1">MTTR médio ${formatMinutesToHHMM(avgMin)}</p>
                     ${buildSevBreakdownHtml(item, donutId)}
                 </div>
             `;
@@ -2752,6 +2770,49 @@
             const donutId = `jornada-donut-${key.replace(/[^a-zA-Z0-9]/g, '_')}`;
             renderMiniDonut(donutId, metrics[key].origemBreakdown);
         });
+    }
+
+    // Item 8: Tecnologias impactadas por Incidentes cuja Origem da Detecção NÃO foi Monitoração
+    // (End-users / Experiências) — quanto mais Incidentes capturados pela Monitoração, melhor; esta
+    // lista ajuda a identificar em quais Tecnologias a cobertura de monitoramento ainda está fraca.
+    function renderJornadaTechOrigemAnalysis() {
+        const container = document.getElementById('jornada-tech-origem-list');
+        if (!container) return;
+        const incidents = ALL_DATA.rawIncidents || [];
+        const relevant = incidents.filter(inc => inc.origem === 'End-users' || inc.origem === 'Experiências');
+
+        const summaryEl = document.getElementById('jornada-tech-origem-summary');
+        if (summaryEl) {
+            const pct = incidents.length > 0 ? Math.round((relevant.length / incidents.length) * 1000) / 10 : 0;
+            summaryEl.textContent = `${relevant.length} de ${incidents.length} Incidentes (${pct}%) não foram detectados via Monitoração.`;
+        }
+
+        if (!relevant.length) {
+            container.innerHTML = `<p class="text-[11px] text-slate-300 italic py-2">Nenhum Incidente com detecção via End-User/Experiências no período filtrado.</p>`;
+            return;
+        }
+
+        const byTech = {};
+        relevant.forEach(inc => {
+            const tech = inc.tech || 'N/A';
+            if (!byTech[tech]) byTech[tech] = { endUsers: 0, experiencias: 0, total: 0 };
+            byTech[tech].total++;
+            if (inc.origem === 'End-users') byTech[tech].endUsers++;
+            else byTech[tech].experiencias++;
+        });
+
+        const list = Object.keys(byTech).map(tech => Object.assign({ tech }, byTech[tech])).sort((a, b) => b.total - a.total);
+        const maxTotal = Math.max.apply(null, list.map(i => i.total));
+
+        container.innerHTML = list.map(item => `
+            <div class="flex items-center gap-3 py-1.5">
+                <span class="text-[11px] font-medium text-slate-700 w-32 flex-none truncate" title="${item.tech}">${item.tech}</span>
+                <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div class="h-full bg-natura-orange" style="width: ${(item.total / maxTotal) * 100}%"></div>
+                </div>
+                <span class="text-[11px] font-bold text-slate-600 flex-none text-right whitespace-nowrap">${item.total} <span class="text-slate-400 font-normal">(${item.endUsers} End-User, ${item.experiencias} Exper.)</span></span>
+            </div>
+        `).join('');
     }
 
     // Cards de Incidentes por País Impactado, com bandeiras
@@ -2768,7 +2829,6 @@
 
         gridEl.innerHTML = keys.map(code => {
             const item = metrics[code];
-            const pct = totalIncidentes > 0 ? Math.round((item.count / totalIncidentes) * 1000) / 10 : 0;
             const donutId = `pais-donut-${code.replace(/[^a-zA-Z0-9]/g, '_')}`;
             return `
                 <div class="kpi-card rounded-2xl p-4 border border-slate-200 bg-white flex-none w-72 snap-start">
@@ -2777,7 +2837,6 @@
                         <p class="text-xs font-bold text-slate-600">${code}</p>
                     </div>
                     <p class="text-2xl font-extrabold text-natura-green-cerrado leading-none">${item.count}</p>
-                    <p class="text-[10px] text-slate-400 mt-1">${pct}% dos Incidentes</p>
                     ${buildSevBreakdownHtml(item, donutId)}
                 </div>
             `;

@@ -611,12 +611,22 @@
                     </button>
                 </div>
 
-                <!-- Governança de Classificação: Aderência Sev x Prioridade -->
+                <!-- Governança de Classificação: Aderência Sev x Prioridade (item 6: oculto por padrão) -->
                 <div class="pt-2">
-                    <div class="flex items-center gap-2 mb-3">
+                    <div class="flex items-center justify-between gap-2 mb-3">
                         <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Governança de
                             Classificação &mdash; Severidade x Prioridade</h2>
+                        <button type="button" id="btn-toggle-governanca"
+                            class="text-[10px] font-bold text-natura-orange flex items-center gap-1 flex-none">
+                            <span id="btn-toggle-governanca-label">Ver Governança de Classificação</span>
+                            <svg id="btn-toggle-governanca-icon" xmlns="http://www.w3.org/2000/svg" class="h-3 w-3"
+                                fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
                     </div>
+                    <div id="governanca-sevprio-panel" class="hidden">
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <!-- Aderência Sev x Prioridade Geral -->
                         <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
@@ -695,6 +705,7 @@
                             Ver Divergências Encontradas (<span id="val-divergencias-count">0</span>)
                         </button>
                     </div>
+                    </div>
                 </div>
                 </div>
                 <!-- Fim Bloco: Incidentes -->
@@ -740,6 +751,32 @@
                         </span>
                     </div>
                     <div id="jornada-cards-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+
+                    <!-- Item 8: Tecnologias impactadas por Incidentes com Origem End-User/Experiências -->
+                    <div class="mt-3">
+                        <button type="button" id="btn-toggle-jornada-tech-origem"
+                            class="text-[10px] font-bold text-natura-orange flex items-center gap-1">
+                            <span id="btn-toggle-jornada-tech-origem-label">Ver Tecnologias com Detecção via
+                                End-User/Experiências</span>
+                            <svg id="btn-toggle-jornada-tech-origem-icon" xmlns="http://www.w3.org/2000/svg"
+                                class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                        <div id="jornada-tech-origem-panel"
+                            class="hidden mt-3 kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
+                            <p class="text-xs font-bold text-slate-700">Tecnologias com Detecção via End-User /
+                                Experiências</p>
+                            <p class="text-[10px] text-slate-400 mt-1 leading-tight">Quanto mais Incidentes forem
+                                detectados pela Monitoração (e menos por End-User/Experiências), melhor a cobertura
+                                de monitoramento. A lista abaixo mostra em quais Tecnologias a Monitoração ainda não
+                                está detectando primeiro.</p>
+                            <p id="jornada-tech-origem-summary" class="text-[10px] text-slate-500 font-semibold mt-2">
+                            </p>
+                            <div id="jornada-tech-origem-list" class="mt-3 divide-y divide-slate-50"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Países Impactados -->
