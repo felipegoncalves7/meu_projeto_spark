@@ -1433,25 +1433,31 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             // Top Grupos/Serviços Responsáveis (contagem por Tecnologia, usada no ranking e no Diagrama de Sankey).
             // Deploy também é agrupado por Grupo Ofensor (assignmentGroup), igual à Tradicional, para o
             // estágio Grupo -> Service Offering -> Tecnologia do Sankey (item 4).
-            if (chg) {
-                if (isDeploy) {
-                    const key = chg.assignmentGroup + '||' + chg.serviceOffering;
-                    if (!metrics.gruposDeploy[key]) {
-                        metrics.gruposDeploy[key] = { grupo: chg.assignmentGroup, serviceOffering: chg.serviceOffering, count: 0, tecnologias: {} };
-                    }
-                    metrics.gruposDeploy[key].count++;
-                    metrics.gruposDeploy[key].tecnologias[techImpactada] = (metrics.gruposDeploy[key].tecnologias[techImpactada] || 0) + 1;
-                } else if (tipoSm === 'NORMAL' || tipoSm === 'URGENTE') {
-                    // Item 2: o ranking/Sankey de Tradicionais só reflete SMs Normal e Urgente — Emergencial e
-                    // Padrão/Standard ficam de fora (o total "Incidentes causados por Mudança Tradicional" nos
-                    // cards gerais continua somando todos os tipos; só este ranking é mais restrito).
-                    const key = chg.assignmentGroup + '||' + chg.service;
-                    if (!metrics.gruposTradicional[key]) {
-                        metrics.gruposTradicional[key] = { grupo: chg.assignmentGroup, chgService: chg.service, count: 0, tecnologias: {} };
-                    }
-                    metrics.gruposTradicional[key].count++;
-                    metrics.gruposTradicional[key].tecnologias[techImpactada] = (metrics.gruposTradicional[key].tecnologias[techImpactada] || 0) + 1;
+            // O ranking precisa somar o MESMO total de Incidentes do card geral de cada Tipo — por isso,
+            // mesmo quando a SM do Incidente não tem par em Change_MI (`chg` nulo: SM não encontrada, ou
+            // 1 SM com múltiplos Incidentes em que algum deles não casou), o Incidente ainda é contado,
+            // só que agrupado num bucket "Mudança sem Grupo Identificado" em vez de ficar de fora.
+            if (isDeploy) {
+                const grupo = chg ? chg.assignmentGroup : 'Mudança sem Grupo Identificado';
+                const serviceOffering = chg ? chg.serviceOffering : 'N/A';
+                const key = grupo + '||' + serviceOffering;
+                if (!metrics.gruposDeploy[key]) {
+                    metrics.gruposDeploy[key] = { grupo: grupo, serviceOffering: serviceOffering, count: 0, tecnologias: {} };
                 }
+                metrics.gruposDeploy[key].count++;
+                metrics.gruposDeploy[key].tecnologias[techImpactada] = (metrics.gruposDeploy[key].tecnologias[techImpactada] || 0) + 1;
+            } else if (tipoSm === 'NORMAL' || tipoSm === 'URGENTE') {
+                // Item 2: o ranking/Sankey de Tradicionais só reflete SMs Normal e Urgente — Emergencial e
+                // Padrão/Standard ficam de fora (o total "Incidentes causados por Mudança Tradicional" nos
+                // cards gerais continua somando todos os tipos; só este ranking é mais restrito).
+                const grupo = chg ? chg.assignmentGroup : 'Mudança sem Grupo Identificado';
+                const chgService = chg ? chg.service : 'N/A';
+                const key = grupo + '||' + chgService;
+                if (!metrics.gruposTradicional[key]) {
+                    metrics.gruposTradicional[key] = { grupo: grupo, chgService: chgService, count: 0, tecnologias: {} };
+                }
+                metrics.gruposTradicional[key].count++;
+                metrics.gruposTradicional[key].tecnologias[techImpactada] = (metrics.gruposTradicional[key].tecnologias[techImpactada] || 0) + 1;
             }
 
             // MTTD (item 2): calculado a partir de DUAS fontes de data de abertura do Incidente — a
