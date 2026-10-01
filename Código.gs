@@ -41,6 +41,19 @@ const CHG_COL_PLANNED_END = 10;      // K
 const CHG_COL_ASSIGNMENT_GROUP = 11; // L
 
 /**
+ * Normaliza um nº de Mudança/SM para comparação: maiúsculas, remove todo espaço (inclusive
+ * não-quebrável/invisível vindo de colar texto) e, se houver um token no formato CHGxxxxxxx em
+ * meio a texto extra, usa só esse token. Usado tanto ao montar changeMap (Change_MI) quanto no
+ * lookup pela SM number do Incidente, para que diferenças de formatação (caixa, espaços, texto
+ * extra colado) não façam a Mudança cair erroneamente no bucket "Mudança sem Grupo Identificado".
+ */
+function normalizeChangeNumber(raw) {
+  const cleaned = String(raw || '').toUpperCase().replace(/[\s ​-‍﻿]+/g, '');
+  const match = cleaned.match(/CHG\d+/);
+  return match ? match[0] : cleaned;
+}
+
+/**
  * Monta um mapa Number -> {plannedStart, plannedEnd, service, serviceOffering, assignmentGroup}
  * a partir da aba Change_MI, usado para calcular o MTTD (tempo entre início/término planejado
  * da Mudança e a abertura do incidente) e o ranking de Grupos/Serviços responsáveis.
@@ -53,11 +66,7 @@ function buildChangeMap(ss) {
   const values = sheet.getDataRange().getValues();
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
-    // Normaliza (maiúsculas) para casar com o lookup em getFilteredData mesmo se a SM number do
-    // Incidente vier com caixa diferente da de Change_MI (ex.: 1 Mudança com 2 Incidentes, um
-    // deles digitado em minúsculas) — sem isso, esse Incidente caía incorretamente no bucket
-    // "Mudança sem Grupo Identificado" mesmo a Mudança existindo em Change_MI.
-    const number = String(row[CHG_COL_NUMBER] || '').trim().toUpperCase();
+    const number = normalizeChangeNumber(row[CHG_COL_NUMBER]);
     if (!number) continue;
     map[number] = {
       plannedStart: row[CHG_COL_PLANNED_START] instanceof Date ? row[CHG_COL_PLANNED_START] : null,
@@ -1430,10 +1439,11 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             bumpBreakdown(metrics.mudancaQuarterlyPorTipo, quarterLabel, tipoBucket);
 
             const numSm = String(row[COL_SM_NUMBER]).trim();
-            // Lookup em changeMap normalizado (maiúsculas) para tolerar diferença de caixa entre a SM
-            // number do Incidente e a de Change_MI. smNumbersCausandoIncidentes (Taxa de Falha, cruzado
-            // com Change_Exe) continua usando numSm como está, sem alterar esse cálculo (já correto).
-            const chg = numSm ? changeMap[numSm.toUpperCase()] : null;
+            // Lookup em changeMap normalizado (ver normalizeChangeNumber) para tolerar diferenças de
+            // formatação entre a SM number do Incidente e a de Change_MI. smNumbersCausandoIncidentes
+            // (Taxa de Falha, cruzado com Change_Exe) continua usando numSm como está, sem alterar esse
+            // cálculo (já correto).
+            const chg = numSm ? changeMap[normalizeChangeNumber(numSm)] : null;
             // Coletado para a Taxa de Falha (item 5/8): toda SM que causou um Major Incident neste período filtrado
             if (numSm) metrics.smNumbersCausandoIncidentes.add(numSm);
 
@@ -1444,8 +1454,13 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             // mesmo quando a SM do Incidente não tem par em Change_MI (`chg` nulo: SM não encontrada, ou
             // 1 SM com múltiplos Incidentes em que algum deles não casou), o Incidente ainda é contado,
             // só que agrupado num bucket "Mudança sem Grupo Identificado" em vez de ficar de fora.
+            // Quando `chg` não é encontrado, o nome do bucket inclui a SM number bruta (não normalizada)
+            // em vez de um rótulo genérico — assim cada Mudança não-casada aparece separada no ranking,
+            // com sua própria Tecnologia, o que facilita identificar exatamente qual SM precisa de
+            // ajuste de cadastro em Change_MI (divergência de número, grupo não preenchido etc.).
+            const grupoNaoIdentificado = `Mudança sem Grupo Identificado (SM: ${numSm || 'N/A'})`;
             if (isDeploy) {
-                const grupo = chg ? chg.assignmentGroup : 'Mudança sem Grupo Identificado';
+                const grupo = chg ? chg.assignmentGroup : grupoNaoIdentificado;
                 const serviceOffering = chg ? chg.serviceOffering : 'N/A';
                 const key = grupo + '||' + serviceOffering;
                 if (!metrics.gruposDeploy[key]) {
@@ -1457,7 +1472,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
                 // Item 2: o ranking/Sankey de Tradicionais só reflete SMs Normal e Urgente — Emergencial e
                 // Padrão/Standard ficam de fora (o total "Incidentes causados por Mudança Tradicional" nos
                 // cards gerais continua somando todos os tipos; só este ranking é mais restrito).
-                const grupo = chg ? chg.assignmentGroup : 'Mudança sem Grupo Identificado';
+                const grupo = chg ? chg.assignmentGroup : grupoNaoIdentificado;
                 const chgService = chg ? chg.service : 'N/A';
                 const key = grupo + '||' + chgService;
                 if (!metrics.gruposTradicional[key]) {
