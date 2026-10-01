@@ -1926,7 +1926,7 @@
             return `<span class="text-[9px] text-slate-300 italic">Taxa de falha: sem dados</span>`;
         }
         const color = item.taxaFalhaPct <= 5 ? 'text-natura-green-cerrado' : (item.taxaFalhaPct <= 15 ? 'text-[#8a5a00]' : 'text-natura-red-buriti');
-        return `<span class="text-[9px] font-bold ${color}">Taxa de Falha: ${item.taxaFalhaPct}% <span class="text-slate-400 font-normal">(${item.smsFalhas}/${item.smsExecutadas} SMs)</span></span>`;
+        return `<span class="text-[9px] font-bold ${color}">Taxa de Falha: ${item.taxaFalhaPct.toFixed(2)}% <span class="text-slate-400 font-normal">(${item.smsFalhas}/${item.smsExecutadas} SMs)</span></span>`;
     }
 
     // Item 8: dois rankings por Universo (Volumetria x Taxa de Falha), alternados por um toggle;
@@ -1953,7 +1953,7 @@
                         <div class="mt-1">${buildFailureRateBadgeHtml(item)}</div>
                     </div>
                 </div>
-                <span class="flex-none font-black text-natura-orange text-sm">${mode === 'falha' ? item.taxaFalhaPct + '%' : item.count}</span>
+                <span class="flex-none font-black text-natura-orange text-sm">${mode === 'falha' ? item.taxaFalhaPct.toFixed(2) + '%' : item.count}</span>
             </div>
         `;
 
@@ -1982,6 +1982,13 @@
         let hash = 0;
         for (let i = 0; i < str.length; i++) { hash = ((hash << 5) - hash) + str.charCodeAt(i); hash |= 0; }
         return hash;
+    }
+
+    // Item 1: remove o prefixo de estágio (grp:/so:/tech:) adicionado pelo backend (buildSankeyStages)
+    // para exibição — o prefixo existe só para impedir que nomes repetidos em estágios diferentes
+    // (ex.: "N/A") colapsem no mesmo nó do diagrama.
+    function stripSankeyNodePrefix(n) {
+        return String(n).replace(/^(grp|so|tech):/, '');
     }
 
     function escapeXml(str) {
@@ -2139,18 +2146,19 @@
             const x2 = tgt.x;
             const xMid = (x1 + x2) / 2;
 
-            linksSvg += `<path d="M${x1},${y1} C${xMid},${y1} ${xMid},${y2} ${x2},${y2}" fill="none" stroke="${colorOf(l.from)}" stroke-opacity="0.35" stroke-width="${thick.toFixed(1)}"><title>${escapeXml(l.from)} → ${escapeXml(l.to)}: ${l.flow} incidente(s)</title></path>`;
+            linksSvg += `<path d="M${x1},${y1} C${xMid},${y1} ${xMid},${y2} ${x2},${y2}" fill="none" stroke="${colorOf(l.from)}" stroke-opacity="0.35" stroke-width="${thick.toFixed(1)}"><title>${escapeXml(stripSankeyNodePrefix(l.from))} → ${escapeXml(stripSankeyNodePrefix(l.to))}: ${l.flow} incidente(s)</title></path>`;
         });
 
         let nodesSvg = '';
         nodeNames.forEach(n => {
             const p = pos[n];
+            const displayName = stripSankeyNodePrefix(n);
             const isLast = stageCache[n] === maxStage;
             const textX = isLast ? p.x - 4 : p.x + nodeWidth + 4;
             const anchor = isLast ? 'end' : 'start';
-            const label = n.length > 20 ? n.substring(0, 18) + '…' : n;
-            nodesSvg += `<rect x="${p.x}" y="${p.y}" width="${nodeWidth}" height="${p.h.toFixed(1)}" fill="${colorOf(n)}" rx="2"><title>${escapeXml(n)}: ${nodeValue[n]} incidente(s)</title></rect>`;
-            nodesSvg += `<text x="${textX}" y="${p.y + p.h / 2}" dy="0.32em" font-size="9" fill="#374151" text-anchor="${anchor}">${escapeXml(label)}<title>${escapeXml(n)}</title></text>`;
+            const label = displayName.length > 20 ? displayName.substring(0, 18) + '…' : displayName;
+            nodesSvg += `<rect x="${p.x}" y="${p.y}" width="${nodeWidth}" height="${p.h.toFixed(1)}" fill="${colorOf(n)}" rx="2"><title>${escapeXml(displayName)}: ${nodeValue[n]} incidente(s)</title></rect>`;
+            nodesSvg += `<text x="${textX}" y="${p.y + p.h / 2}" dy="0.32em" font-size="9" fill="#374151" text-anchor="${anchor}">${escapeXml(label)}<title>${escapeXml(displayName)}</title></text>`;
         });
 
         container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" class="w-full h-full" preserveAspectRatio="xMidYMid meet">${linksSvg}${nodesSvg}</svg>`;
@@ -2180,6 +2188,9 @@
                     });
                     btn.classList.remove('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
                     btn.classList.add('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
+                    // Item 10: mostra a meta de Taxa de Falha (<= 0,15 / 15%) só quando esse modo está ativo
+                    const metaEl = document.getElementById(`grupos-${universo}-falha-meta`);
+                    if (metaEl) metaEl.classList.toggle('hidden', btn.dataset.mode !== 'falha');
                     renderGruposResponsaveis(LAST_GRUPOS_DATA);
                 });
             });

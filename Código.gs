@@ -1416,7 +1416,10 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
                     }
                     metrics.gruposDeploy[key].count++;
                     metrics.gruposDeploy[key].tecnologias[techImpactada] = (metrics.gruposDeploy[key].tecnologias[techImpactada] || 0) + 1;
-                } else {
+                } else if (tipoSm === 'NORMAL' || tipoSm === 'URGENTE') {
+                    // Item 2: o ranking/Sankey de Tradicionais só reflete SMs Normal e Urgente — Emergencial e
+                    // Padrão/Standard ficam de fora (o total "Incidentes causados por Mudança Tradicional" nos
+                    // cards gerais continua somando todos os tipos; só este ranking é mais restrito).
                     const key = chg.assignmentGroup + '||' + chg.service;
                     if (!metrics.gruposTradicional[key]) {
                         metrics.gruposTradicional[key] = { grupo: chg.assignmentGroup, chgService: chg.service, count: 0, tecnologias: {} };
@@ -1635,7 +1638,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         return {
             smsExecutadas: stats.executed,
             smsFalhas: stats.failed,
-            taxaFalhaPct: Math.round((stats.failed / stats.executed) * 1000) / 10
+            // Item 10: 2 casas decimais (antes era 1), para melhor precisão perto da meta (<= 0,15 / 15%)
+            taxaFalhaPct: Math.round((stats.failed / stats.executed) * 10000) / 100
         };
     };
 
@@ -1673,19 +1677,27 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
 
     // Diagrama de Sankey: Deploy e Tradicional são ambos 3 estágios (Grupo -> Service Offering/CHG
     // Service -> Tecnologia), agregando por par em cada estágio.
+    // Item 1: os nós são prefixados por estágio (grp:/so:/tech:) antes de virar IDs do Sankey. Sem
+    // isso, um valor repetido em estágios diferentes (ex.: "N/A" usado tanto como Service Offering
+    // ausente quanto como Tecnologia ausente) colapsava em UM nó só no front-end, somando o fluxo de
+    // entrada (Grupo->N/A) com o de saída (N/A->Tecnologia) e inflando o total de Incidentes exibido
+    // no hover do nó. O front-end exibe o nome sem o prefixo (ver stripSankeyNodePrefix).
     const buildSankeyStages = (gruposObj, serviceKeyName) => {
         const stage1Counts = {};
         const stage2Counts = {};
         Object.keys(gruposObj).forEach(key => {
             const g = gruposObj[key];
             const serviceVal = g[serviceKeyName];
-            const stage1Key = g.grupo + '||' + serviceVal;
-            if (!stage1Counts[stage1Key]) stage1Counts[stage1Key] = { from: g.grupo, to: serviceVal, flow: 0 };
+            const grupoNode = 'grp:' + g.grupo;
+            const serviceNode = 'so:' + serviceVal;
+            const stage1Key = grupoNode + '||' + serviceNode;
+            if (!stage1Counts[stage1Key]) stage1Counts[stage1Key] = { from: grupoNode, to: serviceNode, flow: 0 };
             stage1Counts[stage1Key].flow += g.count;
 
             Object.keys(g.tecnologias).forEach(tech => {
-                const stage2Key = serviceVal + '||' + tech;
-                if (!stage2Counts[stage2Key]) stage2Counts[stage2Key] = { from: serviceVal, to: tech, flow: 0 };
+                const techNode = 'tech:' + tech;
+                const stage2Key = serviceNode + '||' + techNode;
+                if (!stage2Counts[stage2Key]) stage2Counts[stage2Key] = { from: serviceNode, to: techNode, flow: 0 };
                 stage2Counts[stage2Key].flow += g.tecnologias[tech];
             });
         });

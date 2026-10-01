@@ -1111,8 +1111,12 @@
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         <!-- Tradicionais: Sankey Grupo -> CHG Service -> Tecnologia -->
                         <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
-                            <p class="text-xs text-slate-500 uppercase tracking-wider font-bold mb-3">Tradicionais —
+                            <p class="text-xs text-slate-500 uppercase tracking-wider font-bold mb-1">Tradicionais —
                                 Grupo &gt; Serviço &gt; Tecnologia</p>
+                            <p class="text-[9px] text-[#8a5a00] bg-natura-yellow-balsamo/15 border border-natura-yellow-balsamo/40 rounded-lg px-2 py-1 mb-3 leading-tight">
+                                Considera apenas SMs <strong>Normal</strong> e <strong>Urgente</strong> —
+                                Emergencial e Padrão ficam de fora. Por isso o total aqui pode ser menor que o de
+                                Incidentes de Mudança Tradicional nos cards gerais.</p>
                             <div class="h-72" id="sankeyTradicionalChart"></div>
                             <button type="button" id="btn-toggle-grupos-tradicional"
                                 class="text-[10px] font-bold text-natura-orange mt-3 flex items-center gap-1">Ver
@@ -1128,6 +1132,7 @@
                                     <button type="button" data-mode="volume" class="grupos-ranking-toggle-btn px-3 py-1 text-[10px] font-bold rounded-md transition-all bg-white text-natura-green-cerrado shadow-sm border border-slate-200">Por Volumetria</button>
                                     <button type="button" data-mode="falha" class="grupos-ranking-toggle-btn px-3 py-1 text-[10px] font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white">Por Taxa de Falha</button>
                                 </div>
+                                <p id="grupos-tradicional-falha-meta" class="hidden text-[9px] text-slate-400 italic mb-2">Meta: Taxa de Falha &le; 0,15 (15%)</p>
                                 <div id="grupos-tradicional-list" class="space-y-2"></div>
                             </div>
                         </div>
@@ -1150,6 +1155,7 @@
                                     <button type="button" data-mode="volume" class="grupos-ranking-toggle-btn px-3 py-1 text-[10px] font-bold rounded-md transition-all bg-white text-natura-green-cerrado shadow-sm border border-slate-200">Por Volumetria</button>
                                     <button type="button" data-mode="falha" class="grupos-ranking-toggle-btn px-3 py-1 text-[10px] font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white">Por Taxa de Falha</button>
                                 </div>
+                                <p id="grupos-deploy-falha-meta" class="hidden text-[9px] text-slate-400 italic mb-2">Meta: Taxa de Falha &le; 0,15 (15%)</p>
                                 <div id="grupos-deploy-list" class="space-y-2"></div>
                             </div>
                         </div>
