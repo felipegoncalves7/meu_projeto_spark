@@ -22,6 +22,16 @@ const COL_SM_NUMBER = 22;  // W
 const OLA_TARGET_SEV0_MIN = 120; // 2h
 const OLA_TARGET_SEV1_MIN = 360; // 6h
 
+// Item 4: metas de MTTR (bruto e descontando outliers) e limiar de outlier, em minutos.
+// Outlier = TTR >= 3x a meta de OLA da Severidade (Sev0: 3x2h=6h; Sev1: 3x6h=18h).
+const MTTR_TARGET_SEV0_MIN = 180;         // 03:00 bruto
+const MTTR_TARGET_SEV1_MIN = 420;         // 07:00 bruto
+const MTTR_TARGET_SEM_OUTLIERS_SEV0_MIN = 120; // 02:00 descontando outliers
+const MTTR_TARGET_SEM_OUTLIERS_SEV1_MIN = 360; // 06:00 descontando outliers
+const MTTR_OUTLIER_SEV0_MIN = 360;        // 06:00 — limiar de outlier Sev0
+const MTTR_OUTLIER_SEV1_MIN = 1080;       // 18:00 — limiar de outlier Sev1
+const MTTR_OUTLIER_TARGET_PCT = 5;        // meta: outliers <= 5% dos Incidentes da Severidade
+
 // Mapeamento da aba Change_MI (Range A1:Z)
 const CHG_COL_NUMBER = 0;            // A
 const CHG_COL_SERVICE = 7;           // H
@@ -1075,6 +1085,9 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         incidentesTotal: 0, totalDuracaoMinutos: 0,
         sev0Incidentes: 0, sev0DuracaoMinutos: 0,
         sev1Incidentes: 0, sev1DuracaoMinutos: 0,
+        // Item 4: MTTR descontando outliers (TTR >= limiar da Severidade) + contagem de outliers
+        sev0OutlierCount: 0, sev0DuracaoMinutosSemOutliers: 0, sev0IncidentesSemOutliers: 0,
+        sev1OutlierCount: 0, sev1DuracaoMinutosSemOutliers: 0, sev1IncidentesSemOutliers: 0,
         monthlyMetrics: {},
         weeklyMetrics: {},
         quarterlyMetrics: {},
@@ -1221,6 +1234,12 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         if (isSev0) {
         metrics.sev0Incidentes++;
         metrics.sev0DuracaoMinutos += durMin;
+        if (durMin >= MTTR_OUTLIER_SEV0_MIN) {
+            metrics.sev0OutlierCount++;
+        } else {
+            metrics.sev0IncidentesSemOutliers++;
+            metrics.sev0DuracaoMinutosSemOutliers += durMin;
+        }
         if (durMin <= OLA_TARGET_SEV0_MIN) {
             metrics.sev0DentroOLA++;
         } else {
@@ -1234,6 +1253,12 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         } else if (isSev1) {
         metrics.sev1Incidentes++;
         metrics.sev1DuracaoMinutos += durMin;
+        if (durMin >= MTTR_OUTLIER_SEV1_MIN) {
+            metrics.sev1OutlierCount++;
+        } else {
+            metrics.sev1IncidentesSemOutliers++;
+            metrics.sev1DuracaoMinutosSemOutliers += durMin;
+        }
         if (durMin <= OLA_TARGET_SEV1_MIN) {
             metrics.sev1DentroOLA++;
         } else {
@@ -1737,6 +1762,13 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         mttrSev0: calculateMTTR(metrics.sev0DuracaoMinutos, metrics.sev0Incidentes),
         incidentesSev1: metrics.sev1Incidentes,
         mttrSev1: calculateMTTR(metrics.sev1DuracaoMinutos, metrics.sev1Incidentes),
+        // Item 4: MTTR descontando outliers + volumetria/% de outliers, por Severidade
+        mttrSev0SemOutliers: calculateMTTR(metrics.sev0DuracaoMinutosSemOutliers, metrics.sev0IncidentesSemOutliers),
+        sev0OutlierCount: metrics.sev0OutlierCount,
+        sev0OutlierPct: metrics.sev0Incidentes > 0 ? Math.round((metrics.sev0OutlierCount / metrics.sev0Incidentes) * 1000) / 10 : null,
+        mttrSev1SemOutliers: calculateMTTR(metrics.sev1DuracaoMinutosSemOutliers, metrics.sev1IncidentesSemOutliers),
+        sev1OutlierCount: metrics.sev1OutlierCount,
+        sev1OutlierPct: metrics.sev1Incidentes > 0 ? Math.round((metrics.sev1OutlierCount / metrics.sev1Incidentes) * 1000) / 10 : null,
         // Visão Executiva
         aderenciaOLA: aderenciaOLA !== null ? Math.round(aderenciaOLA * 10) / 10 : null,
         aderenciaOLABase: sev0Sev1Total,

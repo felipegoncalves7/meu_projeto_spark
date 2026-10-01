@@ -1866,6 +1866,14 @@
         setText('val-sev1-incidents', kpis.incidentesSev1);
         setText('val-mttr-sev1', kpis.mttrSev1);
 
+        // Item 4: MTTR descontando outliers + volumetria/% de outliers, por Severidade
+        setText('val-mttr-sev0-sem-outliers', kpis.mttrSev0SemOutliers);
+        setText('val-sev0-outlier-count', kpis.sev0OutlierCount);
+        setText('val-sev0-outlier-pct', kpis.sev0OutlierPct != null ? `(${kpis.sev0OutlierPct}%)` : '');
+        setText('val-mttr-sev1-sem-outliers', kpis.mttrSev1SemOutliers);
+        setText('val-sev1-outlier-count', kpis.sev1OutlierCount);
+        setText('val-sev1-outlier-pct', kpis.sev1OutlierPct != null ? `(${kpis.sev1OutlierPct}%)` : '');
+
         // Percentages calculation
         const total = kpis.incidentesTotal || 0;
         const setPct = (id, val) => {
