@@ -53,7 +53,11 @@ function buildChangeMap(ss) {
   const values = sheet.getDataRange().getValues();
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
-    const number = String(row[CHG_COL_NUMBER] || '').trim();
+    // Normaliza (maiúsculas) para casar com o lookup em getFilteredData mesmo se a SM number do
+    // Incidente vier com caixa diferente da de Change_MI (ex.: 1 Mudança com 2 Incidentes, um
+    // deles digitado em minúsculas) — sem isso, esse Incidente caía incorretamente no bucket
+    // "Mudança sem Grupo Identificado" mesmo a Mudança existindo em Change_MI.
+    const number = String(row[CHG_COL_NUMBER] || '').trim().toUpperCase();
     if (!number) continue;
     map[number] = {
       plannedStart: row[CHG_COL_PLANNED_START] instanceof Date ? row[CHG_COL_PLANNED_START] : null,
@@ -1426,7 +1430,10 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             bumpBreakdown(metrics.mudancaQuarterlyPorTipo, quarterLabel, tipoBucket);
 
             const numSm = String(row[COL_SM_NUMBER]).trim();
-            const chg = numSm ? changeMap[numSm] : null;
+            // Lookup em changeMap normalizado (maiúsculas) para tolerar diferença de caixa entre a SM
+            // number do Incidente e a de Change_MI. smNumbersCausandoIncidentes (Taxa de Falha, cruzado
+            // com Change_Exe) continua usando numSm como está, sem alterar esse cálculo (já correto).
+            const chg = numSm ? changeMap[numSm.toUpperCase()] : null;
             // Coletado para a Taxa de Falha (item 5/8): toda SM que causou um Major Incident neste período filtrado
             if (numSm) metrics.smNumbersCausandoIncidentes.add(numSm);
 
