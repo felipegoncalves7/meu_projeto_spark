@@ -868,6 +868,18 @@
                                 data-group="quarterly">Trimestral</button>
                         </div>
                     </div>
+                    <!-- Item 1: só visível na Evolução Semanal -->
+                    <div class="flex justify-end -mt-2 mb-2">
+                        <button type="button" id="btn-open-mttr-outliers"
+                            class="hidden inline-flex items-center gap-2 text-xs font-bold text-natura-red-buriti hover:text-natura-red-boca transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            Ver Incidentes com MTTR &gt; 18h (<span id="val-mttr-outliers-count">0</span>)
+                        </button>
+                    </div>
                     <div class="flex items-center gap-2 mb-6">
                         <label for="evolution-dimension-select"
                             class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ver por:</label>
@@ -1243,7 +1255,7 @@
                                     <button type="button" data-mode="volume" class="grupos-ranking-toggle-btn px-3 py-1 text-[10px] font-bold rounded-md transition-all bg-white text-natura-green-cerrado shadow-sm border border-slate-200">Por Volumetria</button>
                                     <button type="button" data-mode="falha" class="grupos-ranking-toggle-btn px-3 py-1 text-[10px] font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white">Por Taxa de Falha</button>
                                 </div>
-                                <p id="grupos-tradicional-falha-meta" class="hidden text-[9px] text-slate-400 italic mb-2">Meta: Taxa de Falha &le; 0,15 (15%)</p>
+                                <p id="grupos-tradicional-falha-meta" class="hidden text-[9px] text-slate-400 italic mb-2">Meta: Taxa de Falha &le; 1%</p>
                                 <div id="grupos-tradicional-list" class="space-y-2"></div>
                             </div>
                         </div>
@@ -1266,7 +1278,7 @@
                                     <button type="button" data-mode="volume" class="grupos-ranking-toggle-btn px-3 py-1 text-[10px] font-bold rounded-md transition-all bg-white text-natura-green-cerrado shadow-sm border border-slate-200">Por Volumetria</button>
                                     <button type="button" data-mode="falha" class="grupos-ranking-toggle-btn px-3 py-1 text-[10px] font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white">Por Taxa de Falha</button>
                                 </div>
-                                <p id="grupos-deploy-falha-meta" class="hidden text-[9px] text-slate-400 italic mb-2">Meta: Taxa de Falha &le; 0,15 (15%)</p>
+                                <p id="grupos-deploy-falha-meta" class="hidden text-[9px] text-slate-400 italic mb-2">Meta: Taxa de Falha &le; 0,15%</p>
                                 <div id="grupos-deploy-list" class="space-y-2"></div>
                             </div>
                         </div>
@@ -2285,6 +2297,14 @@
 
                     <!-- Content -->
                     <div class="p-6 overflow-y-auto custom-scrollbar flex-1 bg-slate-50">
+                        <!-- Item 2: Origem da Detecção (Volume e %), exibido só no drill-down por Tecnologia -->
+                        <div id="incidents-origem-summary" class="hidden mb-5">
+                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Origem da
+                                Detecção</p>
+                            <div id="incidents-origem-summary-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <!-- Injetado via JS -->
+                            </div>
+                        </div>
                         <div id="incidents-list" class="flex flex-col gap-4">
                             <!-- Injetado via JS -->
                         </div>
