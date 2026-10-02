@@ -2823,12 +2823,26 @@
     // Item 8: Tecnologias impactadas por Incidentes cuja Origem da Detecção NÃO foi Monitoração
     // (End-users / Experiências) — quanto mais Incidentes capturados pela Monitoração, melhor; esta
     // lista ajuda a identificar em quais Tecnologias a cobertura de monitoramento ainda está fraca.
-    // Item 6: a mesma lista pode ser vista agrupada por Tecnologia (padrão) ou por Jornada.
+    // Item 1 (rodada seguinte): a lista é sempre de Tecnologias Impactadas. Uma aba fixa "Por
+    // Tecnologia" mostra todas juntas; uma aba por Jornada (gerada a partir dos dados do período)
+    // filtra para as Tecnologias Impactadas só nos Incidentes daquela Jornada.
     let JORNADA_TECH_ORIGEM_VIEW = 'tech';
+
+    function getJornadaLabel(jornadaRaw) {
+        const keyMatch = Object.keys(JORNADA_MAP).find(k => k.toLowerCase() === jornadaRaw.toLowerCase());
+        return keyMatch ? JORNADA_MAP[keyMatch].label : jornadaRaw;
+    }
+
+    // Lista de Jornadas de um Incidente (coluna pode trazer mais de uma, separada por vírgula)
+    function getIncidentJornadas(inc) {
+        if (!inc.jornada || inc.jornada === 'N/A') return [];
+        return inc.jornada.split(',').map(s => s.trim()).filter(Boolean).map(getJornadaLabel);
+    }
 
     function renderJornadaTechOrigemAnalysis() {
         const container = document.getElementById('jornada-tech-origem-list');
-        if (!container) return;
+        const tabsEl = document.getElementById('jornada-tech-origem-tabs');
+        if (!container || !tabsEl) return;
         const incidents = ALL_DATA.rawIncidents || [];
         const relevant = incidents.filter(inc => inc.origem === 'End-users' || inc.origem === 'Experiências');
 
@@ -2838,41 +2852,53 @@
             summaryEl.textContent = `${relevant.length} de ${incidents.length} Incidentes (${pct}%) não foram detectados via Monitoração.`;
         }
 
-        const multiNoteEl = document.getElementById('jornada-tech-origem-multi-note');
-        if (multiNoteEl) multiNoteEl.classList.toggle('hidden', JORNADA_TECH_ORIGEM_VIEW !== 'jornada');
+        // Monta as abas: "Por Tecnologia" fixa + uma por Jornada presente nos Incidentes relevantes
+        const jornadasPresentes = new Set();
+        relevant.forEach(inc => getIncidentJornadas(inc).forEach(j => jornadasPresentes.add(j)));
+        const jornadaTabs = Array.from(jornadasPresentes).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+        if (JORNADA_TECH_ORIGEM_VIEW !== 'tech' && !jornadaTabs.includes(JORNADA_TECH_ORIGEM_VIEW)) {
+            JORNADA_TECH_ORIGEM_VIEW = 'tech';
+        }
+
+        const tabBtnClass = (active) => active
+            ? 'bg-white text-natura-green-cerrado shadow-sm border border-slate-200'
+            : 'text-slate-500 hover:text-natura-green-cerrado hover:bg-white';
+        tabsEl.innerHTML = [{ key: 'tech', label: 'Por Tecnologia' }].concat(jornadaTabs.map(j => ({ key: j, label: j })))
+            .map(tab => `<button type="button" data-view="${escapeXml(tab.key)}" class="jornada-tech-origem-tab-btn px-3 py-1 text-[10px] font-bold rounded-md transition-all ${tabBtnClass(tab.key === JORNADA_TECH_ORIGEM_VIEW)}">${escapeXml(tab.label)}</button>`)
+            .join('');
+
+        const titleEl = document.getElementById('jornada-tech-origem-list-title');
+        if (titleEl) titleEl.textContent = JORNADA_TECH_ORIGEM_VIEW === 'tech' ? 'Tecnologias Impactadas' : `Tecnologias Impactadas — ${JORNADA_TECH_ORIGEM_VIEW}`;
 
         if (!relevant.length) {
             container.innerHTML = `<p class="text-[11px] text-slate-300 italic py-2">Nenhum Incidente com detecção via End-User/Experiências no período filtrado.</p>`;
             return;
         }
 
-        const byKey = {};
-        const bump = (key, inc) => {
-            if (!byKey[key]) byKey[key] = { endUsers: 0, experiencias: 0, total: 0 };
-            byKey[key].total++;
-            if (inc.origem === 'End-users') byKey[key].endUsers++;
-            else byKey[key].experiencias++;
-        };
+        const scoped = JORNADA_TECH_ORIGEM_VIEW === 'tech'
+            ? relevant
+            : relevant.filter(inc => getIncidentJornadas(inc).includes(JORNADA_TECH_ORIGEM_VIEW));
 
-        relevant.forEach(inc => {
-            if (JORNADA_TECH_ORIGEM_VIEW === 'jornada') {
-                const jornadaStr = inc.jornada;
-                if (!jornadaStr || jornadaStr === 'N/A') { bump('N/A', inc); return; }
-                jornadaStr.split(',').map(s => s.trim()).filter(Boolean).forEach(j => {
-                    const keyMatch = Object.keys(JORNADA_MAP).find(k => k.toLowerCase() === j.toLowerCase());
-                    bump(keyMatch ? JORNADA_MAP[keyMatch].label : j, inc);
-                });
-            } else {
-                bump(inc.tech || 'N/A', inc);
-            }
+        if (!scoped.length) {
+            container.innerHTML = `<p class="text-[11px] text-slate-300 italic py-2">Nenhum Incidente com detecção via End-User/Experiências nessa Jornada, no período filtrado.</p>`;
+            return;
+        }
+
+        const byTech = {};
+        scoped.forEach(inc => {
+            const tech = inc.tech || 'N/A';
+            if (!byTech[tech]) byTech[tech] = { endUsers: 0, experiencias: 0, total: 0 };
+            byTech[tech].total++;
+            if (inc.origem === 'End-users') byTech[tech].endUsers++;
+            else byTech[tech].experiencias++;
         });
 
-        const list = Object.keys(byKey).map(key => Object.assign({ key }, byKey[key])).sort((a, b) => b.total - a.total);
+        const list = Object.keys(byTech).map(tech => Object.assign({ tech }, byTech[tech])).sort((a, b) => b.total - a.total);
         const maxTotal = Math.max.apply(null, list.map(i => i.total));
 
         container.innerHTML = list.map(item => `
             <div class="flex items-center gap-3 py-1.5">
-                <span class="text-[11px] font-medium text-slate-700 w-32 flex-none truncate" title="${item.key}">${item.key}</span>
+                <span class="text-[11px] font-medium text-slate-700 w-32 flex-none truncate" title="${item.tech}">${item.tech}</span>
                 <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div class="h-full bg-natura-orange" style="width: ${(item.total / maxTotal) * 100}%"></div>
                 </div>
@@ -2882,20 +2908,14 @@
     }
 
     function wireJornadaTechOrigemViewToggle() {
-        const container = document.getElementById('jornada-tech-origem-view-toggle');
+        const container = document.getElementById('jornada-tech-origem-tabs');
         if (!container || container.dataset.wired) return;
         container.dataset.wired = 'true';
-        container.querySelectorAll('.jornada-tech-origem-view-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                JORNADA_TECH_ORIGEM_VIEW = btn.dataset.view;
-                container.querySelectorAll('.jornada-tech-origem-view-btn').forEach(b => {
-                    b.classList.remove('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
-                    b.classList.add('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
-                });
-                btn.classList.remove('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
-                btn.classList.add('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
-                renderJornadaTechOrigemAnalysis();
-            });
+        container.addEventListener('click', (e) => {
+            const btn = e.target.closest('.jornada-tech-origem-tab-btn');
+            if (!btn) return;
+            JORNADA_TECH_ORIGEM_VIEW = btn.dataset.view;
+            renderJornadaTechOrigemAnalysis();
         });
     }
 
