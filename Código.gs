@@ -1057,6 +1057,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
            },
            gruposResponsaveis: { deploy: [], tradicional: [] },
            gruposResponsaveisPorTaxaFalha: { deploy: [], tradicional: [] },
+           gruposDeployPorTecnologia: [],
            sankeyMudanca: { deploy: [], tradicional: [] },
            mttdVsMttrDispersao: [],
            mttdTerminoVsMttrDispersao: [],
@@ -1729,6 +1730,45 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
     const gruposDeployList = gruposDeployRanking.porVolume;
     const gruposTradicionalList = gruposTradicionalRanking.porVolume;
 
+    // Item 5: "Taxa de Falha de Tecnologia" (só Deploys) — não é uma taxa de execução (Change_Exe não
+    // tem coluna de Tecnologia, só de Grupo), e sim: do total de Incidentes de Deploy que impactaram
+    // uma Tecnologia (somando todos os Grupos), que % esse Grupo especificamente causou. Uma linha por
+    // combinação Grupo x Tecnologia.
+    const buildTechFailureRanking = (gruposObj) => {
+        const techTotals = {};
+        Object.keys(gruposObj).forEach(key => {
+            const g = gruposObj[key];
+            Object.keys(g.tecnologias).forEach(tech => {
+                techTotals[tech] = (techTotals[tech] || 0) + g.tecnologias[tech];
+            });
+        });
+        const byGrupoTech = {};
+        Object.keys(gruposObj).forEach(key => {
+            const g = gruposObj[key];
+            if (!byGrupoTech[g.grupo]) byGrupoTech[g.grupo] = {};
+            Object.keys(g.tecnologias).forEach(tech => {
+                byGrupoTech[g.grupo][tech] = (byGrupoTech[g.grupo][tech] || 0) + g.tecnologias[tech];
+            });
+        });
+        const rows = [];
+        Object.keys(byGrupoTech).forEach(grupo => {
+            Object.keys(byGrupoTech[grupo]).forEach(tech => {
+                const count = byGrupoTech[grupo][tech];
+                const techTotal = techTotals[tech] || 0;
+                if (techTotal === 0) return;
+                rows.push({
+                    grupo: grupo,
+                    tecnologia: tech,
+                    count: count,
+                    techTotal: techTotal,
+                    taxaFalhaTecnologiaPct: Math.round((count / techTotal) * 10000) / 100
+                });
+            });
+        });
+        return rows.sort((a, b) => b.taxaFalhaTecnologiaPct - a.taxaFalhaTecnologiaPct || b.count - a.count);
+    };
+    const gruposDeployPorTecnologia = buildTechFailureRanking(metrics.gruposDeploy);
+
     // Diagrama de Sankey: Deploy e Tradicional são ambos 3 estágios (Grupo -> Service Offering/CHG
     // Service -> Tecnologia), agregando por par em cada estágio.
     // Item 1: os nós são prefixados por estágio (grp:/so:/tech:) antes de virar IDs do Sankey. Sem
@@ -1853,6 +1893,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             deploy: gruposDeployRanking.porTaxaFalha,
             tradicional: gruposTradicionalRanking.porTaxaFalha
         },
+        // Item 5: só Deploys — ranking Grupo x Tecnologia por % de participação nos Incidentes de cada Tecnologia
+        gruposDeployPorTecnologia: gruposDeployPorTecnologia,
         sankeyMudanca: {
             deploy: sankeyDeploy,
             tradicional: sankeyTradicional

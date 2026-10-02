@@ -1274,11 +1274,13 @@
                                 </svg>
                             </button>
                             <div id="grupos-deploy-panel" class="hidden mt-3">
-                                <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100 w-fit mb-2" id="grupos-deploy-ranking-toggle">
+                                <div class="flex items-center gap-2 flex-wrap bg-slate-50 p-1 rounded-lg border border-slate-100 w-fit mb-2" id="grupos-deploy-ranking-toggle">
                                     <button type="button" data-mode="volume" class="grupos-ranking-toggle-btn px-3 py-1 text-[10px] font-bold rounded-md transition-all bg-white text-natura-green-cerrado shadow-sm border border-slate-200">Por Volumetria</button>
-                                    <button type="button" data-mode="falha" class="grupos-ranking-toggle-btn px-3 py-1 text-[10px] font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white">Por Taxa de Falha</button>
+                                    <button type="button" data-mode="falha" class="grupos-ranking-toggle-btn px-3 py-1 text-[10px] font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white">Por Taxa de Falha de Service Offering</button>
+                                    <button type="button" data-mode="falhaTech" class="grupos-ranking-toggle-btn px-3 py-1 text-[10px] font-bold rounded-md transition-all text-slate-500 hover:text-natura-green-cerrado hover:bg-white">Por Taxa de Falha de Tecnologia</button>
                                 </div>
                                 <p id="grupos-deploy-falha-meta" class="hidden text-[9px] text-slate-400 italic mb-2">Meta: Taxa de Falha &le; 0,15%</p>
+                                <p id="grupos-deploy-falhatech-caption" class="hidden text-[9px] text-slate-400 italic mb-2">% que o Grupo representa do total de Incidentes de Deploy que impactaram aquela Tecnologia (somando todos os Grupos).</p>
                                 <div id="grupos-deploy-list" class="space-y-2"></div>
                             </div>
                         </div>
