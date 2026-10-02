@@ -1321,6 +1321,41 @@
                                     <div id="qm-processo-deploy" class="space-y-1.5"></div>
                                 </div>
                             </div>
+
+                            <!-- Item 8: Avaliação subjetiva dos donos de Produto de TD (dados estáticos) -->
+                            <div class="mt-6 pt-5 border-t border-slate-100">
+                                <div class="flex items-center gap-2 mb-3">
+                                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                        Avaliação subjetiva dos donos de Produto de TD</h4>
+                                    <span class="info-tooltip" tabindex="0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <span class="tooltip-bubble" style="width: 320px;">
+                                            <strong>Paridade:</strong> O ambiente de homologação/staging é fiel ao
+                                            ambiente de produção.<br><br>
+                                            <strong>Massa de Dados:</strong> É fácil e rápido conseguir/gerar massa
+                                            de dados válida.<br><br>
+                                            <strong>Estabilidade:</strong> Os ambientes de teste são estáveis e
+                                            estão sempre disponíveis.<br><br>
+                                            <strong>Isolamento:</strong> Conseguimos testar sem sermos bloqueados
+                                            por instabilidades de terceiros.<br><br>
+                                            <strong>Automação Funcional:</strong> Temos boa cobertura automatizada
+                                            (unitários, integração, E2E) antes da GMUD.<br><br>
+                                            <strong>Testes Técnicos:</strong> Realizamos testes não-funcionais
+                                            (carga, segurança) antes de ir para produção.<br><br>
+                                            <strong>Integridade de APIs:</strong> Testes garantem a integridade
+                                            técnica das APIs consumidas ou fornecidas.<br><br>
+                                            <strong>Confiança no Pipeline:</strong> Quando o CI/CD fica verde, tenho
+                                            confiança que a GMUD não causará incidente.
+                                        </span>
+                                    </span>
+                                </div>
+                                <div id="qm-deploy-avaliacao-subjetiva"
+                                    class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+                            </div>
                         </div>
 
                         <!-- Universo: Tradicional -->
@@ -2032,10 +2067,9 @@
                                         Separado por Universo: Geral, Deploy e Tradicional.</dd>
                                 </div>
                                 <div>
-                                    <dt class="font-bold text-slate-700">Ambiente Adequado / Estratégia de Testes /
-                                        Rollback / Testado em Não-Prod</dt>
-                                    <dd class="text-slate-500">Perguntas de governança específicas por Universo
-                                        (Deploy e/ou Tradicional), preenchidas manualmente na aba Manual_Info.</dd>
+                                    <dt class="font-bold text-slate-700">Rollback / Testado em Não-Prod</dt>
+                                    <dd class="text-slate-500">Perguntas de governança específicas do Universo
+                                        Tradicional, preenchidas manualmente na aba Manual_Info.</dd>
                                 </div>
                                 <div>
                                     <dt class="font-bold text-slate-700">Causa Raiz / Processo de Origem mais
