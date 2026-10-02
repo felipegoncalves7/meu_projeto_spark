@@ -839,7 +839,7 @@
         renderKpiCards(data.kpis);
         renderDivergenciasSevPrio(data.divergenciasSevPrio);
         renderIncidentesForaOLA(data.incidentesForaOLA);
-        renderGruposResponsaveis({ volume: data.gruposResponsaveis, falha: data.gruposResponsaveisPorTaxaFalha, falhaTech: { deploy: data.gruposDeployPorTecnologia || [] } });
+        renderGruposResponsaveis({ volume: data.gruposResponsaveis, falha: data.gruposResponsaveisPorTaxaFalha });
         renderSankeyMudanca(data.sankeyMudanca);
         renderOrigemCards(data.origemDeteccao, data.kpis.incidentesTotal);
         renderMttdVsMttrChart(data.mttdVsMttrDispersao);
@@ -1495,10 +1495,14 @@
     // informado diretamente pelos donos de produto (não vem da planilha/backend).
     const PRODUCT_SUBJECTIVE_CRITERIA = ['Paridade', 'Massa de Dados', 'Estabilidade', 'Isolamento', 'Automação Funcional', 'Testes Técnicos', 'Integridade de APIs', 'Confiança no Pipeline'];
     const PRODUCT_SUBJECTIVE_EVALUATIONS = [
-        { produto: 'LEGO GPP', ratings: { 'Paridade': 'Ruim', 'Massa de Dados': 'Péssima', 'Estabilidade': 'Regular', 'Isolamento': 'Ruim', 'Automação Funcional': 'Regular', 'Testes Técnicos': 'Ruim', 'Integridade de APIs': 'Regular', 'Confiança no Pipeline': 'Boa' } },
-        { produto: 'LEGO Gestão Comercial', ratings: { 'Paridade': 'Boa', 'Massa de Dados': 'Boa', 'Estabilidade': 'Boa', 'Isolamento': 'Regular', 'Automação Funcional': 'Boa', 'Testes Técnicos': 'Boa', 'Integridade de APIs': 'Regular', 'Confiança no Pipeline': 'Boa' } },
+        { produto: 'LEGO GSP', ratings: {} },
+        { produto: 'GPP', ratings: { 'Paridade': 'Ruim', 'Massa de Dados': 'Péssima', 'Estabilidade': 'Regular', 'Isolamento': 'Ruim', 'Automação Funcional': 'Regular', 'Testes Técnicos': 'Ruim', 'Integridade de APIs': 'Regular', 'Confiança no Pipeline': 'Boa' } },
         { produto: 'Mi Negocio', ratings: { 'Paridade': 'Ruim', 'Massa de Dados': 'Ruim', 'Estabilidade': 'Boa', 'Isolamento': 'Regular', 'Automação Funcional': 'Ruim', 'Testes Técnicos': 'Regular', 'Integridade de APIs': 'Regular', 'Confiança no Pipeline': 'Ruim' } },
-        { produto: 'APP Consultoria', ratings: { 'Paridade': 'Regular', 'Massa de Dados': 'Ruim', 'Estabilidade': 'Boa', 'Isolamento': 'Boa', 'Automação Funcional': 'Ruim', 'Testes Técnicos': 'Boa', 'Integridade de APIs': 'Ruim', 'Confiança no Pipeline': 'Ruim' } }
+        { produto: 'APP Consultoria', ratings: { 'Paridade': 'Regular', 'Massa de Dados': 'Ruim', 'Estabilidade': 'Boa', 'Isolamento': 'Boa', 'Automação Funcional': 'Ruim', 'Testes Técnicos': 'Boa', 'Integridade de APIs': 'Ruim', 'Confiança no Pipeline': 'Ruim' } },
+        { produto: 'E-commerce', ratings: {} },
+        { produto: 'LEGO Gestão Comercial', ratings: { 'Paridade': 'Boa', 'Massa de Dados': 'Boa', 'Estabilidade': 'Boa', 'Isolamento': 'Regular', 'Automação Funcional': 'Boa', 'Testes Técnicos': 'Boa', 'Integridade de APIs': 'Regular', 'Confiança no Pipeline': 'Boa' } },
+        { produto: 'CAPTA', ratings: {} },
+        { produto: 'WEB FV', ratings: {} }
     ];
     const PRODUCT_SUBJECTIVE_RATING_STYLE = {
         'Péssima': 'bg-natura-red-buriti/10 text-natura-red-buriti',
@@ -1510,23 +1514,29 @@
     function renderProductSubjectiveEvaluations() {
         const container = document.getElementById('qm-deploy-avaliacao-subjetiva');
         if (!container) return;
-        container.innerHTML = PRODUCT_SUBJECTIVE_EVALUATIONS.map(item => `
+        container.innerHTML = PRODUCT_SUBJECTIVE_EVALUATIONS.map(item => {
+            const emApuracao = !item.ratings || Object.keys(item.ratings).length === 0;
+            return `
             <div class="kpi-card rounded-xl p-4 border border-slate-200 bg-white">
-                <p class="text-xs font-bold text-slate-700 mb-3">${item.produto}</p>
+                <div class="flex items-center justify-between gap-2 mb-3">
+                    <p class="text-xs font-bold text-slate-700">${item.produto}</p>
+                    ${emApuracao ? `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-none bg-slate-100 text-slate-400 whitespace-nowrap">Em apuração</span>` : ''}
+                </div>
                 <div class="space-y-1.5">
                     ${PRODUCT_SUBJECTIVE_CRITERIA.map(criterio => {
-                        const rating = item.ratings[criterio] || 'N/A';
-                        const style = PRODUCT_SUBJECTIVE_RATING_STYLE[rating] || 'bg-slate-100 text-slate-500';
+                        const rating = item.ratings[criterio];
+                        const style = rating ? (PRODUCT_SUBJECTIVE_RATING_STYLE[rating] || 'bg-slate-100 text-slate-500') : 'bg-slate-50 text-slate-300';
                         return `
                             <div class="flex items-center justify-between gap-2">
                                 <span class="text-[10px] text-slate-500">${criterio}</span>
-                                <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-none whitespace-nowrap ${style}">${rating}</span>
+                                <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-none whitespace-nowrap ${style}">${rating || '—'}</span>
                             </div>
                         `;
                     }).join('')}
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
     }
 
     // Qualidade de RCA / Plano de Ação / Governança de Testes (Manual_Info): escopada ao Ano
@@ -1977,8 +1987,7 @@
 
     // Item 8: dois rankings por Universo (Volumetria x Taxa de Falha), alternados por um toggle;
     // guarda o último payload para re-renderizar ao trocar o modo sem precisar recarregar do servidor.
-    // Item 5: Deploys ganha um terceiro modo ('falhaTech'), só disponível nesse universo.
-    let LAST_GRUPOS_DATA = { volume: { deploy: [], tradicional: [] }, falha: { deploy: [], tradicional: [] }, falhaTech: { deploy: [] } };
+    let LAST_GRUPOS_DATA = { volume: { deploy: [], tradicional: [] }, falha: { deploy: [], tradicional: [] } };
     const GRUPOS_RANKING_MODE = { deploy: 'volume', tradicional: 'volume' };
 
     function renderGruposResponsaveis(grupos) {
@@ -1989,25 +1998,8 @@
         LAST_GRUPOS_DATA = grupos || LAST_GRUPOS_DATA;
         const volume = LAST_GRUPOS_DATA.volume || { deploy: [], tradicional: [] };
         const falha = LAST_GRUPOS_DATA.falha || { deploy: [], tradicional: [] };
-        const falhaTech = LAST_GRUPOS_DATA.falhaTech || { deploy: [] };
 
-        const buildRow = (item, idx, mode) => {
-            if (mode === 'falhaTech') {
-                return `
-                    <div class="flex items-start justify-between gap-2 py-2 px-3 border border-slate-100 rounded-lg bg-slate-50/50">
-                        <div class="flex items-start gap-2 min-w-0">
-                            <div class="flex-none w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 text-[10px] font-bold border border-slate-200 mt-0.5">${idx + 1}</div>
-                            <div class="min-w-0">
-                                <p class="font-bold text-slate-700 text-xs truncate" title="${item.grupo}">${item.grupo}</p>
-                                <p class="text-[9px] text-slate-400 truncate">Tecnologia: ${item.tecnologia}</p>
-                                <p class="text-[9px] text-slate-400 mt-0.5">${item.count} de ${item.techTotal} Incidente(s) nessa Tecnologia</p>
-                            </div>
-                        </div>
-                        <span class="flex-none font-black text-natura-orange text-sm">${item.taxaFalhaTecnologiaPct.toFixed(2)}%</span>
-                    </div>
-                `;
-            }
-            return `
+        const buildRow = (item, idx, mode) => `
             <div class="flex items-start justify-between gap-2 py-2 px-3 border border-slate-100 rounded-lg bg-slate-50/50">
                 <div class="flex items-start gap-2 min-w-0">
                     <div class="flex-none w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 text-[10px] font-bold border border-slate-200 mt-0.5">${idx + 1}</div>
@@ -2020,14 +2012,12 @@
                 <span class="flex-none font-black text-natura-orange text-sm">${mode === 'falha' ? item.taxaFalhaPct.toFixed(2) + '%' : item.count}</span>
             </div>
         `;
-        };
 
         const renderList = (el, universo, emptyMsg) => {
             const mode = GRUPOS_RANKING_MODE[universo];
-            const list = (mode === 'falhaTech' ? falhaTech[universo] : (mode === 'falha' ? falha[universo] : volume[universo])) || [];
+            const list = (mode === 'falha' ? falha[universo] : volume[universo]) || [];
             if (!list.length) {
-                const emptyFalhaMsg = mode === 'falhaTech' ? 'Nenhum dado de Taxa de Falha por Tecnologia disponível.' : 'Nenhum dado de Taxa de Falha disponível (verifique a aba Change_Exe).';
-                el.innerHTML = `<p class="text-xs text-slate-300 italic py-2">${mode !== 'volume' ? emptyFalhaMsg : emptyMsg}</p>`;
+                el.innerHTML = `<p class="text-xs text-slate-300 italic py-2">${mode === 'falha' ? 'Nenhum dado de Taxa de Falha disponível (verifique a aba Change_Exe).' : emptyMsg}</p>`;
                 return;
             }
             el.innerHTML = list.slice(0, 10).map((item, idx) => buildRow(item, idx, mode)).join('');
@@ -2259,6 +2249,7 @@
         };
         wireLabeledToggle('btn-toggle-governanca', 'governanca-sevprio-panel', 'btn-toggle-governanca-label', 'btn-toggle-governanca-icon', 'Ver Governança de Classificação', 'Ocultar Governança de Classificação');
         wireLabeledToggle('btn-toggle-jornada-tech-origem', 'jornada-tech-origem-panel', 'btn-toggle-jornada-tech-origem-label', 'btn-toggle-jornada-tech-origem-icon', 'Ver Tecnologias com Detecção via End-User/Experiências', 'Ocultar Tecnologias com Detecção via End-User/Experiências');
+        wireJornadaTechOrigemViewToggle();
 
         const wireRankingModeToggle = (toggleId, universo) => {
             const container = document.getElementById(toggleId);
@@ -2275,9 +2266,6 @@
                     // Item 10: mostra a meta de Taxa de Falha só quando esse modo está ativo
                     const metaEl = document.getElementById(`grupos-${universo}-falha-meta`);
                     if (metaEl) metaEl.classList.toggle('hidden', btn.dataset.mode !== 'falha');
-                    // Item 5: legenda da Taxa de Falha por Tecnologia (só existe no painel de Deploys)
-                    const falhaTechCaptionEl = document.getElementById(`grupos-${universo}-falhatech-caption`);
-                    if (falhaTechCaptionEl) falhaTechCaptionEl.classList.toggle('hidden', btn.dataset.mode !== 'falhaTech');
                     renderGruposResponsaveis(LAST_GRUPOS_DATA);
                 });
             });
@@ -2835,6 +2823,9 @@
     // Item 8: Tecnologias impactadas por Incidentes cuja Origem da Detecção NÃO foi Monitoração
     // (End-users / Experiências) — quanto mais Incidentes capturados pela Monitoração, melhor; esta
     // lista ajuda a identificar em quais Tecnologias a cobertura de monitoramento ainda está fraca.
+    // Item 6: a mesma lista pode ser vista agrupada por Tecnologia (padrão) ou por Jornada.
+    let JORNADA_TECH_ORIGEM_VIEW = 'tech';
+
     function renderJornadaTechOrigemAnalysis() {
         const container = document.getElementById('jornada-tech-origem-list');
         if (!container) return;
@@ -2847,32 +2838,65 @@
             summaryEl.textContent = `${relevant.length} de ${incidents.length} Incidentes (${pct}%) não foram detectados via Monitoração.`;
         }
 
+        const multiNoteEl = document.getElementById('jornada-tech-origem-multi-note');
+        if (multiNoteEl) multiNoteEl.classList.toggle('hidden', JORNADA_TECH_ORIGEM_VIEW !== 'jornada');
+
         if (!relevant.length) {
             container.innerHTML = `<p class="text-[11px] text-slate-300 italic py-2">Nenhum Incidente com detecção via End-User/Experiências no período filtrado.</p>`;
             return;
         }
 
-        const byTech = {};
+        const byKey = {};
+        const bump = (key, inc) => {
+            if (!byKey[key]) byKey[key] = { endUsers: 0, experiencias: 0, total: 0 };
+            byKey[key].total++;
+            if (inc.origem === 'End-users') byKey[key].endUsers++;
+            else byKey[key].experiencias++;
+        };
+
         relevant.forEach(inc => {
-            const tech = inc.tech || 'N/A';
-            if (!byTech[tech]) byTech[tech] = { endUsers: 0, experiencias: 0, total: 0 };
-            byTech[tech].total++;
-            if (inc.origem === 'End-users') byTech[tech].endUsers++;
-            else byTech[tech].experiencias++;
+            if (JORNADA_TECH_ORIGEM_VIEW === 'jornada') {
+                const jornadaStr = inc.jornada;
+                if (!jornadaStr || jornadaStr === 'N/A') { bump('N/A', inc); return; }
+                jornadaStr.split(',').map(s => s.trim()).filter(Boolean).forEach(j => {
+                    const keyMatch = Object.keys(JORNADA_MAP).find(k => k.toLowerCase() === j.toLowerCase());
+                    bump(keyMatch ? JORNADA_MAP[keyMatch].label : j, inc);
+                });
+            } else {
+                bump(inc.tech || 'N/A', inc);
+            }
         });
 
-        const list = Object.keys(byTech).map(tech => Object.assign({ tech }, byTech[tech])).sort((a, b) => b.total - a.total);
+        const list = Object.keys(byKey).map(key => Object.assign({ key }, byKey[key])).sort((a, b) => b.total - a.total);
         const maxTotal = Math.max.apply(null, list.map(i => i.total));
 
         container.innerHTML = list.map(item => `
             <div class="flex items-center gap-3 py-1.5">
-                <span class="text-[11px] font-medium text-slate-700 w-32 flex-none truncate" title="${item.tech}">${item.tech}</span>
+                <span class="text-[11px] font-medium text-slate-700 w-32 flex-none truncate" title="${item.key}">${item.key}</span>
                 <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div class="h-full bg-natura-orange" style="width: ${(item.total / maxTotal) * 100}%"></div>
                 </div>
                 <span class="text-[11px] font-bold text-slate-600 flex-none text-right whitespace-nowrap">${item.total} <span class="text-slate-400 font-normal">(${item.endUsers} End-User, ${item.experiencias} Exper.)</span></span>
             </div>
         `).join('');
+    }
+
+    function wireJornadaTechOrigemViewToggle() {
+        const container = document.getElementById('jornada-tech-origem-view-toggle');
+        if (!container || container.dataset.wired) return;
+        container.dataset.wired = 'true';
+        container.querySelectorAll('.jornada-tech-origem-view-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                JORNADA_TECH_ORIGEM_VIEW = btn.dataset.view;
+                container.querySelectorAll('.jornada-tech-origem-view-btn').forEach(b => {
+                    b.classList.remove('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
+                    b.classList.add('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
+                });
+                btn.classList.remove('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
+                btn.classList.add('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
+                renderJornadaTechOrigemAnalysis();
+            });
+        });
     }
 
     // Cards de Incidentes por País Impactado, com bandeiras
@@ -3273,7 +3297,8 @@
     // (já carregado para o período/filtro atual), sem round-trip ao servidor
     function getMttrOutlierIncidents() {
         const incidents = ALL_DATA.rawIncidents || [];
-        return incidents.filter(inc => parseHHMMToMinutes(inc.ttr) > 1080);
+        return incidents.filter(inc => parseHHMMToMinutes(inc.ttr) > 1080)
+            .sort((a, b) => b.dataAberturaTimestamp - a.dataAberturaTimestamp);
     }
 
     function updateMttrOutliersButton() {
@@ -3298,9 +3323,9 @@
                     { key: 'id', label: 'Incidente' },
                     { key: 'severidade', label: 'Severidade' },
                     { key: 'ttr', label: 'TTR' },
+                    { key: 'dataDefinicao', label: 'Data de Abertura' },
                     { key: 'tech', label: 'Tecnologia' },
-                    { key: 'origem', label: 'Origem da Detecção' },
-                    { key: 'jornada', label: 'Jornada' }
+                    { key: 'origem', label: 'Origem da Detecção' }
                 ]
             });
         });
