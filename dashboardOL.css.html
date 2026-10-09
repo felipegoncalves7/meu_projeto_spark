@@ -397,6 +397,36 @@ td.c-ytd { border-left: var(--border-hairline); background: #FCFBF8; }
 .cell.is-adj .cv { font-style: italic; }
 .cell.is-adj .cv::after { content: '*'; color: var(--brand-rosa-noite); margin-left: 1px; }
 
+/* ---------- OLA de resolução (oculto), cards do Resumo, conciliação ---------- */
+.ola-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 1px solid var(--product-accent-interactive); border-radius: var(--radius-sm); background: var(--product-surface-default); color: var(--brand-verde-noite); font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.ola-btn:hover { background: var(--brand-laranja-bruma); }
+.ola-btn .ico { width: 15px; height: 15px; }
+.ola-btn.sm { height: 24px; padding: 0 9px; font-size: 11px; }
+.ola-btn.ghost { border-color: var(--product-border); color: var(--product-text-secondary); }
+.ola-btn.ghost:hover { background: var(--component-row-hover-bg); color: var(--product-text-primary); }
+.kpi-ola-hidden { background: #FBFBF9; border-style: dashed; align-items: flex-start; }
+.ola-mask { font-family: var(--font-display); font-size: 38px; font-weight: 300; line-height: 1.05; letter-spacing: .04em; color: rgba(51, 61, 32, .22); user-select: none; }
+.ola-mask.sm { font-size: 26px; }
+.ola-hint { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--product-text-secondary); }
+.ola-hint .ico { width: 15px; height: 15px; }
+.ft-inc { margin-top: 2px; padding-top: 10px; border-top: var(--border-hairline); display: flex; flex-direction: column; gap: 4px; }
+.ft-inc-main { display: flex; align-items: baseline; gap: 6px; }
+.ft-inc-main .n { font-size: 26px; font-weight: 700; line-height: 1; }
+.ft-inc-main .u { font-size: 14px; font-weight: 600; color: var(--product-text-secondary); }
+.ft-inc-cmp { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.ft-inc-cmp .delta { font-size: 14px; }
+.ft-inc-cmp .vs { font-size: 13px; font-weight: 500; color: var(--product-text-secondary); }
+.reconcile { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; padding: 8px 12px; background: var(--product-surface-subtle); border-radius: var(--radius-sm); }
+.reconcile .ico { width: 15px; height: 15px; margin-top: 1px; }
+.modal-cmp { margin-top: 8px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 12.5px; }
+.ec-more { display: flex; align-items: center; justify-content: flex-end; gap: 2px; font-size: 11px; font-weight: 700; color: var(--product-text-secondary); margin-top: auto; }
+.ec-more .ico { width: 13px; height: 13px; }
+.ent-card:hover .ec-more { color: var(--product-text-primary); }
+.tag.is-win { background: var(--brand-azul-bruma); border-color: var(--brand-azul-tarde); color: var(--brand-azul-tarde); margin-left: 6px; }
+.chart-box.tall { height: 360px; }
+.mini-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 640px) { .mini-kpis { grid-template-columns: minmax(0, 1fr); } .mini-kpi + .mini-kpi, .mini-kpi:nth-child(4), .mini-kpi:nth-child(odd) { border-left: 0; border-top: var(--border-hairline); padding-top: 10px; } }
+
 /* ---------- avisos ---------- */
 .notice { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-left: 3px solid var(--product-accent-interactive); background: var(--brand-laranja-bruma); font-size: 12px; margin-bottom: 14px; }
 .notice .ico { width: 18px; height: 18px; color: var(--brand-laranja-dia); }

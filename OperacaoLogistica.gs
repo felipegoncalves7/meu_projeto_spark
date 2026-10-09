@@ -78,7 +78,7 @@ const OL_CATALOGO = {
     { name: 'CD Simões Filho', country: 'br', kind: 'cd' },
     { name: 'CD Uberlândia', country: 'br', kind: 'cd' },
     { name: 'HUB Cabreúva', country: 'br', kind: 'hub' },
-    { name: 'HUB Itupeva', country: 'br', kind: 'hub' },
+    { name: 'HUB Itupeva', country: 'br', kind: 'hub', aliases: ['cd itupeva'], prevAliases: ['cd itupeva'] },
     { name: 'PEA Cachoeirinha', country: 'br', kind: 'pea' },
     { name: 'PEA Manaus', country: 'br', kind: 'pea' },
     { name: 'CD Pudahuel', country: 'cl', kind: 'cd' },
@@ -101,8 +101,8 @@ const OL_CATALOGO = {
     { name: 'URA', kind: 'sistema', keywords: ['ura'] }
   ],
   planejamento: [
-    { name: 'SAP APO', kind: 'sistema', keywords: ['sap apo', 'apo'], years: [2025] },
-    { name: 'O9', kind: 'sistema', keywords: ['o9'], years: [2026] }
+    { name: 'SAP APO', kind: 'sistema', keywords: ['sap apo', 'apo'], years: [2025], successor: 'O9' },
+    { name: 'O9', kind: 'sistema', keywords: ['o9'], years: [2026], predecessor: 'SAP APO' }
   ]
 };
 
@@ -122,9 +122,15 @@ const OL_MERCADOS = {
   pa: ['pa', 'Panamá'], panama: ['pa', 'Panamá'],
   sv: ['sv', 'El Salvador'], 'el salvador': ['sv', 'El Salvador'],
   cr: ['cr', 'Costa Rica'], 'costa rica': ['cr', 'Costa Rica'],
+  card: ['card', 'CARD'],
   uy: ['uy', 'Uruguai'], uruguai: ['uy', 'Uruguai'], uruguay: ['uy', 'Uruguai'],
   my: ['my', 'Malásia'], malasia: ['my', 'Malásia']
 };
+
+// Países CARD (América Central e República Dominicana): ficam fora por padrão (filtro "CARD" na tela).
+const OL_CARD_ISO = ['gt', 'sv', 'hn', 'ni', 'pa', 'cr', 'do', 'card'];
+// Países em que o fluxo de Separação tem CDs nomeados no catálogo; nos demais, a linha sem Localidade vira card do país.
+const OL_SEP_COUNTRIES_WITH_CD = ['br', 'cl', 'co', 'ec', 'mx', 'pe'];
 
 const OL_MONTHS_PT = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 
@@ -193,7 +199,27 @@ function olClassifyFlow(impactoFold, streamKey) {
   return streamKey === 'planejamentologistico' ? 'planejamento' : 'outros';
 }
 
-/** Identifica a Localidade/Sistema (entidade do card) de uma linha de impacto dentro do seu fluxo. */
+/** Procura a Localidade (já sem acento/caixa) no catálogo de um fluxo. */
+function olMatchCatalog(flowKey, loc) {
+  const catalog = OL_CATALOGO[flowKey] || [];
+  // Fábricas não são CD/HUB/PEA e vice-versa: cada fluxo só aceita o seu tipo de Localidade.
+  if (flowKey === 'manufatura' && /^(cd|hub|pea)\b/.test(loc)) return null;
+  const names = catalog.map(c => ({ c: c, n: olFold(c.name), a: (c.aliases || []).map(olFold) }));
+  let hit = names.find(x => x.n === loc || x.a.indexOf(loc) !== -1);
+  if (!hit) hit = names.find(x => loc.indexOf(x.n) !== -1 || x.a.some(a => loc.indexOf(a) !== -1));
+  if (!hit) {
+    const partial = names.filter(x => x.n.indexOf(loc) !== -1);
+    if (partial.length === 1) hit = partial[0];
+  }
+  return hit || null;
+}
+
+/**
+ * Identifica a Localidade/Sistema (entidade do card) de uma linha de impacto dentro do seu fluxo.
+ * Fluxos de Localidade (Separação e Manufatura) são ESTRITOS: só vale Localidade do catálogo do fluxo.
+ * Linhas com Localidade de outro fluxo (ex.: fábrica dentro do fluxo de Separação), Localidade fora do
+ * catálogo ou sem Localidade (exceto países sem CD nomeado) ficam com unm = motivo e não entram no fluxo.
+ */
 function olResolveEntity(flowKey, localidadeRaw, impactoFold, mercado) {
   const catalog = OL_CATALOGO[flowKey] || [];
   if (flowKey === 'atendimento' || flowKey === 'planejamento') {
@@ -203,28 +229,18 @@ function olResolveEntity(flowKey, localidadeRaw, impactoFold, mercado) {
   }
 
   const loc = olFold(localidadeRaw);
+  const unmapped = reason => ({ key: 'unm', name: loc ? String(localidadeRaw).trim() : (mercado.name || 'sem Localidade'), kind: 'cd', country: mercado.iso, unm: reason });
   if (loc) {
-    const names = catalog.map(c => ({ c: c, n: olFold(c.name), a: (c.aliases || []).map(olFold) }));
-    let hit = names.find(x => x.n === loc || x.a.indexOf(loc) !== -1);
-    if (!hit) hit = names.find(x => loc.indexOf(x.n) !== -1 || x.a.some(a => loc.indexOf(a) !== -1));
-    if (!hit) {
-      const partial = names.filter(x => x.n.indexOf(loc) !== -1);
-      if (partial.length === 1) hit = partial[0];
-    }
-    if (hit) return { key: 'loc:' + hit.n, name: hit.c.name, kind: hit.c.kind, country: hit.c.country || mercado.iso };
-    const kind = /^cd\b/.test(loc) ? 'cd' : /^hub\b/.test(loc) ? 'hub' : /^pea\b/.test(loc) ? 'pea'
-      : (/planta|fabrica/.test(loc) ? 'planta' : (flowKey === 'manufatura' ? 'planta' : 'cd'));
-    return { key: 'loc:' + loc, name: String(localidadeRaw).trim(), kind: kind, country: mercado.iso };
+    const hit = olMatchCatalog(flowKey, loc);
+    if (hit) return { key: 'loc:' + olFold(hit.c.name), name: hit.c.name, kind: hit.c.kind, country: hit.c.country || mercado.iso };
+    const other = flowKey === 'separacao' ? 'manufatura' : 'separacao';
+    return unmapped(olMatchCatalog(other, loc) ? 'outro-fluxo' : 'fora-catalogo');
   }
-  // Sem Localidade informada (ex.: América Central e Uruguai, onde não há o nome exato do CD): agrupa por Mercado
-  const iso = mercado.iso || 'nd';
-  return {
-    key: 'mkt:' + iso,
-    name: mercado.name ? 'Operação ' + mercado.name : 'Localidade não informada',
-    kind: flowKey === 'manufatura' ? 'planta' : 'cd',
-    country: mercado.iso,
-    unnamed: true
-  };
+  // Sem Localidade: só vira card quando o país não tem CD nomeado (ex.: Uruguai e, se incluídos, os países CARD)
+  if (flowKey === 'separacao' && mercado.iso && OL_SEP_COUNTRIES_WITH_CD.indexOf(mercado.iso) === -1) {
+    return { key: 'mkt:' + mercado.iso, name: 'Operação ' + mercado.name, kind: 'cd', country: mercado.iso, unnamed: true };
+  }
+  return unmapped('sem-localidade');
 }
 
 /**
@@ -319,6 +335,7 @@ function olReadImpactos(ss, year, callerMap) {
   const rows = [];
   const incidents = {};
   const unmatched = {};
+  const anySim = {};   // incidente -> alguma linha com Tecnologia = Sim na própria aba de Impactos
   const txt = (v, max) => {
     const s = String(v === null || v === undefined ? '' : v).trim();
     return max && s.length > max ? s.slice(0, max) + '…' : s;
@@ -346,7 +363,7 @@ function olReadImpactos(ss, year, callerMap) {
     if (dur === null && abertura && encerramento && encerramento > abertura) dur = Math.round((encerramento - abertura) / 60000);
     const mi = miMap[inc];
     const tecRaw = olFold(r[OL_COL_TECNOLOGIA]);
-    const tec = tecRaw ? tecRaw === 'sim' : (mi ? mi.tec : false);
+    if (tecRaw === 'sim') anySim[inc] = true;
     const sev = olParseSeveridade(r[OL_COL_SEVERIDADE]);
 
     rows.push({
@@ -366,8 +383,9 @@ function olReadImpactos(ss, year, callerMap) {
       dur: dur,
       durCd: olParseDuration(durDisplay[i][1]),
       durMi: olParseDuration(durDisplay[i][2]),
-      tec: tec,
+      tec: false,
       tecTxt: txt(r[OL_COL_TECNOLOGIA]),
+      card: OL_CARD_ISO.indexOf(mercado.iso) !== -1,
       tit: txt(r[OL_COL_TITULO], 200),
       dImp: txt(r[OL_COL_DESC_IMPACTO], 600),
       dOf: txt(r[OL_COL_DESC_OFENSOR], 600),
@@ -380,7 +398,8 @@ function olReadImpactos(ss, year, callerMap) {
       entName: ent.name,
       entKind: ent.kind,
       entCc: ent.country || '',
-      entUnnamed: !!ent.unnamed
+      entUnnamed: !!ent.unnamed,
+      unm: ent.unm || ''
     });
 
     if (!incidents[inc]) {
@@ -394,8 +413,23 @@ function olReadImpactos(ss, year, callerMap) {
     }
   }
 
+  // Origem Tecnologia no nível do INCIDENTE: mesma fonte da Visão Geral (MajorIncidentes, "Tecnologia = SIM");
+  // se o incidente não existir lá, vale a coluna Tecnologia da própria aba de Impactos.
+  const stats = { incidents: 0, tecMI: 0, tecImpactos: 0, divergent: 0, notInMI: 0 };
+  Object.keys(incidents).forEach(inc => {
+    const mi = miMap[inc], byP = !!anySim[inc];
+    const tec = mi ? mi.tec : byP;
+    incidents[inc].tec = tec;
+    stats.incidents++;
+    if (tec) stats.tecMI++;
+    if (byP) stats.tecImpactos++;
+    if (!mi) stats.notInMI++; else if (mi.tec !== byP) stats.divergent++;
+  });
+  rows.forEach(r => { r.tec = !!incidents[r.inc].tec; });
+
   return {
     found: true,
+    stats: stats,
     rows: rows,
     incidents: incidents,
     unmatchedImpacts: Object.keys(unmatched).map(k => ({ impacto: k, linhas: unmatched[k] })).sort((a, b) => b.linhas - a.linhas)
@@ -624,6 +658,7 @@ function getOperacaoLogisticaData(year) {
         rows: imp.rows,
         incidents: imp.incidents,
         unmatchedImpacts: imp.unmatchedImpacts,
+        incStats: imp.stats || null,
         disponibilidade: olReadDisponibilidade(ss, y),
         apuracao: olReadApuracao(ss, y)
       };
