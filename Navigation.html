@@ -1,0 +1,50 @@
+<script>
+/* Navegação entre as Visões (Portal, Geral, O&L) sem sair do quadro: funciona no Google Sites e na URL direta do Web App.
+   Links com data-nav="portal|geral|ol" trocam o documento do próprio quadro; se algo falhar, abre a URL do Web App. */
+(function () {
+  // Sem trava global: document.open() descarta os listeners, então cada Visão registra os seus.
+  function overlay(on, msg) {
+    var el = document.getElementById('nav-overlay');
+    if (!on) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'nav-overlay';
+      el.setAttribute('role', 'status');
+      el.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:rgba(246,247,245,.88);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;font:600 13px system-ui,-apple-system,Segoe UI,sans-serif;color:#333D20';
+      el.innerHTML = '<div style="width:34px;height:34px;border-radius:50%;border:3px solid rgba(51,61,32,.14);border-top-color:#FF6D00;animation:navspin 1s linear infinite"></div><div id="nav-overlay-msg"></div><style>@keyframes navspin{to{transform:rotate(360deg)}}</style>';
+      document.body.appendChild(el);
+    }
+    document.getElementById('nav-overlay-msg').textContent = msg || 'Carregando…';
+  }
+
+  function fallback(view) {
+    var base = (document.body && document.body.getAttribute('data-base-url')) || '';
+    var url = base ? base + (view && view !== 'portal' ? '?view=' + view : '') : '';
+    overlay(false);
+    if (url) { try { window.open(url, '_blank'); } catch (e) { /* ignora */ } }
+  }
+
+  window.olNavigate = function (view) {
+    if (!(window.google && google.script && google.script.run)) { fallback(view); return; }
+    overlay(true, 'Carregando a visão…');
+    google.script.run
+      .withSuccessHandler(function (html) {
+        if (!html) { fallback(view); return; }
+        document.open();
+        document.write(html);
+        document.close();
+        try { window.scrollTo(0, 0); } catch (e) { /* ignora */ }
+      })
+      .withFailureHandler(function () { fallback(view); })
+      .getViewHtml(view);
+  };
+
+  document.addEventListener('click', function (ev) {
+    var a = ev.target && ev.target.closest ? ev.target.closest('[data-nav]') : null;
+    if (!a || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button) return;
+    if (!(window.google && google.script && google.script.run)) return;
+    ev.preventDefault();
+    window.olNavigate(a.getAttribute('data-nav'));
+  });
+})();
+</script>

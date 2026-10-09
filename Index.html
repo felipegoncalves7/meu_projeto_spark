@@ -66,7 +66,7 @@
                     </div>
                     <!-- Seletor de Ano + retorno ao Portal de Visões -->
                     <div class="flex-none flex items-center gap-2">
-                    <a id="link-portal" href="#" target="_top" title="Voltar ao Portal de Indicadores ITSM"
+                    <a id="link-portal" data-nav="portal" href="#" target="_blank" rel="noopener" title="Voltar ao Portal de Indicadores ITSM"
                         class="hidden sm:inline-flex items-center gap-1 text-xs font-bold text-white/80 hover:text-white border border-white/25 hover:bg-white/10 rounded px-3 py-1.5 mr-2 transition-colors">&larr; Portal</a>
                     <label for="year-select"
                         class="hidden md:block text-[11px] font-bold text-natura-gray-medium uppercase tracking-wide">Ano:</label>
@@ -91,6 +91,7 @@
             </div>
         </div>
     </header>
+    <?!= include('Navigation'); ?>
     <script>
         (function () {
             var a = document.getElementById('link-portal');

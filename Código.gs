@@ -639,18 +639,34 @@ const VIEW_ROUTES = {
   ol: { file: 'IndexOL', title: 'Visão O&L — Operação & Logística' }
 };
 
-function doGet(e) {
-  const view = String((e && e.parameter && e.parameter.view) || '').toLowerCase().trim();
-  const route = VIEW_ROUTES[view] || { file: 'Portal', title: 'Indicadores ITSM — Portal' };
+function olRouteFor(view) {
+  const key = String(view || '').toLowerCase().trim();
+  return VIEW_ROUTES[key] || { file: 'Portal', title: 'Indicadores ITSM — Portal' };
+}
+
+function olEvaluateView(view) {
+  const route = olRouteFor(view);
   const template = HtmlService.createTemplateFromFile(route.file);
   let baseUrl = '';
   try { baseUrl = ScriptApp.getService().getUrl() || ''; } catch (err) { baseUrl = ''; }
   template.baseUrl = baseUrl;
-  return template
-      .evaluate()
+  return { route: route, output: template.evaluate() };
+}
+
+function doGet(e) {
+  const r = olEvaluateView(e && e.parameter && e.parameter.view);
+  return r.output
       .setSandboxMode(HtmlService.SandboxMode.IFRAME)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-      .setTitle(route.title);
+      .setTitle(r.route.title);
+}
+
+/**
+ * Troca de Visão dentro do próprio quadro (necessário quando o Web App está incorporado no Google Sites,
+ * onde navegar a página-mãe com target="_top" é bloqueado). Devolve o HTML completo da Visão ('portal', 'geral' ou 'ol').
+ */
+function getViewHtml(view) {
+  return olEvaluateView(view).output.getContent();
 }
 
 function include(filename) {

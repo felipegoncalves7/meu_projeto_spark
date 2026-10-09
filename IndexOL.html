@@ -46,7 +46,7 @@
           <button type="button" data-v="sem" data-tip="Simula o resultado sem os Outliers de Disponibilidade: incidentes com 1.000 minutos ou mais de indisponibilidade apurada (ver seção Impacto isolado &amp; Outliers).">Desconsiderar</button>
         </div>
       </div>
-      <a id="ol-portal-link" class="btn btn-ghost-dark" href="#" target="_top" title="Voltar ao Portal de Indicadores ITSM">&larr; Portal</a>
+      <a id="ol-portal-link" class="btn btn-ghost-dark" data-nav="portal" href="#" target="_blank" rel="noopener" title="Voltar ao Portal de Indicadores ITSM">&larr; Portal</a>
     </div>
   </div>
 
@@ -79,6 +79,7 @@
 <div id="ol-tooltip" class="tooltip" role="tooltip" hidden></div>
 <div id="ol-modal-root"></div>
 
+<?!= include('Navigation'); ?>
 <?!= include('dashboardOL.js'); ?>
 </body>
 </html>
