@@ -1614,7 +1614,7 @@
     var segEl = t.closest('.seg');
     if (segEl && t.tagName === 'BUTTON' && !t.hasAttribute('data-action')) { onSeg(segEl, t.getAttribute('data-v')); return; }
     var a = t.getAttribute('data-action');
-    if (a === 'goto') { var el = $(t.getAttribute('data-target')); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    if (a === 'goto') { var el = $(t.getAttribute('data-target')); if (el) { if (window.olScrollTo) window.olScrollTo(el); else el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }
     else if (a === 'open-all') openIncidentsModal(modalOpts('Todos os fluxos de O&L', 'Incidentes de O&L', 'truck', M.rowsCur, M.rowsPrev));
     else if (a === 'open-flow') {
       var f = M.flows.find(function (x) { return x.cfg.key === t.getAttribute('data-flow'); });
@@ -1764,7 +1764,7 @@
     if (window.Chart) { Chart.defaults.font.family = "'Aptos', 'Segoe UI', system-ui, sans-serif"; Chart.defaults.color = '#333D20'; }
     Array.prototype.forEach.call(document.querySelectorAll('#ol-nav a'), function (a) {
       a.insertAdjacentHTML('afterbegin', icon(a.getAttribute('data-icon')));
-      a.addEventListener('click', function (ev) { ev.preventDefault(); var s = $(a.getAttribute('data-sec')); if (s) s.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+      a.addEventListener('click', function (ev) { ev.preventDefault(); var s = $(a.getAttribute('data-sec')); if (s) { if (window.olScrollTo) window.olScrollTo(s); else s.scrollIntoView({ behavior: 'smooth', block: 'start' }); } });
     });
     var portal = $('ol-portal-link');
     if (portal) portal.href = BASE_URL || '#';

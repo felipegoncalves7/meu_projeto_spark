@@ -39,6 +39,30 @@
       .getViewHtml(view);
   };
 
+  // Rolagem dentro do quadro. Se o documento do quadro rola, usa window.scrollTo (não mexe na página-mãe do Google Sites,
+  // onde element.scrollIntoView() empurra o quadro para fora da tela). Se o quadro tem a altura do conteúdo (sem rolagem própria),
+  // usa scrollIntoView para a página que o contém rolar até a seção.
+  window.olScrollTo = function (el) {
+    if (!el) return;
+    var de = document.documentElement;
+    var scrollable = (de.scrollHeight - window.innerHeight) > 4;
+    if (!scrollable) { try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { el.scrollIntoView(); } return; }
+    var head = document.querySelector('.ol-head') || document.getElementById('app-header');
+    var off = head ? head.getBoundingClientRect().height + 8 : 0;
+    var top = el.getBoundingClientRect().top + (window.pageYOffset || de.scrollTop || 0) - off;
+    try { window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' }); } catch (e) { window.scrollTo(0, Math.max(0, top)); }
+  };
+
+  // O Apps Script injeta <base target="_top">: qualquer link "#..." navegaria a página-mãe. Aqui viram rolagem interna.
+  document.addEventListener('click', function (ev) {
+    var l = ev.target && ev.target.closest ? ev.target.closest('a[href^="#"]') : null;
+    if (!l || l.hasAttribute('data-nav') || ev.defaultPrevented) return;
+    ev.preventDefault();
+    var id = (l.getAttribute('href') || '').slice(1);
+    var t = id ? document.getElementById(id) : null;
+    if (t) window.olScrollTo(t); else if (!id) window.scrollTo(0, 0);
+  });
+
   document.addEventListener('click', function (ev) {
     var a = ev.target && ev.target.closest ? ev.target.closest('[data-nav]') : null;
     if (!a || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button) return;

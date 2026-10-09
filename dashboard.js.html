@@ -203,7 +203,7 @@
             link.addEventListener('click', (e) => {
                 e.preventDefault();
                 const target = document.getElementById(link.dataset.section);
-                if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                if (target) { if (window.olScrollTo) window.olScrollTo(target); else target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
             });
         });
 
@@ -3284,7 +3284,7 @@
             }
         });
 
-        container.scrollIntoView({ behavior: 'smooth' });
+        if (window.olScrollTo) window.olScrollTo(container); else container.scrollIntoView({ behavior: 'smooth' });
     }
 
     function setupEvolutionToggle() {
