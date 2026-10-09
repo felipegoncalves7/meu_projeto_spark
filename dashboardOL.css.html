@@ -427,6 +427,14 @@ td.c-ytd { border-left: var(--border-hairline); background: #FCFBF8; }
 .mini-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 640px) { .mini-kpis { grid-template-columns: minmax(0, 1fr); } .mini-kpi + .mini-kpi, .mini-kpi:nth-child(4), .mini-kpi:nth-child(odd) { border-left: 0; border-top: var(--border-hairline); padding-top: 10px; } }
 
+.check-text { width: 100%; min-height: 150px; resize: vertical; padding: 10px 12px; border: var(--border-hairline); border-radius: var(--radius-sm); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: var(--product-text-primary); background: #FBFCFA; }
+.check-sum { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; border: var(--border-hairline); margin-top: 14px; }
+.check-sum > div { padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.check-sum > div + div { border-left: var(--border-hairline); }
+.check-sum .n { font-family: var(--font-display); font-size: 28px; font-weight: 300; line-height: 1.1; }
+.check-sum .n.ok { color: var(--semantic-delta-good); }
+@media (max-width: 760px) { .check-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); } .check-sum > div:nth-child(odd) { border-left: 0; } .check-sum > div:nth-child(n+3) { border-top: var(--border-hairline); } }
+
 /* ---------- avisos ---------- */
 .notice { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-left: 3px solid var(--product-accent-interactive); background: var(--brand-laranja-bruma); font-size: 12px; margin-bottom: 14px; }
 .notice .ico { width: 18px; height: 18px; color: var(--brand-laranja-dia); }

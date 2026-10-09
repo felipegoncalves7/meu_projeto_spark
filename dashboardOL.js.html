@@ -992,6 +992,7 @@
 
     $('sec-incidentes').innerHTML = sectionHead('alert', 'Visão Geral de Incidentes de O&amp;L', 'Incidentes de O&amp;L — todos os fluxos',
       'Mesmos KPIs da Visão Geral (Volume, MTTR, MTTR s/ outliers e ' + OLA_NAME + '), com comparativo vs ' + esc(L.prev) + '.',
+      '<button type="button" class="btn" data-action="open-check">' + icon('check') + 'Conferir lista</button>' +
       '<button type="button" class="btn btn-accent" data-action="open-all">' + icon('list') + 'Ver incidentes (' + c.incidents + ')</button>') +
       '<div class="grid cols-4">' + cards + '</div>' + reconcileHtml() + unmatched +
       '<div class="grid cols-2" style="margin-top:14px">' + chartPanel + rankPanel + '</div>';
@@ -1454,6 +1455,80 @@
       '<div class="modal-body"><div class="modal-tools">' + seg + '<button type="button" class="btn" data-action="modal-export">' + icon('download') + 'Exportar Excel</button></div>' + table + '</div></div></div>';
     document.body.style.overflow = 'hidden';
   }
+  /* ------------------------------------------------ Conferir lista de incidentes */
+  // Cole os números dos incidentes (ex.: filtro da aba Major_Incidents_Impactos: Stream = O&L/Planejamento Logístico e Tecnologia = Sim)
+  // e veja, para cada um, se entra nos números da tela e, se não, o motivo.
+  var CHECK = { text: '', res: null };
+  function openCheckModal() {
+    state.modal = { check: true };
+    document.body.style.overflow = 'hidden';
+    renderCheckModal();
+  }
+  function renderCheckModal() {
+    var r = CHECK.res, cy = D.current.year;
+    var body = '<p class="legend" style="margin:0 0 8px">Cole os números dos incidentes (um por linha, ou separados por espaço/vírgula). A conferência olha a aba <b>Major_Incidents_Impactos_' + cy + '</b> inteira, em todos os meses, e mostra por que cada incidente entra ou não nos números da tela (período selecionado: <b>' + esc(M.labels.cur) + '</b>).</p>' +
+      '<textarea id="ol-check-text" class="check-text" placeholder="INC0830657&#10;INC0835824&#10;…" spellcheck="false">' + esc(CHECK.text) + '</textarea>' +
+      '<div class="modal-tools" style="margin-top:10px"><button type="button" class="btn btn-accent" data-action="check-run">' + icon('check') + 'Conferir</button>' + (r ? '<button type="button" class="btn" data-action="check-export">' + icon('download') + 'Exportar Excel</button>' : '') + '</div>' + (r ? checkResultHtml(r) : '');
+    $('ol-modal-root').innerHTML = '<div class="modal-overlay" data-action="modal-bg"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="ol-modal-title">' +
+      '<div class="modal-head">' + tile('check') + '<div class="titles"><div class="eyebrow">Incidentes de O&amp;L</div><h3 id="ol-modal-title">Conferir lista de incidentes</h3></div>' +
+      '<button type="button" class="close-x" data-action="modal-close" aria-label="Fechar">' + icon('close') + '</button></div><div class="modal-body">' + body + '</div></div></div>';
+  }
+  function checkClassify(id) {
+    var rows = D.current.rows.filter(function (r) { return r.inc === id; });
+    if (!rows.length) {
+      var other = D.current.diag && D.current.diag.otherStreams && D.current.diag.otherStreams[id];
+      if (other) return { st: 'stream', label: 'Stream fora de O&L/Planejamento', det: 'Coluna B = "' + other + '"' };
+      if (D.previous.rows.some(function (r) { return r.inc === id; })) return { st: 'ano', label: 'É de ' + D.previous.year, det: 'Está na aba Major_Incidents_Impactos_' + D.previous.year };
+      return { st: 'nf', label: 'Não encontrado', det: 'Não existe na aba Major_Incidents_Impactos_' + D.current.year + ' (nem nas Streams O&L/Planejamento Logístico)' };
+    }
+    var tecTxt = uniq(rows.map(function (r) { return r.tecTxt || '(em branco)'; })).join(', ');
+    var m = rows[0].m, mon = m ? MONTHS[m - 1] : '—';
+    if (!rows.some(function (r) { return r.tec; })) return { st: 'tec', label: 'Origem não é Tecnologia', det: 'Coluna P = ' + tecTxt, m: m };
+    if (!m) return { st: 'nomes', label: 'Sem mês identificado', det: 'Colunas J (Mês) e K (Abertura) sem mês válido', m: m };
+    var stt = D.current.statuses[m - 1];
+    if (stt === 'NAO_INICIADO') return { st: 'mes', label: 'Mês não iniciado', det: mon + ' está "Não iniciado" na Status_Apuracao (' + D.current.year + ')', m: m };
+    if (M.months.indexOf(m) === -1) return { st: 'per', label: 'Fora do período selecionado', det: mon + ' não está em ' + M.labels.cur, m: m };
+    return { st: 'ok', label: stt === 'PARCIAL' ? 'Contado (mês parcial)' : 'Contado', det: mon + ' · ' + (rows[0].st || ''), m: m, partial: stt === 'PARCIAL', card: rows.every(function (r) { return r.card; }) };
+  }
+  function runCheck() {
+    var ta = $('ol-check-text');
+    CHECK.text = ta ? ta.value : CHECK.text;
+    var ids = uniq((CHECK.text.toUpperCase().match(/INC\d+/g) || []));
+    var items = ids.map(function (id) { var c = checkClassify(id); c.id = id; return c; });
+    var listed = {}; ids.forEach(function (id) { listed[id] = true; });
+    // incidentes que a tela considera (origem Tecnologia, qualquer mês do ano) e não estão na lista informada
+    var extra = [], seen = {};
+    D.current.rows.forEach(function (r) { if (r.tec && !listed[r.inc] && !seen[r.inc]) { seen[r.inc] = true; extra.push({ id: r.inc, m: r.m, st: r.st, month: r.m ? MONTHS[r.m - 1] : '—' }); } });
+    CHECK.res = { items: items, extra: extra, n: ids.length };
+    renderCheckModal();
+  }
+  function checkResultHtml(r) {
+    var by = {}; r.items.forEach(function (i) { (by[i.st] = by[i.st] || []).push(i); });
+    var cnt = function (k) { return (by[k] || []).length; };
+    var found = r.items.length - cnt('nf') - cnt('ano') - cnt('stream');
+    var sum = '<div class="check-sum"><div><span class="n num">' + r.n + '</span><span class="legend">na sua lista</span></div>' +
+      '<div><span class="n num ok">' + cnt('ok') + '</span><span class="legend">contados no período</span></div>' +
+      '<div><span class="n num">' + (cnt('mes') + cnt('per') + cnt('nomes')) + '</span><span class="legend">fora por mês/período</span></div>' +
+      '<div><span class="n num">' + (cnt('tec') + cnt('stream')) + '</span><span class="legend">fora por Stream/origem</span></div>' +
+      '<div><span class="n num">' + (cnt('nf') + cnt('ano')) + '</span><span class="legend">não encontrados no ano</span></div>' +
+      '<div><span class="n num">' + r.extra.length + '</span><span class="legend">na tela, fora da lista</span></div></div>';
+    var rest = r.items.filter(function (i) { return i.st !== 'ok'; });
+    var tbl = rest.length ? '<div class="tbl-wrap" style="max-height:320px"><table class="tbl"><thead><tr><th>Incidente</th><th>Motivo</th><th>Detalhe</th></tr></thead><tbody>' +
+      rest.map(function (i) { return '<tr><td class="id">' + esc(i.id) + '</td><td class="nowrap"><span class="tag">' + esc(i.label) + '</span></td><td>' + esc(i.det) + '</td></tr>'; }).join('') + '</tbody></table></div>' :
+      '<div class="empty">Todos os ' + r.n + ' incidentes da lista entram nos números do período selecionado.</div>';
+    var ex = r.extra.length ? '<div class="sub-title" style="margin-top:14px">' + icon('alert') + 'Na tela (origem Tecnologia, ' + D.current.year + ') e fora da sua lista</div><div class="legend">' + esc(r.extra.slice(0, 60).map(function (e) { return e.id + ' (' + e.month + ')'; }).join(', ')) + (r.extra.length > 60 ? '…' : '') + '</div>' : '';
+    return sum + '<div class="sub-title" style="margin-top:14px">' + icon('list') + 'Incidentes da lista que não entram nos números do período' + '</div>' + tbl + ex +
+      '<div class="legend" style="margin-top:10px">Encontrados na aba: ' + found + ' de ' + r.n + '. "Contados no período" respeitam o período, a Status_Apuracao e a origem Tecnologia; o filtro CARD não altera o total geral.</div>';
+  }
+  function exportCheck() {
+    if (!CHECK.res || !window.XLSX) return;
+    var rows = CHECK.res.items.map(function (i) { return { 'Incidente': i.id, 'Situação': i.label, 'Detalhe': i.det }; })
+      .concat(CHECK.res.extra.map(function (e) { return { 'Incidente': e.id, 'Situação': 'Na tela, fora da lista', 'Detalhe': e.month + ' · ' + e.st }; }));
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Conferência');
+    XLSX.writeFile(wb, 'OL_conferencia_incidentes.xlsx');
+  }
+
   // Comparativo com o outro ano: a volumetria do ano anterior só aparece aqui (ao abrir o card).
   function modalCompare(o, a) {
     if (!o.rowsPrev) return '';
@@ -1515,7 +1590,10 @@
     } else if (a === 'modal-close') closeModal();
     else if (a === 'modal-bg') { if (ev.target === t) closeModal(); }
     else if (a === 'modal-export') exportModal();
-    else if (a === 'ola-show' || a === 'ola-hide') { ev.stopPropagation(); state.showOla = a === 'ola-show'; var y2 = window.scrollY; renderAll(); window.scrollTo(0, y2); if (state.modal) renderModal(); }
+    else if (a === 'open-check') openCheckModal();
+    else if (a === 'check-run') runCheck();
+    else if (a === 'check-export') exportCheck();
+    else if (a === 'ola-show' || a === 'ola-hide') { ev.stopPropagation(); state.showOla = a === 'ola-show'; var y2 = window.scrollY; renderAll(); window.scrollTo(0, y2); if (state.modal && !state.modal.check) renderModal(); }
     else if (a === 'out-restore') { var y0 = window.scrollY; initOutliers(); renderAll(); window.scrollTo(0, y0); }
   }
   function onSeg(segEl, v) {

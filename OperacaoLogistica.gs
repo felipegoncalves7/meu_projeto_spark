@@ -172,14 +172,10 @@ function olParseDuration(display) {
   return isFinite(num) ? Math.round(num) : null;
 }
 
-/** Stream de O&L: "O&L" ou "Planejamento Logístico" (aceita variações de caixa, espaços e sufixos). Retorna a chave ou ''. */
+/** Stream de O&L: exatamente "O&L" ou "Planejamento Logístico" (ignora caixa, acentos e espaços). Retorna a chave ou ''. */
 function olStreamKey(raw) {
   const k = olFold(raw).replace(/\s+/g, '');
-  if (!k) return '';
-  if (OL_STREAMS[k]) return k;
-  if (k.indexOf('planejamentologistico') === 0) return 'planejamentologistico';
-  if (k === 'ol' || /(^|[^a-z])o&l($|[^a-z])/.test(olFold(raw))) return 'o&l';
-  return '';
+  return OL_STREAMS[k] ? k : '';
 }
 
 function olParseSeveridade(v) {
@@ -345,6 +341,7 @@ function olReadImpactos(ss, year, callerMap) {
   const unmatched = {};
   const anySim = {};   // incidente -> alguma linha com Tecnologia = Sim na própria aba de Impactos
   const hasP = {};     // incidente -> alguma linha com a coluna Tecnologia preenchida
+  const otherStreams = {}; // incidente -> Stream (linhas fora de O&L/Planejamento Logístico), usado na conferência
   const txt = (v, max) => {
     const s = String(v === null || v === undefined ? '' : v).trim();
     return max && s.length > max ? s.slice(0, max) + '…' : s;
@@ -355,7 +352,7 @@ function olReadImpactos(ss, year, callerMap) {
     const inc = txt(r[OL_COL_INCIDENTE]);
     if (!inc) continue;
     const streamKey = olStreamKey(r[OL_COL_STREAM]);
-    if (!streamKey) continue;
+    if (!streamKey) { const sraw = txt(r[OL_COL_STREAM]); if (sraw && !otherStreams[inc]) otherStreams[inc] = sraw; continue; }
 
     const abertura = olIsDate(r[OL_COL_ABERTURA]) ? r[OL_COL_ABERTURA] : null;
     const encerramento = olIsDate(r[OL_COL_ENCERRAMENTO]) ? r[OL_COL_ENCERRAMENTO] : null;
@@ -440,6 +437,7 @@ function olReadImpactos(ss, year, callerMap) {
   return {
     found: true,
     stats: stats,
+    diag: { otherStreams: otherStreams },
     rows: rows,
     incidents: incidents,
     unmatchedImpacts: Object.keys(unmatched).map(k => ({ impacto: k, linhas: unmatched[k] })).sort((a, b) => b.linhas - a.linhas)
@@ -651,6 +649,7 @@ function getOperacaoLogisticaData(year) {
         incidents: imp.incidents,
         unmatchedImpacts: imp.unmatchedImpacts,
         incStats: imp.stats || null,
+        diag: imp.diag || { otherStreams: {} },
         disponibilidade: olReadDisponibilidade(ss, y),
         apuracao: olReadApuracao(ss, y)
       };
