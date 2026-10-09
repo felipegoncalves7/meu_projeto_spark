@@ -15,6 +15,10 @@
 const OL_IMPACT_SHEET_PREFIX = 'Major_Incidents_Impactos_';
 const OL_DISP_SHEET_PREFIXES = ['Disponibilidade_', 'DISP_'];
 const OL_STATUS_SHEET = 'Status_Apuracao';
+// Aba opcional com os Incidentes que o negócio classifica como Outlier (A: Incidente, B: Motivo, C: Ano).
+const OL_OUTLIERS_SHEET = 'Outliers_OL';
+// Marca considerada na apuração (o indicador de Disponibilidade é da Natura; linhas de outras marcas são ignoradas).
+const OL_APURACAO_BRAND = 'natura';
 
 // Colunas da aba Major_Incidents_Impactos_[Ano] (base 0) — docs/abas_Major_Incidents_Impactos_[ano]
 const OL_COL_INCIDENTE = 0;        // A
@@ -463,14 +467,7 @@ function olReadDisponibilidade(ss, year) {
   const olNode = nodes.find(isOL);
   if (!olNode) return { found: false, sheet: sheet.getName() };
 
-  const flowKeyOf = name => {
-    const k = olFold(name);
-    if (/separa|faturamento|transporte|expedi/.test(k)) return 'separacao';
-    if (/fabrica|manufatura/.test(k)) return 'manufatura';
-    if (/atendimento/.test(k)) return 'atendimento';
-    if (/planejamento/.test(k)) return 'planejamento';
-    return null;
-  };
+  const flowKeyOf = olFlowKeyFromName;
 
   // Fluxos = filhos do nó O&L; se O&L não tiver filhos (fluxos como irmãos no mesmo nível), usa os irmãos seguintes.
   let flowNodes = olNode.children.slice();
@@ -503,6 +500,88 @@ function olReadDisponibilidade(ss, year) {
   const olOut = strip(olNode);
   olOut.children = [];
   return { found: true, sheet: sheet.getName(), ol: olOut, flows: flows };
+}
+
+/** Nome de um Fluxo (aba de Disponibilidade ou de apuração) -> chave do fluxo de O&L. */
+function olFlowKeyFromName(name) {
+  const k = olFold(name);
+  if (/separa|faturamento|transporte|expedi/.test(k)) return 'separacao';
+  if (/fabrica|manufatura/.test(k)) return 'manufatura';
+  if (/atendimento/.test(k)) return 'atendimento';
+  if (/planejamento/.test(k)) return 'planejamento';
+  return null;
+}
+
+/**
+ * Lê a aba apuracao_[Ano] (docs/abas_apuracao_[ano]): minutos de indisponibilidade apurados por
+ * Incidente x Fluxo x País x Serviço x Mês. É a base para isolar o efeito de cada incidente na
+ * Disponibilidade (visão "sem outliers"). Mantém só Stream O&L / Planejamento Logístico da marca Natura.
+ */
+function olReadApuracao(ss, year) {
+  const out = { found: false, sheet: null, rows: [], stats: { rows: 0, otherBrand: 0, otherStream: 0, noMonth: 0, badMinutes: 0 } };
+  const target = 'apuracao_' + year;
+  let sheet = null;
+  ss.getSheets().forEach(sh => { if (!sheet && olFold(sh.getName()) === target) sheet = sh; });
+  if (!sheet) ss.getSheets().forEach(sh => { const f = olFold(sh.getName()); if (!sheet && f.indexOf('apura') !== -1 && f.indexOf(String(year)) !== -1 && f.indexOf('status') === -1) sheet = sh; });
+  if (!sheet) return out;
+  out.found = true; out.sheet = sheet.getName();
+  const lastRow = sheet.getLastRow(), lastCol = sheet.getLastColumn();
+  if (lastRow < 2 || lastCol < 1) return out;
+  const rng = sheet.getRange(1, 1, lastRow, lastCol);
+  const values = rng.getValues(), shown = rng.getDisplayValues();
+
+  let header = -1;
+  for (let r = 0; r < Math.min(values.length, 15); r++) if (olFold(values[r][0]) === 'incidente') { header = r; break; }
+  const byLabel = {};
+  if (header !== -1) values[header].forEach((h, i) => { const k = olFold(h); if (k && !(k in byLabel)) byLabel[k] = i; });
+  const col = (label, idx) => (label in byLabel ? byLabel[label] : idx);
+  const C = { inc: col('incidente', 0), data: col('data de abertura', 1), marca: col('marca', 2), stream: col('stream', 3), fluxo: col('fluxo', 4), pais: col('pais', 5), serv: col('servico', 6), tempo: col('tempo', 7), mes: col('mes', 9) };
+
+  for (let i = header + 1; i < values.length; i++) {
+    const v = values[i], d = shown[i];
+    const inc = String(v[C.inc] === null || v[C.inc] === undefined ? '' : v[C.inc]).trim();
+    if (!inc) continue;
+    out.stats.rows++;
+    const marca = olFold(d[C.marca]);
+    if (marca && marca !== OL_APURACAO_BRAND) { out.stats.otherBrand++; continue; }
+    const streamKey = olFold(d[C.stream]).replace(/\s+/g, '');
+    const flow = olFlowKeyFromName(d[C.fluxo]);
+    if (!OL_STREAMS[streamKey] && !(streamKey === '' && flow)) { out.stats.otherStream++; continue; }
+    let m = parseInt(String(d[C.mes]).trim(), 10);
+    if (!(m >= 1 && m <= 12)) m = olIsDate(v[C.data]) ? v[C.data].getMonth() + 1 : null;
+    if (!m) { out.stats.noMonth++; continue; }
+    const min = typeof v[C.tempo] === 'number' ? v[C.tempo] : parseFloat(String(d[C.tempo]).replace(',', '.'));
+    if (!isFinite(min) || min < 0) { out.stats.badMinutes++; continue; }
+    out.rows.push({
+      inc: inc,
+      isInc: /^INC\d+$/i.test(inc),
+      m: m,
+      flow: flow || (streamKey === 'planejamentologistico' ? 'planejamento' : 'outros'),
+      fluxo: String(d[C.fluxo] || '').trim(),
+      pais: String(d[C.pais] || '').trim(),
+      serv: String(d[C.serv] || '').trim(),
+      min: Math.round(min * 100) / 100
+    });
+  }
+  return out;
+}
+
+/** Lê a aba Outliers_OL (opcional): Incidentes classificados pelo negócio como Outlier. */
+function olReadOutliers(ss) {
+  const res = { found: false, items: [] };
+  let sheet = ss.getSheetByName(OL_OUTLIERS_SHEET);
+  if (!sheet) ss.getSheets().forEach(sh => { const f = olFold(sh.getName()).replace(/[\s_&-]/g, ''); if (!sheet && (f === 'outliersol' || f === 'outliers')) sheet = sh; });
+  if (!sheet) return res;
+  res.found = true; res.sheet = sheet.getName();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 1) return res;
+  const values = sheet.getRange(1, 1, lastRow, Math.max(1, Math.min(3, sheet.getLastColumn()))).getValues();
+  values.forEach(r => {
+    const inc = String(r[0] || '').trim();
+    if (!/^INC\d+$/i.test(inc)) return; // ignora cabeçalho e linhas vazias
+    res.items.push({ inc: inc.toUpperCase(), motivo: String(r[1] || '').trim(), ano: Number(r[2]) || null });
+  });
+  return res;
 }
 
 function olListYears(ss) {
@@ -545,7 +624,8 @@ function getOperacaoLogisticaData(year) {
         rows: imp.rows,
         incidents: imp.incidents,
         unmatchedImpacts: imp.unmatchedImpacts,
-        disponibilidade: olReadDisponibilidade(ss, y)
+        disponibilidade: olReadDisponibilidade(ss, y),
+        apuracao: olReadApuracao(ss, y)
       };
     };
 
@@ -559,6 +639,7 @@ function getOperacaoLogisticaData(year) {
       warnings: statusInfo.warnings,
       current: buildYear(year),
       previous: buildYear(year - 1),
+      outliers: olReadOutliers(ss),
       config: {
         flows: OL_FLOW_DISPLAY_ORDER.map(k => {
           const f = OL_FLOWS.find(x => x.key === k);

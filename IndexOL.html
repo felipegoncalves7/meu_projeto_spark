@@ -31,10 +31,17 @@
       <label class="field"><span class="eyebrow">Período</span>
         <select id="ol-period" disabled aria-label="Período (YTD, trimestre, semestre ou mês)"></select></label>
       <div class="field">
-        <span class="eyebrow">Origem dos incidentes</span>
+        <span class="eyebrow">Origem</span>
         <div class="seg on-dark" id="ol-origem" role="group" aria-label="Origem dos incidentes">
           <button type="button" data-v="tec" class="is-active" data-tip="Somente incidentes com origem em Tecnologia (mesmo critério da Visão Geral).">Tecnologia</button>
           <button type="button" data-v="all" data-tip="Todos os incidentes de O&amp;L, independentemente da origem (Tecnologia, Não Tecnologia, Outro).">Todas</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="eyebrow">Outliers</span>
+        <div class="seg on-dark" id="ol-outmode" role="group" aria-label="Outliers">
+          <button type="button" data-v="com" class="is-active" data-tip="Resultado oficial, com todos os incidentes.">Considerar</button>
+          <button type="button" data-v="sem" data-tip="Simula o resultado sem os incidentes classificados como Outlier (ver seção Impacto isolado &amp; Outliers).">Desconsiderar</button>
         </div>
       </div>
       <a id="ol-portal-link" class="btn btn-ghost-dark" href="#" target="_top" title="Voltar ao Portal de Indicadores ITSM">&larr; Portal</a>
@@ -43,6 +50,7 @@
 
   <nav class="ol-nav" id="ol-nav" aria-label="Seções">
     <a href="#sec-resumo" data-sec="sec-resumo" data-icon="spark">Resumo Executivo</a>
+    <a href="#sec-outliers" data-sec="sec-outliers" data-icon="target">Impacto isolado &amp; Outliers</a>
     <a href="#sec-incidentes" data-sec="sec-incidentes" data-icon="alert">Incidentes O&amp;L</a>
     <a href="#sec-flow-separacao" data-sec="sec-flow-separacao" data-icon="box">Separação, Faturamento &amp; Transporte</a>
     <a href="#sec-flow-manufatura" data-sec="sec-flow-manufatura" data-icon="factory">Manufatura</a>
@@ -55,6 +63,7 @@
 <main class="ol-main" id="ol-app" aria-live="polite">
   <div id="ol-error" hidden></div>
   <section id="sec-resumo" class="ol-section"></section>
+  <section id="sec-outliers" class="ol-section"></section>
   <section id="sec-incidentes" class="ol-section"></section>
   <div id="ol-flows"></div>
   <section id="sec-disponibilidade" class="ol-section"></section>

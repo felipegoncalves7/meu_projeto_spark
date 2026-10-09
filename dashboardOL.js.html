@@ -225,7 +225,11 @@
   var IDX = { cur: {}, prev: {} };
   var CACHE = {};
   var charts = {};
-  var state = { year: null, periodKey: null, origem: 'tec', gran: 'month', sel: 'ol', expanded: {}, chartMetric: 'inc', rank: 'tec', entSort: {}, modal: null };
+  var state = { year: null, periodKey: null, origem: 'tec', outMode: 'com', gran: 'month', sel: 'ol', expanded: {}, chartMetric: 'inc', rank: 'tec', entSort: {}, modal: null, outScope: 'ol', outMonth: null };
+  // Outliers: set = incidentes desconsiderados na visão "sem outliers"; official = aba Outliers_OL (inc -> motivo);
+  // suggested = sugestão estatística (minutos apurados acima de Q3 + 1,5·IQR no ano). ver invalida os caches.
+  var OUT = { set: {}, official: {}, suggested: {}, ver: 0, source: 'none' };
+  var APUC = { cur: {}, prev: {} }, ADJ = {};
   var BASE_URL = (document.body && document.body.getAttribute('data-base-url')) || '';
 
   /* --------------------------------------------------------------- períodos */
@@ -279,8 +283,11 @@
 
   /* ---------------------------------------------------------- agregações */
   function passOrigem(r) { return state.origem === 'all' || r.tec; }
-  function filterRows(rows, months) {
-    return rows.filter(function (r) { return months.indexOf(r.m) !== -1 && passOrigem(r); });
+  function isOutlier(inc) { return !!OUT.set[inc]; }
+  function outCount() { return Object.keys(OUT.set).length; }
+  function passRow(r, mode) { return passOrigem(r) && !((mode || state.outMode) === 'sem' && isOutlier(r.inc)); }
+  function filterRows(rows, months, mode) {
+    return rows.filter(function (r) { return months.indexOf(r.m) !== -1 && passRow(r, mode); });
   }
 
   // Agrega linhas de impacto: Incidentes únicos (KPIs de MTTR/OLA pelo TTR oficial) e pares
@@ -363,38 +370,123 @@
   function indexDisp(dd) {
     var idx = {};
     if (!dd || !dd.found) return idx;
-    function walk(n, path) {
-      n._path = path; idx[path] = n;
+    // _chain = nomes abaixo do fluxo (ex.: ['Brasil', 'CD Cajamar']), usados para casar com a apuração
+    function walk(n, path, chain) {
+      n._path = path; n._chain = chain; idx[path] = n;
       var seen = {};
       (n.children || []).forEach(function (c) {
         var p = path + '/' + fold(c.name);
         seen[p] = (seen[p] || 0) + 1;
         if (seen[p] > 1) p += '~' + seen[p];
-        walk(c, p);
+        walk(c, p, chain.concat([c.name]));
       });
     }
-    if (dd.ol) walk(dd.ol, 'ol');
-    Object.keys(dd.flows || {}).forEach(function (k) { walk(dd.flows[k], 'f:' + k); });
+    if (dd.ol) walk(dd.ol, 'ol', []);
+    Object.keys(dd.flows || {}).forEach(function (k) { walk(dd.flows[k], 'f:' + k, []); });
     return idx;
   }
-  function periodValue(node, months, statuses) {
+
+  /* ---------------- impacto isolado / outliers (atribuição proporcional dos minutos apurados) */
+  // A indisponibilidade de um nó no mês (100% − resultado oficial) é repartida entre os incidentes na
+  // proporção dos minutos apurados (aba apuracao_[Ano]) que casam com o nó (Fluxo, País, Serviço).
+  // Remover um incidente devolve a sua fatia: resultado sem ele = oficial + (100 − oficial) × min_inc / min_total.
+  function apuRows(which) { var yd = which === 'cur' ? D.current : D.previous; return yd.apuracao && yd.apuracao.found ? yd.apuracao.rows : []; }
+  function hasApuracao(which) { var yd = which === 'cur' ? D.current : D.previous; return !!(yd.apuracao && yd.apuracao.found && yd.apuracao.rows.length); }
+  function servMatch(serv, n) {
+    var s = fold(serv);
+    if (!s || !n) return false;
+    return s === n || s.indexOf(n) !== -1 || (s.length >= 2 && (s.length <= 4 ? matchKw(n, s) : n.indexOf(s) !== -1));
+  }
+  function chainTest(name) {
+    var n = fold(name), parts = n.split(' - '), iso = countryOfName(name);
+    if (iso) {
+      var cn = fold(COUNTRY_NAMES[iso]), rest = parts.slice(1).join(' - ');
+      return function (r) { return fold(r.pais) === cn && (!rest || servMatch(r.serv, rest)); };
+    }
+    return function (r) { return servMatch(r.serv, n); };
+  }
+  function attribution(path, which) {
+    var cache = APUC[which];
+    if (cache[path]) return cache[path];
+    var node = (which === 'cur' ? IDX.cur : IDX.prev)[path], res = {};
+    if (!node) return (cache[path] = res);
+    var key = path === 'ol' ? null : path.slice(2).split('/')[0];
+    var tests = (node._chain || []).map(chainTest);
+    apuRows(which).forEach(function (r) {
+      if (key && r.flow !== key) return;
+      for (var i = 0; i < tests.length; i++) if (!tests[i](r)) return;
+      var a = res[r.m] || (res[r.m] = { total: 0, byInc: {} });
+      a.total += r.min;
+      a.byInc[r.inc] = (a.byInc[r.inc] || 0) + r.min;
+    });
+    return (cache[path] = res);
+  }
+  function outlierMinutes(a) { var out = 0; if (a) Object.keys(a.byInc).forEach(function (inc) { if (isOutlier(inc)) out += a.byInc[inc]; }); return out; }
+  function adjustValue(v, a) {
+    if (!isNum(v) || !a || !(a.total > 0) || v >= 100) return v;
+    var out = outlierMinutes(a);
+    return out ? v + (100 - v) * Math.min(1, out / a.total) : v;
+  }
+  // Meses do nó conforme o modo: oficiais ('com') ou estimados sem os outliers ('sem').
+  function monthsOf(node, which, mode) {
+    if (!node) return null;
+    if ((mode || state.outMode) !== 'sem' || !outCount()) return node.months;
+    var key = which + '|' + node._path + '|' + OUT.ver;
+    if (ADJ[key]) return ADJ[key];
+    var att = attribution(node._path, which);
+    var arr = node.months.map(function (v, i) { return adjustValue(v, att[i + 1]); });
+    arr._changed = arr.map(function (v, i) { return v !== node.months[i]; });
+    return (ADJ[key] = arr);
+  }
+  function periodValue(node, months, statuses, which, mode) {
     if (!node || !months.length) return null;
     if (months.some(function (m) { return statuses[m - 1] === 'NAO_INICIADO'; })) return { v: null, pending: true };
     var partial = months.some(function (m) { return statuses[m - 1] === 'PARCIAL'; });
-    var vals = months.map(function (m) { return node.months[m - 1]; });
+    var arr = monthsOf(node, which, mode);
+    var adjusted = !!(arr._changed && months.some(function (m) { return arr._changed[m - 1]; }));
+    var vals = months.map(function (m) { return arr[m - 1]; });
     if (vals.some(function (v) { return !isNum(v); })) return { v: null, missing: true, partial: partial };
-    var q = quarterIndex(months);
-    if (q >= 0 && isNum(node.quarters[q])) return { v: node.quarters[q], partial: partial, official: true };
-    if (months.length === 12 && isNum(node.fullYear)) return { v: node.fullYear, partial: partial, official: true };
-    if (months.length === 1) return { v: vals[0], partial: partial, official: true };
-    return { v: mean(vals), partial: partial, official: false };
+    if (!adjusted) {
+      var q = quarterIndex(months);
+      if (q >= 0 && isNum(node.quarters[q])) return { v: node.quarters[q], partial: partial, official: true };
+      if (months.length === 12 && isNum(node.fullYear)) return { v: node.fullYear, partial: partial, official: true };
+    }
+    if (months.length === 1) return { v: vals[0], partial: partial, official: !adjusted, adjusted: adjusted };
+    return { v: mean(vals), partial: partial, official: false, adjusted: adjusted };
   }
-  function dispFor(path, months) {
+  function dispFor(path, months, mode) {
     var node = IDX.cur[path] || null, pnode = IDX.prev[path] || null;
-    var c = periodValue(node, months, D.current.statuses), p = periodValue(pnode, months, D.previous.statuses);
+    var c = periodValue(node, months, D.current.statuses, 'cur', mode), p = periodValue(pnode, months, D.previous.statuses, 'prev', mode);
     var refs = node ? { min: node.min, meta: node.meta, des: node.des } : null;
     var cv = c && c.v, pv = p && p.v;
-    return { path: path, node: node, pnode: pnode, cur: c, prev: p, cv: cv, pv: pv, refs: refs, status: statusOf(cv, refs), delta: deltaPP(cv, pv, 2, 'higher'), gap: isNum(cv) && hasRefs(refs) ? r2(cv) - r2(refs.meta) : null };
+    return { path: path, node: node, pnode: pnode, cur: c, prev: p, cv: cv, pv: pv, refs: refs, adjusted: !!((c && c.adjusted) || (p && p.adjusted)), status: statusOf(cv, refs), delta: deltaPP(cv, pv, 2, 'higher'), gap: isNum(cv) && hasRefs(refs) ? r2(cv) - r2(refs.meta) : null };
+  }
+
+  // Outliers padrão: aba Outliers_OL (oficial). Sem a aba, usa a sugestão estatística do ano corrente.
+  function initOutliers() {
+    OUT = { set: {}, official: {}, suggested: {}, ver: (OUT.ver || 0) + 1, source: 'none' };
+    APUC = { cur: {}, prev: {} }; ADJ = {};
+    var o = D.outliers || {};
+    (o.items || []).forEach(function (it) { OUT.official[it.inc] = it.motivo || 'Classificado como Outlier na aba ' + (o.sheet || 'Outliers_OL'); });
+    var tot = {};
+    apuRows('cur').forEach(function (r) { if (r.isInc) tot[r.inc] = (tot[r.inc] || 0) + r.min; });
+    var vals = Object.keys(tot).map(function (k) { return tot[k]; }).sort(function (a, b) { return a - b; });
+    if (vals.length >= 8) {
+      var qt = function (p) { var i = (vals.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i); return vals[lo] + (vals[hi] - vals[lo]) * (i - lo); };
+      var q1 = qt(0.25), q3 = qt(0.75), lim = q3 + 1.5 * (q3 - q1);
+      Object.keys(tot).forEach(function (k) { if (tot[k] > lim) OUT.suggested[k] = { min: tot[k], lim: lim }; });
+    }
+    if (o.found) { Object.keys(OUT.official).forEach(function (k) { OUT.set[k] = true; }); OUT.source = 'sheet'; }
+    else { Object.keys(OUT.suggested).forEach(function (k) { OUT.set[k] = true; }); OUT.source = 'suggested'; }
+  }
+  function setOutlier(inc, on) {
+    if (on) OUT.set[inc] = true; else delete OUT.set[inc];
+    OUT.ver++; ADJ = {};
+  }
+  function outSetIsDefault() {
+    var def = OUT.source === 'sheet' ? OUT.official : OUT.suggested;
+    var a = Object.keys(OUT.set).sort().join(','), b = Object.keys(def).sort().join(',');
+    return a === b;
   }
   function matchDispPath(flowKey, e) {
     var prefix = 'f:' + flowKey + '/';
@@ -477,6 +569,7 @@
     M = computeModel();
     renderStamp();
     renderResumo();
+    renderOutliers();
     renderIncidentes();
     renderFlows();
     renderDisponibilidade();
@@ -497,6 +590,11 @@
 
   function periodNotices() {
     var h = '', per = M.per, info = statusInfo(D.current.statuses);
+    if (state.outMode === 'sem') {
+      var ids = Object.keys(OUT.set);
+      h += '<div class="notice is-out">' + icon('target') + '<div><b>Visão sem outliers (simulação):</b> ' + ids.length + ' ' + plural(ids.length, 'incidente desconsiderado', 'incidentes desconsiderados') + (ids.length ? ' (' + esc(ids.slice(0, 6).join(', ')) + (ids.length > 6 ? '…' : '') + ')' : '') +
+        '. KPIs de incidentes excluem esses incidentes e a Disponibilidade é estimada devolvendo a fatia de cada um. Para ver os valores oficiais, selecione <b>Considerar</b> em Outliers.</div></div>';
+    }
     if (per.partial) {
       var pm = per.months.filter(function (m) { return D.current.statuses[m - 1] === 'PARCIAL'; }).map(function (m) { return MONTHS[m - 1]; });
       h += '<div class="notice">' + icon('alert') + '<div><b>Apuração parcial:</b> o período inclui ' + esc(pm.join(', ')) + ' com apuração parcial — incidentes e disponibilidade ainda podem mudar (dados provisórios).</div></div>';
@@ -516,7 +614,7 @@
     var calc = od.cur && od.cur.official === false ? ' <span class="info-i" data-tip="Consolidado do período calculado pela média simples dos meses oficiais da aba Disponibilidade_' + D.current.year + ' (mesmo método aplicado ao ano anterior).">i</span>' : '';
     var heroLeft = '<div class="hero-kpi"><div class="eyebrow">Disponibilidade O&amp;L · ' + esc(L.cur) + calc + '</div>' +
       '<div class="value num">' + (isNum(od.cv) ? fmtNum(od.cv, 2) + '<small>%</small>' : '<span class="muted" style="font-size:22px">sem dado no período</span>') + '</div>' +
-      '<div class="hero-meta">' + deltaHtml(od.delta, L.prev) + (isNum(od.cv) ? chip(od.status) : '') + tag + '</div>' +
+      '<div class="hero-meta">' + deltaHtml(od.delta, L.prev) + (isNum(od.cv) ? chip(od.status) : '') + tag + '</div>' + outAltLine(L) +
       (gapTxt ? '<div class="legend">' + esc(gapTxt) + (isNum(od.pv) ? ' · ' + esc(L.prev) + ': ' + fmtPct(od.pv) : '') + '</div>' : '') +
       '<div class="hero-ruler">' + bandHtml(od.refs, od.cv, { lg: true, labels: true, prev: od.pv, curLabel: L.cur, prevLabel: L.prev }) + '</div>' +
       (hasRefs(od.refs) ? bandLegend(L.cur, isNum(od.pv) ? L.prev + ' (mesmo período)' : '') : '') +
@@ -558,6 +656,15 @@
       periodNotices() + '<div class="hero">' + heroLeft + heroRight + '</div>' + tiles + insHtml;
   }
 
+  function outAltLine(L) {
+    if (!outCount() || !hasApuracao('cur')) return '';
+    var alt = dispFor('ol', M.months, state.outMode === 'sem' ? 'com' : 'sem');
+    if (!isNum(alt.cv)) return '';
+    return '<div class="out-alt" role="button" tabindex="0" data-action="goto" data-target="sec-outliers">' + icon('target') +
+      '<span>' + (state.outMode === 'sem' ? 'Oficial (com outliers)' : 'Sem os ' + outCount() + ' ' + plural(outCount(), 'outlier', 'outliers')) + ': <b>' + fmtPct(alt.cv) + '</b></span>' +
+      chip(alt.status, true) + deltaHtml(alt.delta, L.prev) + '<span class="legend">ver impacto isolado →</span></div>';
+  }
+
   function buildInsights() {
     var L = M.labels, od = M.olDisp, out = [], c = M.overall.cur, p = M.overall.prev;
     if (isNum(od.cv)) {
@@ -581,6 +688,12 @@
       out.push('MTTR <b>' + fmtHM(c.mttr) + '</b>' + (p && isNum(p.mttr) ? ' (' + esc(deltaMin(c.mttr, p.mttr).txt) + ' vs ' + fmtHM(p.mttr) + ')' : '') +
         (isNum(c.ola) ? ' · Aderência ao OLA <b>' + fmtPct(c.ola, 1) + '</b>' + (p && isNum(p.ola) ? ' (' + esc(deltaPP(c.ola, p.ola, 1).txt) + ')' : '') : '') + '.');
     }
+    if (outCount() && hasApuracao('cur') && state.outMode === 'com') {
+      var ws = dispFor('ol', M.months, 'sem');
+      if (isNum(ws.cv) && isNum(od.cv) && r2(ws.cv) > r2(od.cv)) {
+        out.push('Sem os <b>' + outCount() + ' ' + plural(outCount(), 'outlier', 'outliers') + '</b>, O&amp;L fecharia ' + esc(L.cur) + ' em <b>' + fmtPct(ws.cv) + '</b> (' + esc(deltaPP(ws.cv, od.cv, 2).txt) + ' sobre o oficial; status <b>' + esc(ws.status.label) + '</b>' + (isNum(ws.pv) ? '; ' + esc(ws.delta.txt) + ' vs ' + esc(L.prev) : '') + ').');
+      }
+    }
     var all = [];
     M.flows.forEach(function (f) { f.entities.forEach(function (e) { if (e.cur.incidents > 0) all.push({ f: f, e: e }); }); });
     all.sort(function (a, b) { return (b.e.cur.impactMin || 0) - (a.e.cur.impactMin || 0) || b.e.cur.incidents - a.e.cur.incidents; });
@@ -589,6 +702,190 @@
       out.push('Maior impacto acumulado: <b>' + esc(t.e.name) + '</b> (' + esc(t.f.cfg.short) + ') — ' + t.e.cur.incidents + ' ' + plural(t.e.cur.incidents, 'incidente', 'incidentes') + ' e ' + fmtDur(t.e.cur.impactMin) + ' de impacto.');
     }
     return out;
+  }
+
+  /* ------------------------------------------- Impacto isolado & Outliers */
+  function incInfo(inc) {
+    var cache = D._incInfo || (D._incInfo = {});
+    if (cache[inc]) return cache[inc];
+    var info = { tit: '', sev: null, ents: {}, mks: {} }, meta = D.current.incidents && D.current.incidents[inc];
+    if (meta && isNum(meta.sev)) info.sev = meta.sev;
+    D.current.rows.forEach(function (r) {
+      if (r.inc !== inc) return;
+      if (!info.tit && r.tit) info.tit = r.tit;
+      if (!isNum(info.sev) && isNum(r.sev)) info.sev = r.sev;
+      info.ents[r.entName] = true; if (r.mk) info.mks[r.mk] = true;
+    });
+    return (cache[inc] = info);
+  }
+  function outScopes() {
+    var list = [{ key: 'ol', label: 'O&L', icon: 'truck' }];
+    D.config.flows.forEach(function (f) { if (IDX.cur['f:' + f.key]) list.push({ key: 'f:' + f.key, label: f.short, icon: f.icon }); });
+    return list;
+  }
+  function outMonthsAvailable() {
+    return range(1, 12).filter(function (m) { return D.current.statuses[m - 1] !== 'NAO_INICIADO'; });
+  }
+  function scopeRows(rows, scope) {
+    if (scope === 'ol') return rows;
+    var key = scope.slice(2);
+    return rows.filter(function (r) { return r.flow === key; });
+  }
+  function scopeLabel(scope) {
+    if (scope === 'ol') return 'O&L (consolidado)';
+    var f = D.config.flows.find(function (x) { return 'f:' + x.key === scope; });
+    return f ? f.label : scope;
+  }
+  // Itens (incidentes/janelas) que compõem a indisponibilidade do nó no mês, com a sua fatia em p.p.
+  function isolatedItems(scope, month) {
+    var node = IDX.cur[scope];
+    if (!node) return { A: null, total: 0, items: [] };
+    var A = node.months[month - 1], a = attribution(scope, 'cur')[month];
+    if (!isNum(A) || !a || !(a.total > 0)) return { A: A, total: a ? a.total : 0, items: [] };
+    var gap = Math.max(0, 100 - A), nPer = M.months.length, inPer = M.months.indexOf(month) !== -1;
+    var items = Object.keys(a.byInc).map(function (inc) {
+      var min = a.byInc[inc], pp = gap * min / a.total;
+      return { inc: inc, isInc: /^INC\d+$/i.test(inc), min: min, share: min / a.total * 100, pp: pp, ppPer: inPer ? pp / nPer : null };
+    }).sort(function (x, y) { return y.min - x.min; });
+    return { A: A, total: a.total, items: items };
+  }
+
+  function ppTxt(v) { return v < 0.0005 ? '< 0,001 p.p.' : '−' + fmtNum(v, 3) + ' p.p.'; }
+
+  function renderOutliers() {
+    var sec = $('sec-outliers');
+    if (!sec) return;
+    if (charts.wf) { charts.wf.destroy(); charts.wf = null; }
+    var L = M.labels, cy = D.current.year;
+    var scopes = outScopes();
+    if (!scopes.find(function (x) { return x.key === state.outScope; })) state.outScope = 'ol';
+    var avail = outMonthsAvailable();
+    if (!state.outMonth || avail.indexOf(state.outMonth) === -1) state.outMonth = avail.indexOf(1) !== -1 ? 1 : (avail[0] || 1);
+    var scope = state.outScope, month = state.outMonth;
+    var restore = outSetIsDefault() ? '' : '<button type="button" class="btn" data-action="out-restore">' + icon('layers') + 'Restaurar outliers ' + (OUT.source === 'sheet' ? 'oficiais' : 'sugeridos') + '</button>';
+    var head = sectionHead('target', 'Disponibilidade · Impacto isolado', 'Impacto isolado dos incidentes e Outliers',
+      'Quanto cada incidente custou à Disponibilidade no mês e como ficaria o resultado se os Outliers não tivessem acontecido.', restore);
+
+    var notes = '';
+    var nOut = outCount();
+    if (OUT.source === 'sheet') notes += '<div class="notice is-info">' + icon('info') + '<div>Outliers oficiais: aba <b>' + esc((D.outliers && D.outliers.sheet) || 'Outliers_OL') + '</b> (' + Object.keys(OUT.official).length + '). Marque/desmarque abaixo para simular outros cenários — a seleção da tela não altera a planilha.</div></div>';
+    else notes += '<div class="notice">' + icon('alert') + '<div>Aba <b>Outliers_OL</b> não encontrada: pré-selecionados os <b>Outliers sugeridos</b> (minutos apurados acima de Q3 + 1,5 × IQR dos incidentes de ' + cy + '). Para oficializar, crie a aba <b>Outliers_OL</b> com A: Incidente, B: Motivo, C: Ano.</div></div>';
+    if (!hasApuracao('cur')) {
+      sec.innerHTML = head + notes + '<div class="notice">' + icon('alert') + '<div>Aba <b>apuracao_' + cy + '</b> não encontrada (ou sem linhas de O&amp;L): sem os minutos apurados por incidente não é possível isolar o impacto na Disponibilidade.</div></div>';
+      return;
+    }
+
+    var segScope = '<div class="seg" id="ol-out-scope">' + scopes.map(function (x) { return '<button type="button" data-v="' + x.key + '"' + (x.key === scope ? ' class="is-active"' : '') + '>' + esc(x.label) + '</button>'; }).join('') + '</div>';
+    var segMonth = '<div class="seg" id="ol-out-month">' + avail.map(function (m) { return '<button type="button" data-v="' + m + '"' + (m === month ? ' class="is-active"' : '') + '>' + MABBR[m - 1] + (D.current.statuses[m - 1] === 'PARCIAL' ? ' ◔' : '') + '</button>'; }).join('') + '</div>';
+    var toolbar = '<div class="disp-toolbar"><div class="field-inline"><span class="eyebrow">Escopo</span>' + segScope + '</div><div class="field-inline"><span class="eyebrow">Mês</span>' + segMonth + '</div></div>';
+
+    var iso = isolatedItems(scope, month);
+    var mLbl = MABBR[month - 1] + '/' + cy;
+    var mOff = dispFor(scope, [month], 'com'), mSem = dispFor(scope, [month], 'sem');
+    var pOff = dispFor(scope, M.months, 'com'), pSem = dispFor(scope, M.months, 'sem');
+    function valBlock(label, d) {
+      return '<div class="ov-col"><span class="legend">' + label + '</span><span class="ov-val num">' + fmtPct(d.cv) + '</span>' + (isNum(d.cv) ? chip(d.status, true) : '') + '</div>';
+    }
+    function gainHtml(a, b) {
+      var g = deltaPP(b.cv, a.cv, 2, 'higher');
+      return g.cls === 'nobase' ? '' : '<div class="ov-gain">' + deltaHtml({ cls: g.d > 0 ? 'good' : 'flat', arrow: g.d > 0 ? '▲' : '=', txt: (g.d > 0 ? g.txt : '0,00 p.p.') + ' sem outliers' }) + '</div>';
+    }
+    var rc = scopeRows(filterRows(D.current.rows, M.months, 'com'), scope);
+    var aOff = agg(D.current, rc), aSem = agg(D.current, rc.filter(function (r) { return !isOutlier(r.inc); }));
+    function krow(label, a, b) { return '<tr><td>' + label + '</td><td class="num">' + a + '</td><td class="num strong">' + b + '</td></tr>'; }
+    var cards = '<div class="grid cols-3 out-cards">' +
+      '<div class="kpi"><div class="kpi-head"><span class="eyebrow">Mês · ' + esc(mLbl) + ' · ' + esc(scopeLabel(scope)) + '</span></div><div class="ov-row">' + valBlock('Oficial', mOff) + '<span class="ov-arrow">→</span>' + valBlock('Sem outliers', mSem) + '</div>' + gainHtml(mOff, mSem) +
+        '<div class="kpi-foot">' + esc(MABBR[month - 1] + '/' + D.previous.year) + ': ' + fmtPct(mOff.pv) + ' · oficial ' + esc(mOff.delta.txt) + ' · sem outliers ' + esc(mSem.delta.txt) + '</div></div>' +
+      '<div class="kpi"><div class="kpi-head"><span class="eyebrow">Período · ' + esc(L.cur) + '</span></div><div class="ov-row">' + valBlock('Oficial', pOff) + '<span class="ov-arrow">→</span>' + valBlock('Sem outliers', pSem) + '</div>' + gainHtml(pOff, pSem) +
+        '<div class="kpi-foot">vs ' + esc(L.prev) + ' (' + fmtPct(pOff.pv) + '): oficial ' + deltaHtml(pOff.delta) + ' · sem outliers ' + deltaHtml(pSem.delta) + '</div></div>' +
+      '<div class="kpi"><div class="kpi-head"><span class="eyebrow">Incidentes · ' + esc(L.cur) + '</span><span class="legend">' + nOut + ' ' + plural(nOut, 'outlier', 'outliers') + '</span></div>' +
+        '<table class="cmp-table ov-table"><thead><tr><th></th><th>Oficial</th><th>Sem outliers</th></tr></thead><tbody>' +
+        krow('Incidentes', fmtInt(aOff.incidents), fmtInt(aSem.incidents)) + krow('MTTR', fmtHM(aOff.mttr), fmtHM(aSem.mttr)) +
+        krow('Aderência OLA', fmtPct(aOff.ola, 1), fmtPct(aSem.ola, 1)) + krow('Horas de impacto', fmtDur(aOff.impactMin), fmtDur(aSem.impactMin)) + '</tbody></table></div>' +
+      '</div>';
+
+    var maxPer = M.months.length;
+    var table = iso.items.length ? '<div class="tbl-wrap" style="max-height:440px"><table class="tbl out-tbl"><thead><tr><th>Outlier</th><th>Incidente</th><th>Minutos apurados</th><th>% da indisponibilidade</th><th>Impacto no mês</th><th>Impacto em ' + esc(L.cur) + '</th></tr></thead><tbody>' +
+      iso.items.map(function (it) {
+        var info = it.isInc ? incInfo(it.inc) : null, on = isOutlier(it.inc);
+        var tags = (OUT.official[it.inc] ? '<span class="tag is-off" data-tip="' + esc(OUT.official[it.inc]) + '">Oficial</span>' : '') +
+          (OUT.suggested[it.inc] ? '<span class="tag is-sug" data-tip="' + esc('Sugestão estatística: ' + fmtInt(OUT.suggested[it.inc].min) + ' min apurados no ano (limite ' + fmtInt(OUT.suggested[it.inc].lim) + ' min = Q3 + 1,5 × IQR)') + '">Sugerido</span>' : '') +
+          (!it.isInc ? '<span class="tag">Janela programada</span>' : '');
+        var sub = info ? [isNum(info.sev) ? 'Sev ' + info.sev : '', Object.keys(info.ents).slice(0, 3).join(', ')].filter(Boolean).join(' · ') : '';
+        return '<tr class="' + (on ? 'is-out' : '') + '"><td>' + (it.isInc ? '<label class="ck"><input type="checkbox" data-action="toggle-outlier" data-inc="' + esc(it.inc) + '"' + (on ? ' checked' : '') + ' aria-label="Marcar ' + esc(it.inc) + ' como Outlier"></label>' : '') + '</td>' +
+          '<td><div class="id">' + esc(it.inc) + ' ' + tags + '</div>' + (info && info.tit ? '<div class="desc">' + esc(info.tit) + '</div>' : '') + (sub ? '<div class="desc">' + esc(sub) + (info && Object.keys(info.mks).length ? ' ' + Object.keys(info.mks).map(function (k) { return flag(k); }).join('') : '') + '</div>' : '') + '</td>' +
+          '<td class="nowrap num">' + fmtInt(it.min) + ' min<div class="desc">' + fmtDur(it.min) + '</div></td>' +
+          '<td class="nowrap"><div class="share-bar"><span style="width:' + Math.min(100, it.share).toFixed(1) + '%"></span></div><span class="num">' + fmtNum(it.share, 1) + '%</span></td>' +
+          '<td class="nowrap num strong">' + ppTxt(it.pp) + '</td>' +
+          '<td class="nowrap num">' + (isNum(it.ppPer) ? ppTxt(it.ppPer) : '<span class="muted">fora do período</span>') + '</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<div class="empty">' + (isNum(iso.A) ? (iso.A >= 100 ? 'Sem indisponibilidade em ' + esc(mLbl) + '.' : 'Nenhum minuto apurado casou com este escopo em ' + esc(mLbl) + ' (a fatia por incidente não pode ser calculada).') : 'Sem dado de Disponibilidade em ' + esc(mLbl) + '.') + '</div>';
+
+    var wfPanel = '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('chart') + 'Cascata · ' + esc(mLbl) + ' · ' + esc(scopeLabel(scope)) + '</div></div>' +
+      (iso.items.length ? '<div class="chart-box"><canvas id="ol-chart-wf"></canvas></div><div class="legend" style="margin-top:6px">De 100% ao resultado oficial: cada barra é a fatia do incidente na indisponibilidade do mês (vinho = Outlier). A última barra é o resultado sem os Outliers.</div>' : '<div class="empty">Sem composição de indisponibilidade para exibir.</div>') + '</div>';
+    var listPanel = '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('list') + 'Incidentes de ' + esc(mLbl) + ' por impacto</div><span class="legend">' + iso.items.length + ' ' + plural(iso.items.length, 'item', 'itens') + ' · ' + fmtInt(iso.total) + ' min apurados</span></div>' + table + '</div>';
+
+    // resumo por fluxo: período oficial x sem outliers
+    var flowRows = [{ key: 'ol', label: 'O&L (consolidado)', icon: 'truck' }].concat(D.config.flows.map(function (f) { return { key: 'f:' + f.key, label: f.label, icon: f.icon }; })).filter(function (x) { return IDX.cur[x.key]; });
+    var flowTable = '<div class="tbl-scroll"><table class="cmp-table out-flows"><thead><tr><th>Escopo</th><th>' + esc(L.cur) + ' oficial</th><th>Sem outliers</th><th>Ganho</th><th>vs ' + esc(L.prev) + ' (oficial)</th><th>vs ' + esc(L.prev) + ' (sem outliers)</th></tr></thead><tbody>' +
+      flowRows.map(function (x) {
+        var o = dispFor(x.key, M.months, 'com'), w = dispFor(x.key, M.months, 'sem'), g = deltaPP(w.cv, o.cv, 2, 'higher');
+        return '<tr' + (x.key === scope ? ' class="is-sel"' : '') + '><td><span class="rh-inline">' + tile(x.icon, 'sm') + esc(x.label) + '</span></td>' +
+          '<td class="num">' + fmtPct(o.cv) + ' ' + (isNum(o.cv) ? chip(o.status, true) : '') + '</td><td class="num strong">' + fmtPct(w.cv) + ' ' + (isNum(w.cv) ? chip(w.status, true) : '') + '</td>' +
+          '<td>' + (g.cls === 'nobase' ? '—' : deltaHtml({ cls: g.d > 0 ? 'good' : 'flat', arrow: g.d > 0 ? '▲' : '=', txt: g.txt })) + '</td><td>' + deltaHtml(o.delta) + '</td><td>' + deltaHtml(w.delta) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+
+    sec.innerHTML = head + notes + toolbar + cards +
+      '<div style="margin-top:14px">' + wfPanel + '</div><div style="margin-top:14px">' + listPanel + '</div>' +
+      '<div class="sub-title" style="margin-top:22px">' + icon('layers') + 'Período ' + esc(L.cur) + ' com e sem outliers, por fluxo</div>' + flowTable +
+      '<div class="legend" style="margin-top:10px">Método: a indisponibilidade oficial do mês (100% − resultado da aba Disponibilidade_' + cy + ') é repartida entre os incidentes na proporção dos minutos apurados na aba apuracao_' + cy + ' para o mesmo Fluxo/País/Serviço. "Sem outliers" devolve a fatia desses incidentes; períodos usam a média dos meses. É uma estimativa — o resultado oficial continua sendo o da planilha.</div>';
+    if (iso.items.length) drawWaterfall(scope, iso, mSem);
+  }
+
+  function drawWaterfall(scope, iso, mSem) {
+    var cv = $('ol-chart-wf');
+    if (!cv || !window.Chart) return;
+    var node = IDX.cur[scope], refs = { min: node.min, meta: node.meta, des: node.des };
+    var top = iso.items.slice(0, 8), rest = iso.items.slice(8);
+    var labels = ['100%'], data = [], colors = [], tips = [];
+    var A = iso.A, Asem = mSem.cv;
+    var lo = Math.min(A, isNum(Asem) ? Asem : A, hasRefs(refs) ? refs.min : A);
+    var ymin = Math.max(0, Math.floor((lo - Math.max(0.03, (100 - lo) * 0.2)) * 100) / 100);
+    data.push([ymin, 100]); colors.push('#C9CFC4'); tips.push('Sem indisponibilidade');
+    var level = 100;
+    top.forEach(function (it) {
+      labels.push(it.isInc ? it.inc.replace(/^INC0*/, 'INC ') : 'Janela');
+      data.push([level - it.pp, level]); level -= it.pp;
+      colors.push(isOutlier(it.inc) ? '#691B34' : '#FF6D00');
+      var info = it.isInc ? incInfo(it.inc) : null;
+      tips.push(it.inc + (info && info.tit ? ' — ' + info.tit : '') + '\n' + fmtInt(it.min) + ' min · −' + fmtNum(it.pp, 3) + ' p.p.' + (isOutlier(it.inc) ? ' · Outlier' : ''));
+    });
+    if (rest.length) {
+      var pp = rest.reduce(function (s, it) { return s + it.pp; }, 0), anyOut = rest.some(function (it) { return isOutlier(it.inc); });
+      labels.push('Demais (' + rest.length + ')'); data.push([level - pp, level]); level -= pp; colors.push(anyOut ? '#9C5A6E' : '#E8B48C');
+      tips.push(rest.length + ' itens · −' + fmtNum(pp, 3) + ' p.p.');
+    }
+    labels.push('Oficial'); data.push([ymin, A]); colors.push('#333D20'); tips.push('Resultado oficial: ' + fmtPct(A));
+    labels.push('Sem outliers'); data.push([ymin, isNum(Asem) ? Asem : A]); colors.push('#77985B'); tips.push('Sem outliers (estimado): ' + fmtPct(Asem));
+    var ds = [{ type: 'bar', label: 'Disponibilidade', data: data, backgroundColor: colors, borderRadius: 2, maxBarThickness: 34, order: 2 }];
+    if (hasRefs(refs)) ds.push({ type: 'line', label: 'Meta ' + fmtPct(refs.meta), data: labels.map(function () { return r2(refs.meta); }), borderColor: '#77985B', borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, order: 1 });
+    charts.wf = new Chart(cv, {
+      data: { labels: labels, datasets: ds },
+      options: {
+        responsive: true, maintainAspectRatio: false, layout: { padding: { top: 16 } },
+        plugins: {
+          legend: { display: hasRefs(refs), position: 'top', align: 'end', labels: { boxWidth: 10, boxHeight: 10, font: { size: 11 }, filter: function (it) { return it.datasetIndex === 1; } } },
+          tooltip: { callbacks: { label: function (ctx) { return ctx.datasetIndex === 0 ? tips[ctx.dataIndex].split('\n') : ctx.dataset.label; } } },
+          datalabels: {
+            display: function (ctx) { return ctx.datasetIndex === 0; }, anchor: 'end', align: 'end', offset: -1, font: { size: 9.5, weight: '700' }, color: '#333D20',
+            formatter: function (v, ctx) { var i = ctx.dataIndex; if (i === 0) return '100%'; if (i >= labels.length - 2) return fmtNum(v[1], 2) + '%'; var d = v[1] - v[0]; return d < 0.0005 ? '<0,001' : '−' + fmtNum(d, 3); }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 45, minRotation: 0 } },
+          y: { min: ymin, max: 100, grid: { color: 'rgba(51,61,32,.08)' }, ticks: { font: { size: 10 }, callback: function (v) { return fmtNum(v, 2) + '%'; } } }
+        }
+      }
+    });
   }
 
   /* ------------------------------------------------------- Incidentes O&L */
@@ -669,7 +966,7 @@
     var out = [];
     for (var m = 1; m <= 12; m++) {
       if (yd.statuses[m - 1] === 'NAO_INICIADO' || !yd.impactsFound) { out.push(null); continue; }
-      out.push(agg(yd, yd.rows.filter(function (r) { return r.m === m && passOrigem(r); })));
+      out.push(agg(yd, yd.rows.filter(function (r) { return r.m === m && passRow(r); })));
     }
     return out;
   }
@@ -906,8 +1203,9 @@
           (hasRefs(d.refs) ? '\nMínimo ' + fmtPct(d.refs.min) + ' · Meta ' + fmtPct(d.refs.meta) + ' · Desafio ' + fmtPct(d.refs.des) : '') +
           '\n' + c.label + '/' + D.previous.year + ': ' + (isNum(d.pv) ? fmtPct(d.pv) : 'sem dado') +
           (d.delta.cls !== 'nobase' ? '\nVariação: ' + d.delta.txt : '') + (d.cur.partial ? '\nApuração parcial — dado provisório' : '') +
-          (d.cur.official === false ? '\nConsolidado calculado (média simples dos meses)' : '');
-        return '<td' + (c.ytd ? ' class="c-ytd"' : '') + '><div class="cell' + (d.cur.partial ? ' is-partial' : '') + '" data-tip="' + esc(tip) + '"><span class="cv">' + sdot(d.status) + fmtNum(d.cv, 2) + '</span>' +
+          (d.cur.official === false && !d.cur.adjusted ? '\nConsolidado calculado (média simples dos meses)' : '') +
+          (d.cur.adjusted ? '\nSem outliers (estimado) — oficial: ' + fmtPct(dispFor(r.path, c.months, 'com').cv) : '');
+        return '<td' + (c.ytd ? ' class="c-ytd"' : '') + '><div class="cell' + (d.cur.partial ? ' is-partial' : '') + (d.cur.adjusted ? ' is-adj' : '') + '" data-tip="' + esc(tip) + '"><span class="cv">' + sdot(d.status) + fmtNum(d.cv, 2) + '</span>' +
           '<span class="cd ' + d.delta.cls + '">' + (d.delta.cls === 'nobase' ? '—' : (d.delta.arrow === '=' ? '= ' : d.delta.arrow + ' ') + fmtSigned(d.delta.d, 2)) + '</span></div></td>';
       }).join('');
       return '<tr class="lv-' + r.kind + (state.sel === r.path ? ' is-selected' : '') + '" data-action="select-row" data-path="' + esc(r.path) + '"><td class="rowh">' + nameHtml + '</td>' + cells + '</tr>';
@@ -967,8 +1265,8 @@
     if (charts.disp) { charts.disp.destroy(); charts.disp = null; }
     var n = IDX.cur[path], pn = IDX.prev[path];
     var refs = { min: n.min, meta: n.meta, des: n.des };
-    var cur = n.months.map(function (v, i) { return D.current.statuses[i] === 'NAO_INICIADO' ? null : (isNum(v) ? r2(v) : null); });
-    var prev = pn ? pn.months.map(function (v) { return isNum(v) ? r2(v) : null; }) : MABBR.map(function () { return null; });
+    var cur = monthsOf(n, 'cur').map(function (v, i) { return D.current.statuses[i] === 'NAO_INICIADO' ? null : (isNum(v) ? r2(v) : null); });
+    var prev = pn ? monthsOf(pn, 'prev').map(function (v) { return isNum(v) ? r2(v) : null; }) : MABBR.map(function () { return null; });
     var colors = cur.map(function (v) { return STATUS_COLOR[statusOf(v, refs).key] || STATUS_COLOR.none; });
     var all = cur.concat(prev).filter(isNum);
     if (hasRefs(refs)) all.push(refs.min, refs.meta);
@@ -1102,10 +1400,14 @@
     } else if (a === 'modal-close') closeModal();
     else if (a === 'modal-bg') { if (ev.target === t) closeModal(); }
     else if (a === 'modal-export') exportModal();
+    else if (a === 'out-restore') { var y0 = window.scrollY; initOutliers(); renderAll(); window.scrollTo(0, y0); }
   }
   function onSeg(segEl, v) {
     var id = segEl.id;
     if (id === 'ol-origem') { if (state.origem === v) return; state.origem = v; setSegActive(segEl, v); renderAll(); }
+    else if (id === 'ol-outmode') { if (state.outMode === v) return; state.outMode = v; setSegActive(segEl, v); ADJ = {}; var y1 = window.scrollY; renderAll(); window.scrollTo(0, y1); }
+    else if (id === 'ol-out-scope') { state.outScope = v; renderOutliers(); }
+    else if (id === 'ol-out-month') { state.outMonth = Number(v); renderOutliers(); }
     else if (id === 'ol-evo-metric') { state.chartMetric = v; setSegActive(segEl, v); if (charts.evo) { charts.evo.destroy(); charts.evo = null; } drawEvoChart(); }
     else if (id === 'ol-rank-tab') { state.rank = v; setSegActive(segEl, v); $('ol-rank-body').innerHTML = rankHtml(); }
     else if (id === 'ol-gran') { state.gran = v; renderDisponibilidade(); }
@@ -1194,6 +1496,7 @@
     D = res;
     state.year = res.year;
     IDX = { cur: indexDisp(res.current.disponibilidade), prev: indexDisp(res.previous.disponibilidade) };
+    initOutliers();
     var p = getPeriod(state.periodKey);
     if (!state.periodKey || p.key !== state.periodKey || p.disabled) state.periodKey = defaultPeriodKey();
     fillSelectors();
@@ -1219,6 +1522,14 @@
     if (portal) portal.href = BASE_URL || '#';
     document.addEventListener('click', onClick);
     document.addEventListener('keydown', onKey);
+    document.addEventListener('change', function (ev) {
+      var t = ev.target;
+      if (!t || t.getAttribute('data-action') !== 'toggle-outlier') return;
+      var y = window.scrollY;
+      setOutlier(t.getAttribute('data-inc'), t.checked);
+      renderAll();
+      window.scrollTo(0, y);
+    });
     document.addEventListener('mouseover', onOver);
     document.addEventListener('mouseout', onOut);
     window.addEventListener('scroll', function () { if (tipEl) tipEl.hidden = true; }, { passive: true });
