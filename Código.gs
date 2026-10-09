@@ -628,13 +628,29 @@ function buildIncidentSeverityMap(ss) {
 }
 
 /**
- * Ponto de entrada
+ * Ponto de entrada: roteia pelo parâmetro ?view= da URL do Web App.
+ *   (sem parâmetro) -> Portal (hub com as Visões disponíveis)
+ *   ?view=geral     -> Visão Geral (Gestão de Incidentes e Problemas ITSM)
+ *   ?view=ol        -> Visão O&L (Operação & Logística)
+ * Cada página recebe baseUrl (URL do Web App) para navegar entre as Visões.
  */
-function doGet() {
-  return HtmlService.createTemplateFromFile('Index')
+const VIEW_ROUTES = {
+  geral: { file: 'Index', title: 'Gestão de Incidentes e Problemas ITSM' },
+  ol: { file: 'IndexOL', title: 'Visão O&L — Operação & Logística' }
+};
+
+function doGet(e) {
+  const view = String((e && e.parameter && e.parameter.view) || '').toLowerCase().trim();
+  const route = VIEW_ROUTES[view] || { file: 'Portal', title: 'Indicadores ITSM — Portal' };
+  const template = HtmlService.createTemplateFromFile(route.file);
+  let baseUrl = '';
+  try { baseUrl = ScriptApp.getService().getUrl() || ''; } catch (err) { baseUrl = ''; }
+  template.baseUrl = baseUrl;
+  return template
       .evaluate()
       .setSandboxMode(HtmlService.SandboxMode.IFRAME)
-      .setTitle('Gestão de Incidentes e Problemas ITSM');
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setTitle(route.title);
 }
 
 function include(filename) {

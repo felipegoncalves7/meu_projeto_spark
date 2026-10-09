@@ -48,7 +48,7 @@
     <?!= include('dashboard.css'); ?>
 </head>
 
-<body class="bg-slate-50 text-slate-800">
+<body class="bg-slate-50 text-slate-800" data-base-url="<?= baseUrl ?>">
     <!-- Header: fixo no topo, com logo, navegação por seção (scroll-spy) e seletor de Ano -->
     <header id="app-header" class="sticky top-0 z-30 bg-natura-green-cerrado shadow-md">
         <div class="flex items-center">
@@ -64,8 +64,10 @@
                         <span class="hidden sm:block text-[11px] text-natura-gray-light/80 truncate">Visão Executiva
                             &mdash; Major Incidents &amp; Major Problems</span>
                     </div>
-                    <!-- Seletor de Ano -->
+                    <!-- Seletor de Ano + retorno ao Portal de Visões -->
                     <div class="flex-none flex items-center gap-2">
+                    <a id="link-portal" href="#" target="_top" title="Voltar ao Portal de Indicadores ITSM"
+                        class="hidden sm:inline-flex items-center gap-1 text-xs font-bold text-white/80 hover:text-white border border-white/25 hover:bg-white/10 rounded px-3 py-1.5 mr-2 transition-colors">&larr; Portal</a>
                     <label for="year-select"
                         class="hidden md:block text-[11px] font-bold text-natura-gray-medium uppercase tracking-wide">Ano:</label>
                     <select id="year-select"
@@ -89,6 +91,12 @@
             </div>
         </div>
     </header>
+    <script>
+        (function () {
+            var a = document.getElementById('link-portal');
+            if (a) a.href = document.body.getAttribute('data-base-url') || '#';
+        })();
+    </script>
 
     <!-- Content -->
     <main class="bg-slate-50 p-4 sm:p-8 relative">

@@ -1,0 +1,1233 @@
+<script>
+/* ==========================================================================
+   Visão O&L — Operação & Logística (frontend)
+   Dados: getOperacaoLogisticaData(ano) em OperacaoLogistica.gs. Todos os cálculos de
+   período, comparativos YTD x mesmo período do ano anterior e status (Mínimo/Meta/Desafio)
+   são feitos aqui, em memória, para troca instantânea de período/origem.
+   ========================================================================== */
+(function () {
+  'use strict';
+
+  /* --------------------------------------------------------------- constantes */
+  var MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  var MABBR = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+  // abaixo do Mínimo = Atenção; [Mínimo, Meta) = Mínimo; [Meta, Desafio) = Meta; >= Desafio = Desafio.
+  var STATUS = {
+    atencao: { key: 'atencao', label: 'Atenção', symbol: '!', rank: 0 },
+    minimo: { key: 'minimo', label: 'Mínimo', symbol: '≥', rank: 1 },
+    meta: { key: 'meta', label: 'Meta', symbol: '✓', rank: 2 },
+    desafio: { key: 'desafio', label: 'Desafio', symbol: '★', rank: 3 },
+    none: { key: 'none', label: 'Sem referência', symbol: '–', rank: 4 },
+    nodata: { key: 'none', label: 'Sem dado', symbol: '–', rank: 5 }
+  };
+  var STATUS_COLOR = { atencao: '#691B34', minimo: '#FFB338', meta: '#77985B', desafio: '#00F1AE', none: '#C9CFC4' };
+
+  var COUNTRY_NAMES = {
+    br: 'Brasil', ar: 'Argentina', cl: 'Chile', co: 'Colômbia', ec: 'Equador', mx: 'México', pe: 'Peru',
+    gt: 'Guatemala', sv: 'El Salvador', hn: 'Honduras', ni: 'Nicarágua', cr: 'Costa Rica', pa: 'Panamá',
+    do: 'República Dominicana', uy: 'Uruguai', my: 'Malásia'
+  };
+  var COUNTRY_ORDER = ['br', 'ar', 'cl', 'co', 'ec', 'mx', 'pe', 'gt', 'sv', 'hn', 'ni', 'cr', 'pa', 'do', 'uy', 'my'];
+  var KIND_LABEL = { cd: 'Centro de Distribuição', hub: 'HUB', pea: 'PEA', planta: 'Planta', ecoparque: 'Ecoparque', sistema: 'Sistema / Aplicação' };
+  var FLOW_KEYWORDS_TXT = {
+    separacao: 'Impactos de Separação, Faturamento, Expedição e Facturación/Separación',
+    manufatura: 'Impactos de Fabricação, Evolutio, GTA e PlantSuite',
+    atendimento: 'Impactos de CRM e URA',
+    planejamento: 'Stream Planejamento Logístico — SAP APO (2025) e O9 (2026)'
+  };
+
+  /* ------------------------------------------------------------------ ícones */
+  // Malha 24, linha contínua + pontilhado (iconografia do brandbook).
+  var ICONS = {
+    spark: '<path d="M12 3.5l1.8 5.2 5.2 1.8-5.2 1.8L12 17.5l-1.8-5.2L5 10.5l5.2-1.8z"/><path class="dots" d="M18.5 17v4M16.5 19h4"/>',
+    alert: '<path d="M12 4l9 15.5H3z"/><path d="M12 10v4.5"/><circle class="fill" cx="12" cy="17" r="1"/>',
+    box: '<path d="M12 3.5l8 4v9l-8 4-8-4v-9z"/><path d="M4 7.5l8 4 8-4M12 11.5v9"/>',
+    factory: '<path d="M3.5 20V10.5l6 3v-3l6 3V5.5h4V20z"/><path class="dots" d="M7 17h10"/>',
+    headset: '<path d="M4.5 14v-2a7.5 7.5 0 0 1 15 0v2"/><rect x="3.5" y="13.5" width="3.5" height="5.5" rx="1.2"/><rect x="17" y="13.5" width="3.5" height="5.5" rx="1.2"/><path d="M19 19c0 1.6-2 2.2-5 2.2"/>',
+    calendar: '<rect x="4" y="5.5" width="16" height="14.5" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/><path class="dots" d="M8 14.5h8"/>',
+    gauge: '<path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4-5"/><path class="dots" d="M6.5 11.5l1 .8M12 7.5v1.2M17.5 11.5l-1 .8"/><circle class="fill" cx="12" cy="16" r="1.3"/>',
+    truck: '<path d="M3 6.5h11v9H3zM14 9.5h3.6l3 3.2v2.8H14"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/><path class="dots" d="M5 10h6"/>',
+    warehouse: '<path d="M3.5 20V9l8.5-5 8.5 5v11"/><path d="M7 20v-7h10v7"/><path class="dots" d="M7 16.5h10"/>',
+    hub: '<circle cx="12" cy="12" r="2.6"/><circle cx="5" cy="6" r="1.8"/><circle cx="19" cy="6" r="1.8"/><circle cx="5" cy="18" r="1.8"/><circle cx="19" cy="18" r="1.8"/><path d="M6.5 7.2l3.5 3M17.5 7.2l-3.5 3M6.5 16.8l3.5-3M17.5 16.8l-3.5-3"/>',
+    pea: '<path d="M4 9.5h12v9H4z"/><path d="M16 12h2.8l1.7 2.3v4.2H16"/><path d="M7.5 9.5V6.5h5v3"/><path class="dots" d="M6.5 14h7"/>',
+    leaf: '<path d="M5 19c0-8 5-13 14-14 0 9-5 14-13 14z"/><path class="dots" d="M5 19l8-8"/>',
+    monitor: '<rect x="3.5" y="4.5" width="17" height="11.5" rx="1.5"/><path d="M9 20h6M12 16v4"/><path class="dots" d="M7 10h10"/>',
+    users: '<circle cx="9" cy="8.5" r="3"/><path d="M3.5 19c.5-3.2 2.7-5 5.5-5s5 1.8 5.5 5"/><circle cx="17" cy="9.5" r="2.3"/><path class="dots" d="M16 14.2c2.4.2 4 1.8 4.5 4.8"/>',
+    phone: '<path d="M5 4.5h4l1.5 4-2.2 1.5a11 11 0 0 0 5.7 5.7l1.5-2.2 4 1.5v4c0 .8-.7 1.5-1.5 1.5A16 16 0 0 1 3.5 6c0-.8.7-1.5 1.5-1.5z"/>',
+    layers: '<path d="M12 4l8.5 4.5L12 13 3.5 8.5z"/><path d="M3.5 12.5L12 17l8.5-4.5"/><path class="dots" d="M3.5 16.5L12 21l8.5-4.5"/>',
+    clock: '<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>',
+    target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.5"/><circle class="fill" cx="12" cy="12" r="1.4"/>',
+    check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    pin: '<path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.2"/>',
+    chevron: '<path d="M9 6l6 6-6 6"/>',
+    close: '<path d="M6 6l12 12M18 6L6 18"/>',
+    download: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>',
+    list: '<path d="M8 7h12M8 12h12M8 17h12"/><path class="dots" d="M4 7h.1M4 12h.1M4 17h.1"/>',
+    chart: '<path d="M4 20h16"/><path d="M7 16v-5M12 16V7M17 16v-8"/>',
+    info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><circle class="fill" cx="12" cy="8" r="1"/>',
+    dotgrid: '<circle class="fill" cx="7" cy="7" r="1.3"/><circle class="fill" cx="12" cy="7" r="1.3"/><circle class="fill" cx="17" cy="7" r="1.3"/><circle class="fill" cx="7" cy="12" r="1.3"/><circle class="fill" cx="12" cy="12" r="1.3"/><circle class="fill" cx="17" cy="12" r="1.3"/><circle class="fill" cx="7" cy="17" r="1.3"/><circle class="fill" cx="12" cy="17" r="1.3"/><circle class="fill" cx="17" cy="17" r="1.3"/>'
+  };
+  function icon(name) { return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + (ICONS[name] || ICONS.dotgrid) + '</svg>'; }
+  function tile(name, size) { return '<span class="ico-tile' + (size ? ' ' + size : '') + '" aria-hidden="true">' + icon(name) + '</span>'; }
+  function entIcon(e) {
+    if (e.kind === 'sistema') {
+      var n = fold(e.name);
+      if (/\bura\b/.test(n)) return 'phone';
+      if (/\bcrm\b/.test(n)) return 'users';
+      if (/\bo9\b|apo/.test(n)) return 'layers';
+      return 'monitor';
+    }
+    return { cd: 'warehouse', hub: 'hub', pea: 'pea', planta: 'factory', ecoparque: 'leaf' }[e.kind] || 'pin';
+  }
+
+  /* --------------------------------------------------------------- utilitários */
+  function isNum(v) { return typeof v === 'number' && isFinite(v); }
+  function r2(v) { return Math.round(v * 100) / 100; }
+  function esc(s) {
+    return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function fold(s) { return String(s === null || s === undefined ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+  function matchKw(text, kw) {
+    if (!text || !kw) return false;
+    if (kw.length <= 4) return new RegExp('(^|[^a-z0-9])' + kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^a-z0-9]|$)').test(text);
+    return text.indexOf(kw) !== -1;
+  }
+  function fmtNum(v, d) { return isNum(v) ? v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—'; }
+  function fmtPct(v, d) { return isNum(v) ? fmtNum(v, d === undefined ? 2 : d) + '%' : '—'; }
+  function fmtInt(v) { return isNum(v) ? Math.round(v).toLocaleString('pt-BR') : '—'; }
+  function fmtSigned(v, d) { if (!isNum(v)) return '—'; var r = Number(v.toFixed(d)); return (r > 0 ? '+' : r < 0 ? '−' : '') + fmtNum(Math.abs(r), d); }
+  function fmtHM(min) {
+    if (!isNum(min)) return '—';
+    var m = Math.round(Math.abs(min)), h = Math.floor(m / 60), mm = m % 60;
+    return (h < 10 ? '0' : '') + h + ':' + (mm < 10 ? '0' : '') + mm;
+  }
+  function fmtDur(min) {
+    if (!isNum(min)) return '—';
+    var m = Math.round(min);
+    if (m < 60) return m + 'min';
+    var h = Math.floor(m / 60), mm = m % 60;
+    return h.toLocaleString('pt-BR') + 'h' + (mm ? (mm < 10 ? '0' : '') + mm : '');
+  }
+  function fmtDate(ms) {
+    if (!isNum(ms)) return '—';
+    var d = new Date(ms), p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  function plural(n, s, p) { return n === 1 ? s : p; }
+  function mean(a) { return a.reduce(function (s, v) { return s + v; }, 0) / a.length; }
+  function range(a, b) { var out = []; for (var i = a; i <= b; i++) out.push(i); return out; }
+  function uniq(a) { return a.filter(function (v, i) { return a.indexOf(v) === i; }); }
+  function $(id) { return document.getElementById(id); }
+
+  function flag(iso, lg) {
+    if (!iso) return '';
+    var c = String(iso).toLowerCase(), nm = COUNTRY_NAMES[c] || c.toUpperCase();
+    return '<span class="fi fi-' + esc(c) + (lg ? ' lg' : '') + '" role="img" aria-label="' + esc(nm) + '" title="' + esc(nm) + '"></span>';
+  }
+  function countryOfName(name) {
+    var n = fold(name).split(' - ')[0];
+    for (var k in COUNTRY_NAMES) if (fold(COUNTRY_NAMES[k]) === n) return k;
+    return null;
+  }
+
+  /* ---------------------------------------------------------------- status */
+  function hasRefs(r) { return !!r && isNum(r.min) && isNum(r.meta) && isNum(r.des) && r.min <= r.meta && r.meta <= r.des; }
+  function statusOf(v, refs) {
+    if (!isNum(v)) return STATUS.nodata;
+    if (!hasRefs(refs)) return STATUS.none;
+    // Comparação na precisão exibida (2 casas): 99,86% exibido atinge a Meta de 99,86%
+    if (r2(v) < r2(refs.min)) return STATUS.atencao;
+    if (r2(v) < r2(refs.meta)) return STATUS.minimo;
+    if (r2(v) < r2(refs.des)) return STATUS.meta;
+    return STATUS.desafio;
+  }
+  function chip(st, sm) { return '<span class="chip is-' + st.key + (sm ? ' sm' : '') + '"><span class="sym" aria-hidden="true">' + st.symbol + '</span>' + esc(st.label) + '</span>'; }
+  function sdot(st) { return '<span class="sdot is-' + st.key + '" aria-hidden="true"></span>'; }
+
+  /* ------------------------------------------------------------------ deltas */
+  // dir: 'lower' = quanto menor, melhor (incidentes, MTTR, horas); 'higher' = quanto maior, melhor (disponibilidade, OLA).
+  function nobase(txt) { return { cls: 'nobase', arrow: '', txt: txt || 'sem base comparável', d: null }; }
+  function clsFor(d, dir) { return d === 0 ? 'flat' : ((d < 0) === (dir === 'lower') ? 'good' : 'bad'); }
+  function arrowFor(d) { return d === 0 ? '=' : (d < 0 ? '▼' : '▲'); }
+  function deltaCount(cur, prev, dir) {
+    if (!isNum(cur) || !isNum(prev)) return nobase();
+    var d = cur - prev, pct = prev > 0 ? d / prev * 100 : null;
+    return { cls: clsFor(d, dir || 'lower'), arrow: arrowFor(d), d: d, txt: d === 0 ? 'estável' : fmtSigned(d, 0) + (isNum(pct) ? ' (' + fmtSigned(pct, 0) + '%)' : '') };
+  }
+  function deltaMin(cur, prev) {
+    if (!isNum(cur) || !isNum(prev)) return nobase();
+    var d = Math.round(cur) - Math.round(prev);
+    return { cls: clsFor(d, 'lower'), arrow: arrowFor(d), d: d, txt: d === 0 ? 'estável' : (d > 0 ? '+' : '−') + fmtHM(d) };
+  }
+  function deltaDur(cur, prev) {
+    if (!isNum(cur) || !isNum(prev)) return nobase();
+    var d = Math.round(cur) - Math.round(prev), pct = prev > 0 ? d / prev * 100 : null;
+    return { cls: clsFor(d, 'lower'), arrow: arrowFor(d), d: d, txt: d === 0 ? 'estável' : (d > 0 ? '+' : '−') + fmtDur(Math.abs(d)) + (isNum(pct) ? ' (' + fmtSigned(pct, 0) + '%)' : '') };
+  }
+  function deltaPP(cur, prev, dec, dir) {
+    if (!isNum(cur) || !isNum(prev)) return nobase();
+    var f = Math.pow(10, dec), d = (Math.round(cur * f) - Math.round(prev * f)) / f;
+    return { cls: clsFor(d, dir || 'higher'), arrow: arrowFor(d), d: d, txt: fmtSigned(d, dec) + ' p.p.' };
+  }
+  function deltaHtml(dl, vs) {
+    return '<span class="delta ' + dl.cls + '">' + (dl.arrow ? '<span class="arrow" aria-hidden="true">' + dl.arrow + '</span>' : '') + esc(dl.txt) +
+      (vs && dl.cls !== 'nobase' ? ' <span class="vs">vs ' + esc(vs) + '</span>' : '') + '</span>';
+  }
+
+  /* --------------------------------------------- faixa Mínimo · Meta · Desafio */
+  // Escala determinística (mesmo critério do site de Disponibilidade): depende só das referências exibidas.
+  function domainFor(refs) {
+    var mn = r2(refs.min), ch = r2(refs.des), span = ch - mn;
+    if (!(span > 0)) span = 0.1;
+    var lo = mn - span * 0.6, hi = Math.min(100, ch + span * 3);
+    if (hi <= ch) hi = ch + span * 0.1;
+    return [lo, hi];
+  }
+  function bpos(v, d) { return Math.max(0, Math.min(100, (v - d[0]) / (d[1] - d[0]) * 100)); }
+  // o: { lg, labels, prev (valor do mesmo período do ano anterior), prevLabel, curLabel }
+  function bandHtml(refs, value, o) {
+    o = o || {};
+    if (!hasRefs(refs)) return o.lg ? '<div class="no-ref">Referências (Mínimo/Meta/Desafio) não definidas para este item</div>' : '<span class="legend">sem referência</span>';
+    var d = domainFor(refs), mn = r2(refs.min), tg = r2(refs.meta), ch = r2(refs.des);
+    var pMin = bpos(mn, d), pTgt = bpos(tg, d), pCh = bpos(ch, d);
+    var tip = 'Mínimo ' + fmtPct(refs.min) + ' · Meta ' + fmtPct(refs.meta) + ' · Desafio ' + fmtPct(refs.des) +
+      (isNum(value) ? '\n' + (o.curLabel || 'Resultado') + ': ' + fmtPct(value) : '') +
+      (isNum(o.prev) ? '\n' + (o.prevLabel || 'Ano anterior') + ': ' + fmtPct(o.prev) : '');
+    function seg(cls, l, r) { return '<span class="band-seg z-' + cls + '" style="left:' + l.toFixed(2) + '%;width:' + Math.max(0, r - l).toFixed(2) + '%"></span>'; }
+    var h = '<div class="band' + (o.lg ? ' lg' : '') + '" role="img" aria-label="' + esc(tip) + '" data-tip="' + esc(tip) + '"><div class="band-bar"><div class="band-segs">' +
+      seg('atencao', 0, pMin) + seg('minimo', pMin, pTgt) + seg('meta', pTgt, pCh) + seg('desafio', pCh, 100) + '</div>';
+    [pMin, pTgt, pCh].forEach(function (x) { h += '<span class="band-tick" style="left:' + x.toFixed(2) + '%"></span>'; });
+    if (isNum(o.prev)) h += '<span class="band-prev" style="left:' + bpos(r2(o.prev), d).toFixed(2) + '%"></span>';
+    if (isNum(value)) {
+      var v = r2(value), cls = v < d[0] ? ' under' : (v > d[1] ? ' over' : '');
+      h += '<span class="band-now' + cls + '" style="left:' + bpos(v, d).toFixed(2) + '%"></span>';
+    }
+    h += '</div>';
+    if (o.labels) {
+      h += '<div class="band-labels">';
+      [['Mínimo', mn, pMin], ['Meta', tg, pTgt], ['Desafio', ch, pCh]].forEach(function (t) {
+        h += '<span class="band-label" style="left:' + t[2].toFixed(2) + '%">' + (o.lg ? '<span class="k">' + t[0] + '</span>' : '') + '<span class="v num">' + (o.lg ? fmtPct(t[1]) : fmtNum(t[1], 2)) + '</span></span>';
+      });
+      h += '</div>';
+    }
+    return h + '</div>';
+  }
+  function bandLegend(curLabel, prevLabel) {
+    return '<div class="band-legend legend"><span><i class="mk-now"></i>' + esc(curLabel) + '</span>' + (prevLabel ? '<span><i class="mk-prev"></i>' + esc(prevLabel) + '</span>' : '') + '</div>';
+  }
+
+  /* ------------------------------------------------------------------ estado */
+  var D = null;          // payload do ano selecionado
+  var M = null;          // modelo derivado (período/origem)
+  var IDX = { cur: {}, prev: {} };
+  var CACHE = {};
+  var charts = {};
+  var state = { year: null, periodKey: null, origem: 'tec', gran: 'month', sel: 'ol', expanded: {}, chartMetric: 'inc', rank: 'tec', entSort: {}, modal: null };
+  var BASE_URL = (document.body && document.body.getAttribute('data-base-url')) || '';
+
+  /* --------------------------------------------------------------- períodos */
+  function statusInfo(statuses) {
+    var closed = 0, avail = 0, m;
+    for (m = 1; m <= 12 && statuses[m - 1] === 'APURADO'; m++) closed = m;
+    for (m = 1; m <= 12 && statuses[m - 1] !== 'NAO_INICIADO'; m++) avail = m;
+    return { closed: closed, avail: avail };
+  }
+  function buildPeriods(statuses) {
+    var info = statusInfo(statuses), list = [];
+    function add(key, label, months, group) {
+      var pending = months.some(function (m) { return statuses[m - 1] === 'NAO_INICIADO'; });
+      var partial = months.some(function (m) { return statuses[m - 1] === 'PARCIAL'; });
+      list.push({ key: key, label: label, months: months, group: group, disabled: pending || !months.length, partial: partial && !pending });
+    }
+    if (info.closed > 0) add('ytd', (info.closed === 12 ? 'Ano completo · Jan–Dez' : 'YTD · Jan–' + MABBR[info.closed - 1] + ' (apurado)'), range(1, info.closed), 'YTD');
+    if (info.avail > info.closed) add('ytdp', 'YTD · Jan–' + MABBR[info.avail - 1] + ' (inclui parcial)', range(1, info.avail), 'YTD');
+    for (var q = 1; q <= 4; q++) add('q' + q, 'Q' + q + ' · ' + MABBR[(q - 1) * 3] + '–' + MABBR[(q - 1) * 3 + 2], range((q - 1) * 3 + 1, q * 3), 'Trimestres');
+    add('s1', '1º Semestre · Jan–Jun', range(1, 6), 'Semestres');
+    add('s2', '2º Semestre · Jul–Dez', range(7, 12), 'Semestres');
+    for (var m = 1; m <= 12; m++) add('m' + m, MONTHS[m - 1], [m], 'Meses');
+    return list;
+  }
+  function getPeriod(key) {
+    var list = buildPeriods(D.current.statuses);
+    return list.find(function (p) { return p.key === key; }) || list.find(function (p) { return !p.disabled; }) || list[0];
+  }
+  function defaultPeriodKey() {
+    var list = buildPeriods(D.current.statuses);
+    var p = list.find(function (x) { return x.key === 'ytd' && !x.disabled; }) || list.find(function (x) { return x.key === 'ytdp' && !x.disabled; }) || list.find(function (x) { return !x.disabled; });
+    return p ? p.key : 'ytd';
+  }
+  function rangeLabel(months, year) {
+    if (!months.length) return '—';
+    var a = months[0], b = months[months.length - 1];
+    return (a === b ? MABBR[a - 1] : MABBR[a - 1] + '–' + MABBR[b - 1]) + '/' + year;
+  }
+  function quarterIndex(months) {
+    if (months.length !== 3 || (months[0] - 1) % 3 !== 0) return -1;
+    return months[1] === months[0] + 1 && months[2] === months[0] + 2 ? (months[0] - 1) / 3 : -1;
+  }
+  function apuracaoSummary(statuses) {
+    var groups = [], cur = null;
+    statuses.forEach(function (s, i) {
+      if (!cur || cur.s !== s) { cur = { s: s, a: i, b: i }; groups.push(cur); } else cur.b = i;
+    });
+    var nm = { APURADO: ['apurado', 'apurados'], PARCIAL: ['parcial', 'parciais'], NAO_INICIADO: ['não iniciado', 'não iniciados'] };
+    return groups.map(function (g) { return (g.a === g.b ? MABBR[g.a] : MABBR[g.a] + '–' + MABBR[g.b]) + ' ' + nm[g.s][g.a === g.b ? 0 : 1]; }).join(' · ');
+  }
+
+  /* ---------------------------------------------------------- agregações */
+  function passOrigem(r) { return state.origem === 'all' || r.tec; }
+  function filterRows(rows, months) {
+    return rows.filter(function (r) { return months.indexOf(r.m) !== -1 && passOrigem(r); });
+  }
+
+  // Agrega linhas de impacto: Incidentes únicos (KPIs de MTTR/OLA pelo TTR oficial) e pares
+  // Incidente + Localidade/Sistema (impactos), sem duplicar linhas de impacto do mesmo par.
+  function agg(yd, rows) {
+    var T = D.config.targets;
+    var incs = {}, order = [], pairs = {}, pairOrder = [], ents = {};
+    rows.forEach(function (r) {
+      var I = incs[r.inc];
+      if (!I) {
+        var meta = (yd.incidents && yd.incidents[r.inc]) || {};
+        I = incs[r.inc] = {
+          id: r.inc, sevMI: isNum(meta.sev) ? meta.sev : null, sevRow: null, ttrOf: isNum(meta.ttr) ? meta.ttr : null,
+          ttrTxt: meta.ttrTxt || '', origem: meta.origem || 'N/A', foundMI: !!meta.foundMI, rows: [], maxDur: null, ab: null, enc: null,
+          flows: {}, ents: {}, imps: {}, tImp: {}, ofe: {}, prb: {}, mks: {}, tit: '', dImp: '', dOf: '', sol: '', st: r.st, tecTxt: r.tecTxt
+        };
+        order.push(r.inc);
+      }
+      I.rows.push(r);
+      if (isNum(r.sev) && (!isNum(I.sevRow) || r.sev < I.sevRow)) I.sevRow = r.sev;
+      var d = isNum(r.durMi) ? r.durMi : r.dur;
+      if (isNum(d)) I.maxDur = Math.max(I.maxDur || 0, d);
+      if (isNum(r.ab) && (!isNum(I.ab) || r.ab < I.ab)) I.ab = r.ab;
+      if (isNum(r.enc) && (!isNum(I.enc) || r.enc > I.enc)) I.enc = r.enc;
+      I.flows[r.flow] = true; I.ents[r.entName] = true; if (r.imp) I.imps[r.imp] = true;
+      if (r.tImp && r.tImp !== 'N/A') I.tImp[r.tImp] = true;
+      if (r.ofe && r.ofe !== 'N/A') I.ofe[r.ofe] = true;
+      if (r.prb) I.prb[r.prb] = true;
+      if (r.mk) I.mks[r.mk] = true;
+      if (!I.tit && r.tit) I.tit = r.tit;
+      if (!I.dImp && r.dImp) I.dImp = r.dImp;
+      if (!I.dOf && r.dOf) I.dOf = r.dOf;
+      if (!I.sol && r.sol) I.sol = r.sol;
+
+      var pk = r.flow + '|' + r.ent + '|' + r.inc, P = pairs[pk];
+      if (!P) { P = pairs[pk] = { inc: r.inc, flow: r.flow, ent: r.ent, entName: r.entName, dur: null, durCd: null, apd: false }; pairOrder.push(pk); }
+      if (isNum(r.dur)) P.dur = Math.max(P.dur || 0, r.dur);
+      if (isNum(r.durCd)) P.durCd = Math.max(P.durCd || 0, r.durCd);
+      if (r.apd === 'SIM') P.apd = true;
+      ents[r.flow + '|' + r.ent] = true;
+    });
+
+    var n = 0, s0 = 0, s1 = 0, sumT = 0, nT = 0, sum0 = 0, n0 = 0, sum1 = 0, n1 = 0, ok0 = 0, ok1 = 0, out0 = 0, out1 = 0, so0 = 0, so0n = 0, so1 = 0, so1n = 0;
+    var list = order.map(function (id) {
+      var I = incs[id];
+      I.sev = isNum(I.sevMI) ? I.sevMI : I.sevRow;
+      I.ttr = isNum(I.ttrOf) ? I.ttrOf : I.maxDur;
+      n++;
+      if (I.sev === 0) s0++; else if (I.sev === 1) s1++;
+      I.olaOk = null; I.outlier = false;
+      if (isNum(I.ttr)) {
+        sumT += I.ttr; nT++;
+        if (I.sev === 0) { sum0 += I.ttr; n0++; I.olaOk = I.ttr <= T.olaSev0; if (I.olaOk) ok0++; if (I.ttr >= T.outlierSev0) { out0++; I.outlier = true; } else { so0 += I.ttr; so0n++; } }
+        else if (I.sev === 1) { sum1 += I.ttr; n1++; I.olaOk = I.ttr <= T.olaSev1; if (I.olaOk) ok1++; if (I.ttr >= T.outlierSev1) { out1++; I.outlier = true; } else { so1 += I.ttr; so1n++; } }
+      }
+      return I;
+    });
+    var impactMin = 0, nDur = 0, apd = 0;
+    var pairList = pairOrder.map(function (k) {
+      var P = pairs[k];
+      P.d = isNum(P.durCd) ? P.durCd : P.dur;
+      if (isNum(P.d)) { impactMin += P.d; nDur++; }
+      if (P.apd) apd++;
+      if (incs[P.inc]) incs[P.inc].impactMin = (incs[P.inc].impactMin || 0) + (isNum(P.d) ? P.d : 0);
+      return P;
+    });
+    list.sort(function (a, b) { return (b.ab || 0) - (a.ab || 0); });
+    return {
+      incidents: n, sev0: s0, sev1: s1,
+      mttr: nT ? sumT / nT : null, mttr0: n0 ? sum0 / n0 : null, mttr1: n1 ? sum1 / n1 : null,
+      mttrSO0: so0n ? so0 / so0n : null, mttrSO1: so1n ? so1 / so1n : null,
+      out0: out0, out1: out1, n0: n0, n1: n1,
+      ola: (n0 + n1) ? (ok0 + ok1) / (n0 + n1) * 100 : null, ola0: n0 ? ok0 / n0 * 100 : null, ola1: n1 ? ok1 / n1 * 100 : null, olaBase: n0 + n1,
+      pairs: pairList.length, impactMin: pairList.length ? (nDur ? impactMin : null) : 0, avgImpact: nDur ? impactMin / nDur : null,
+      entities: Object.keys(ents).length, apdPairs: apd, list: list, pairList: pairList
+    };
+  }
+
+  /* ----------------------------------------------- disponibilidade (oficial) */
+  function indexDisp(dd) {
+    var idx = {};
+    if (!dd || !dd.found) return idx;
+    function walk(n, path) {
+      n._path = path; idx[path] = n;
+      var seen = {};
+      (n.children || []).forEach(function (c) {
+        var p = path + '/' + fold(c.name);
+        seen[p] = (seen[p] || 0) + 1;
+        if (seen[p] > 1) p += '~' + seen[p];
+        walk(c, p);
+      });
+    }
+    if (dd.ol) walk(dd.ol, 'ol');
+    Object.keys(dd.flows || {}).forEach(function (k) { walk(dd.flows[k], 'f:' + k); });
+    return idx;
+  }
+  function periodValue(node, months, statuses) {
+    if (!node || !months.length) return null;
+    if (months.some(function (m) { return statuses[m - 1] === 'NAO_INICIADO'; })) return { v: null, pending: true };
+    var partial = months.some(function (m) { return statuses[m - 1] === 'PARCIAL'; });
+    var vals = months.map(function (m) { return node.months[m - 1]; });
+    if (vals.some(function (v) { return !isNum(v); })) return { v: null, missing: true, partial: partial };
+    var q = quarterIndex(months);
+    if (q >= 0 && isNum(node.quarters[q])) return { v: node.quarters[q], partial: partial, official: true };
+    if (months.length === 12 && isNum(node.fullYear)) return { v: node.fullYear, partial: partial, official: true };
+    if (months.length === 1) return { v: vals[0], partial: partial, official: true };
+    return { v: mean(vals), partial: partial, official: false };
+  }
+  function dispFor(path, months) {
+    var node = IDX.cur[path] || null, pnode = IDX.prev[path] || null;
+    var c = periodValue(node, months, D.current.statuses), p = periodValue(pnode, months, D.previous.statuses);
+    var refs = node ? { min: node.min, meta: node.meta, des: node.des } : null;
+    var cv = c && c.v, pv = p && p.v;
+    return { path: path, node: node, pnode: pnode, cur: c, prev: p, cv: cv, pv: pv, refs: refs, status: statusOf(cv, refs), delta: deltaPP(cv, pv, 2, 'higher'), gap: isNum(cv) && hasRefs(refs) ? r2(cv) - r2(refs.meta) : null };
+  }
+  function matchDispPath(flowKey, e) {
+    var prefix = 'f:' + flowKey + '/';
+    var cands = Object.keys(IDX.cur).filter(function (p) { return p.indexOf(prefix) === 0; });
+    if (!cands.length) return null;
+    var nm = fold(e.name), aliases = ((e.catalog && e.catalog.aliases) || []).map(fold);
+    var byLevel = function (a, b) { return IDX.cur[a].level - IDX.cur[b].level; };
+    var hit = cands.find(function (p) { return fold(IDX.cur[p].name) === nm; });
+    if (!hit && e.kind === 'sistema') {
+      var kws = ((e.catalog && e.catalog.keywords) || [nm]).map(fold);
+      hit = cands.filter(function (p) { var n = fold(IDX.cur[p].name); return kws.some(function (k) { return matchKw(n, k); }); }).sort(byLevel)[0];
+    }
+    if (!hit && e.kind !== 'sistema' && !e.unnamed) {
+      hit = cands.filter(function (p) {
+        var n = fold(IDX.cur[p].name);
+        return n.indexOf(nm) !== -1 || aliases.some(function (a) { return n.indexOf(a) !== -1; });
+      }).sort(byLevel)[0];
+    }
+    return hit || null;
+  }
+
+  /* ----------------------------------------------------------- entidades */
+  function buildEntities(f, rowsCur, rowsPrev, months) {
+    var map = {}, order = [];
+    var catalog = (D.config.catalog && D.config.catalog[f.key]) || [];
+    catalog.forEach(function (c, i) {
+      var key = (f.entityType === 'sistema' ? 'sys:' : 'loc:') + fold(c.name);
+      map[key] = { key: key, name: c.name, kind: c.kind, country: c.country || '', order: i, catalog: c, curRows: [], prevRows: [] };
+      order.push(key);
+    });
+    function ensure(r) {
+      if (!map[r.ent]) { map[r.ent] = { key: r.ent, name: r.entName, kind: r.entKind, country: r.entCc, order: 1000 + order.length, catalog: null, unnamed: r.entUnnamed, curRows: [], prevRows: [] }; order.push(r.ent); }
+      return map[r.ent];
+    }
+    rowsCur.forEach(function (r) { ensure(r).curRows.push(r); });
+    (rowsPrev || []).forEach(function (r) { ensure(r).prevRows.push(r); });
+    var cy = D.current.year, py = D.previous.year;
+    return order.map(function (k) {
+      var e = map[k];
+      e.cur = agg(D.current, e.curRows);
+      e.prev = rowsPrev ? agg(D.previous, e.prevRows) : null;
+      e.countries = uniq(e.curRows.concat(e.prevRows).map(function (r) { return r.mk; }).filter(Boolean));
+      var c = e.catalog || {};
+      e.retired = !!(c.years && c.years.indexOf(cy) === -1);
+      e.noPrevBase = !e.retired && !!(c.years && c.years.indexOf(py) === -1);
+      e.inactive = !!(c.inactiveAfterYear && cy > c.inactiveAfterYear);
+      var path = matchDispPath(f.key, e);
+      e.disp = path ? dispFor(path, months) : null;
+      return e;
+    }).filter(function (e) {
+      if (e.curRows.length || e.prevRows.length) return true;
+      if (e.key === 'sys:outros') return false;
+      return !e.retired && !e.inactive;
+    });
+  }
+
+  /* --------------------------------------------------------------- modelo */
+  function computeModel() {
+    var cur = D.current, prev = D.previous;
+    var per = getPeriod(state.periodKey);
+    var months = per.months;
+    var prevOk = !!prev.impactsFound && months.every(function (m) { return prev.statuses[m - 1] !== 'NAO_INICIADO'; });
+    var labels = { cur: rangeLabel(months, cur.year), prev: rangeLabel(months, prev.year), curYear: String(cur.year), prevYear: String(prev.year) };
+    var rowsCur = filterRows(cur.rows, months), rowsPrev = prevOk ? filterRows(prev.rows, months) : null;
+    var overall = { cur: agg(cur, rowsCur), prev: rowsPrev ? agg(prev, rowsPrev) : null };
+    var flows = D.config.flows.map(function (f) {
+      var rc = rowsCur.filter(function (r) { return r.flow === f.key; });
+      var rp = rowsPrev ? rowsPrev.filter(function (r) { return r.flow === f.key; }) : null;
+      return { cfg: f, rowsCur: rc, rowsPrev: rp, cur: agg(cur, rc), prev: rp ? agg(prev, rp) : null, disp: dispFor('f:' + f.key, months), entities: buildEntities(f, rc, rp, months) };
+    });
+    return {
+      per: per, months: months, prevOk: prevOk, labels: labels, rowsCur: rowsCur, rowsPrev: rowsPrev, overall: overall, flows: flows,
+      olDisp: dispFor('ol', months), unmatchedCur: rowsCur.filter(function (r) { return r.flow === 'outros'; })
+    };
+  }
+
+  /* ============================================================ RENDER */
+  function renderAll() {
+    destroyCharts();
+    M = computeModel();
+    renderStamp();
+    renderResumo();
+    renderIncidentes();
+    renderFlows();
+    renderDisponibilidade();
+    renderFoot();
+    setupScrollSpy();
+  }
+
+  function renderStamp() {
+    var s = 'Atualizado em ' + (D.lastUpdated || 'N/A') + ' · Apuração ' + D.current.year + ': ' + apuracaoSummary(D.current.statuses);
+    $('ol-stamp').textContent = s;
+    $('ol-stamp').title = s;
+  }
+
+  function sectionHead(ic, eyebrow, title, sub, actions) {
+    return '<div class="sec-head">' + tile(ic, 'lg') + '<div class="titles"><div class="eyebrow">' + eyebrow + '</div><h2>' + title + '</h2>' +
+      (sub ? '<div class="sub">' + sub + '</div>' : '') + '</div>' + (actions ? '<div class="sec-actions">' + actions + '</div>' : '') + '</div>';
+  }
+
+  function periodNotices() {
+    var h = '', per = M.per, info = statusInfo(D.current.statuses);
+    if (per.partial) {
+      var pm = per.months.filter(function (m) { return D.current.statuses[m - 1] === 'PARCIAL'; }).map(function (m) { return MONTHS[m - 1]; });
+      h += '<div class="notice">' + icon('alert') + '<div><b>Apuração parcial:</b> o período inclui ' + esc(pm.join(', ')) + ' com apuração parcial — incidentes e disponibilidade ainda podem mudar (dados provisórios).</div></div>';
+    } else if (state.periodKey === 'ytd' && info.avail > info.closed) {
+      h += '<div class="notice is-info">' + icon('info') + '<div>' + esc(MONTHS[info.avail - 1]) + ' está em apuração parcial e não entra no YTD fechado. Para incluí-lo, selecione <b>YTD · Jan–' + MABBR[info.avail - 1] + ' (inclui parcial)</b> no filtro de Período.</div></div>';
+    }
+    if (!D.previous.impactsFound) h += '<div class="notice is-info">' + icon('info') + '<div>Aba <b>Major_Incidents_Impactos_' + D.previous.year + '</b> não encontrada: os comparativos de incidentes com ' + D.previous.year + ' ficam sem base.</div></div>';
+    if (!D.current.impactsFound) h += '<div class="notice">' + icon('alert') + '<div>Aba <b>Major_Incidents_Impactos_' + D.current.year + '</b> não encontrada na planilha.</div></div>';
+    return h;
+  }
+
+  /* ------------------------------------------------------- Resumo executivo */
+  function renderResumo() {
+    var L = M.labels, od = M.olDisp, c = M.overall.cur, p = M.overall.prev;
+    var tag = od.cur && od.cur.partial ? '<span class="tag is-partial">◔ Apuração parcial</span>' : (isNum(od.cv) ? '<span class="tag is-closed">● Período fechado</span>' : '');
+    var gapTxt = isNum(od.gap) ? (od.gap === 0 ? 'na Meta' : fmtNum(Math.abs(od.gap), 2) + ' p.p. ' + (od.gap > 0 ? 'acima' : 'abaixo') + ' da Meta') : '';
+    var calc = od.cur && od.cur.official === false ? ' <span class="info-i" data-tip="Consolidado do período calculado pela média simples dos meses oficiais da aba Disponibilidade_' + D.current.year + ' (mesmo método aplicado ao ano anterior).">i</span>' : '';
+    var heroLeft = '<div class="hero-kpi"><div class="eyebrow">Disponibilidade O&amp;L · ' + esc(L.cur) + calc + '</div>' +
+      '<div class="value num">' + (isNum(od.cv) ? fmtNum(od.cv, 2) + '<small>%</small>' : '<span class="muted" style="font-size:22px">sem dado no período</span>') + '</div>' +
+      '<div class="hero-meta">' + deltaHtml(od.delta, L.prev) + (isNum(od.cv) ? chip(od.status) : '') + tag + '</div>' +
+      (gapTxt ? '<div class="legend">' + esc(gapTxt) + (isNum(od.pv) ? ' · ' + esc(L.prev) + ': ' + fmtPct(od.pv) : '') + '</div>' : '') +
+      '<div class="hero-ruler">' + bandHtml(od.refs, od.cv, { lg: true, labels: true, prev: od.pv, curLabel: L.cur, prevLabel: L.prev }) + '</div>' +
+      (hasRefs(od.refs) ? bandLegend(L.cur, isNum(od.pv) ? L.prev + ' (mesmo período)' : '') : '') +
+      (IDX.cur.ol ? '<div class="eyebrow" style="margin-top:18px">Disponibilidade O&amp;L · comparativos em p.p. vs ' + D.previous.year + '</div>' + ppGridHtml('ol') : '') + '</div>';
+
+    function row(label, cv, pv, dl, cls) {
+      return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + label + '</td><td class="cur">' + cv + '</td><td class="prev">' + pv + '</td><td>' + deltaHtml(dl) + '</td></tr>';
+    }
+    var P = p || {};
+    var table = '<div class="tbl-scroll"><table class="cmp-table"><thead><tr><th>Indicador</th><th>' + esc(L.cur) + '</th><th>' + esc(L.prev) + '</th><th>Variação</th></tr></thead><tbody>' +
+      row('Incidentes O&amp;L', fmtInt(c.incidents), p ? fmtInt(P.incidents) : '—', deltaCount(c.incidents, p ? P.incidents : null, 'lower')) +
+      row('<span class="sev-dot s0"></span>Sev 0', fmtInt(c.sev0), p ? fmtInt(P.sev0) : '—', deltaCount(c.sev0, p ? P.sev0 : null, 'lower'), 'sub-row') +
+      row('<span class="sev-dot s1"></span>Sev 1', fmtInt(c.sev1), p ? fmtInt(P.sev1) : '—', deltaCount(c.sev1, p ? P.sev1 : null, 'lower'), 'sub-row') +
+      row('MTTR (geral)', fmtHM(c.mttr), p ? fmtHM(P.mttr) : '—', deltaMin(c.mttr, p ? P.mttr : null)) +
+      row('Aderência ao OLA', fmtPct(c.ola, 1), p ? fmtPct(P.ola, 1) : '—', deltaPP(c.ola, p ? P.ola : null, 1, 'higher')) +
+      row('Impactos (Incidente × Localidade)', fmtInt(c.pairs), p ? fmtInt(P.pairs) : '—', deltaCount(c.pairs, p ? P.pairs : null, 'lower')) +
+      row('Horas de impacto nas localidades', fmtDur(c.impactMin), p ? fmtDur(P.impactMin) : '—', deltaDur(c.impactMin, p ? P.impactMin : null)) +
+      '</tbody></table></div>';
+    var heroRight = '<div><div class="eyebrow" style="margin-bottom:10px">' + esc(L.cur) + ' vs mesmo período de ' + esc(L.prevYear) + '</div>' + table +
+      '<div class="legend" style="margin-top:8px">Incidentes de O&amp;L = Stream O&amp;L ou Planejamento Logístico (aba Major_Incidents_Impactos_' + D.current.year + ')' +
+      (state.origem === 'tec' ? ', origem Tecnologia' : ', todas as origens') + '. MTTR/OLA pelo TTR oficial do Incidente (MajorIncidentes).</div></div>';
+
+    var tiles = '<div class="flow-tiles">' + M.flows.map(function (f) {
+      var d = f.disp, st = d.status;
+      return '<button type="button" class="flow-tile" data-action="goto" data-target="sec-flow-' + f.cfg.key + '">' +
+        '<div class="ft-head">' + tile(f.cfg.icon, 'sm') + '<span class="ft-name">' + esc(f.cfg.short) + '</span></div>' +
+        '<div class="ft-row"><span class="ft-val num">' + (isNum(d.cv) ? fmtPct(d.cv) : '<span class="muted" style="font-size:14px">sem dado</span>') + '</span>' + (isNum(d.cv) ? chip(st, true) : '') + '</div>' +
+        '<div class="ft-row">' + deltaHtml(d.delta, L.prevYear) + '</div>' +
+        bandHtml(d.refs, d.cv, { prev: d.pv, curLabel: L.cur, prevLabel: L.prev }) +
+        '<div class="ft-row legend"><span>' + f.cur.incidents + ' ' + plural(f.cur.incidents, 'incidente', 'incidentes') + ' · ' + fmtDur(f.cur.impactMin) + '</span>' + deltaHtml(deltaCount(f.cur.incidents, f.prev ? f.prev.incidents : null, 'lower')) + '</div>' +
+        '</button>';
+    }).join('') + '</div>';
+
+    var ins = buildInsights();
+    var insHtml = ins.length ? '<div class="insights"><div class="eyebrow">' + icon('spark').replace('class="ico"', 'class="ico" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px"') + 'Leitura executiva</div><ul>' + ins.map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ul></div>' : '';
+
+    $('sec-resumo').innerHTML = sectionHead('truck', 'Visão O&amp;L · Resumo executivo', 'Operação &amp; Logística — ' + esc(L.cur) + ' vs ' + esc(L.prev),
+      'Comparativos sempre contra o mesmo período do ano anterior. Períodos considerados conforme a aba Status_Apuracao.') +
+      periodNotices() + '<div class="hero">' + heroLeft + heroRight + '</div>' + tiles + insHtml;
+  }
+
+  function buildInsights() {
+    var L = M.labels, od = M.olDisp, out = [], c = M.overall.cur, p = M.overall.prev;
+    if (isNum(od.cv)) {
+      out.push('Disponibilidade de O&amp;L em ' + esc(L.cur) + ': <b>' + fmtPct(od.cv) + '</b>' +
+        (isNum(od.pv) ? ' (<b>' + esc(od.delta.txt) + '</b> vs ' + esc(L.prev) + ')' : '') + ' — status <b>' + esc(od.status.label) + '</b>' +
+        (isNum(od.gap) ? ' (' + fmtSigned(od.gap, 2) + ' p.p. vs Meta)' : '') + '.');
+    }
+    var fl = M.flows.filter(function (f) { return isNum(f.disp.cv) && isNum(f.disp.pv); }).map(function (f) { return { f: f, d: f.disp.delta.d }; });
+    if (fl.length > 1) {
+      fl.sort(function (a, b) { return b.d - a.d; });
+      var best = fl[0], worst = fl[fl.length - 1];
+      out.push('Maior evolução vs ' + esc(L.prevYear) + ': <b>' + esc(best.f.cfg.short) + '</b> (' + fmtSigned(best.d, 2) + ' p.p.)' +
+        (worst.d < best.d ? '; maior retração: <b>' + esc(worst.f.cfg.short) + '</b> (' + fmtSigned(worst.d, 2) + ' p.p.)' : '') + '.');
+    }
+    var below = M.flows.filter(function (f) { return isNum(f.disp.cv) && (f.disp.status.key === 'atencao' || f.disp.status.key === 'minimo'); });
+    if (below.length) out.push('Abaixo da Meta no período: ' + below.map(function (f) { return '<b>' + esc(f.cfg.short) + '</b> (' + fmtPct(f.disp.cv) + ', ' + esc(f.disp.status.label) + ')'; }).join('; ') + '.');
+    else if (M.flows.some(function (f) { return isNum(f.disp.cv); })) out.push('Todos os fluxos com dado no período estão na Meta ou acima.');
+    out.push('<b>' + c.incidents + '</b> ' + plural(c.incidents, 'incidente', 'incidentes') + ' de O&amp;L (' + c.sev0 + ' Sev 0 · ' + c.sev1 + ' Sev 1)' +
+      (p ? ', ' + esc(deltaCount(c.incidents, p.incidents, 'lower').txt) + ' vs ' + p.incidents + ' em ' + esc(L.prev) : '') + '.');
+    if (isNum(c.mttr)) {
+      out.push('MTTR <b>' + fmtHM(c.mttr) + '</b>' + (p && isNum(p.mttr) ? ' (' + esc(deltaMin(c.mttr, p.mttr).txt) + ' vs ' + fmtHM(p.mttr) + ')' : '') +
+        (isNum(c.ola) ? ' · Aderência ao OLA <b>' + fmtPct(c.ola, 1) + '</b>' + (p && isNum(p.ola) ? ' (' + esc(deltaPP(c.ola, p.ola, 1).txt) + ')' : '') : '') + '.');
+    }
+    var all = [];
+    M.flows.forEach(function (f) { f.entities.forEach(function (e) { if (e.cur.incidents > 0) all.push({ f: f, e: e }); }); });
+    all.sort(function (a, b) { return (b.e.cur.impactMin || 0) - (a.e.cur.impactMin || 0) || b.e.cur.incidents - a.e.cur.incidents; });
+    if (all.length) {
+      var t = all[0];
+      out.push('Maior impacto acumulado: <b>' + esc(t.e.name) + '</b> (' + esc(t.f.cfg.short) + ') — ' + t.e.cur.incidents + ' ' + plural(t.e.cur.incidents, 'incidente', 'incidentes') + ' e ' + fmtDur(t.e.cur.impactMin) + ' de impacto.');
+    }
+    return out;
+  }
+
+  /* ------------------------------------------------------- Incidentes O&L */
+  function kpiTarget(label, v, target) {
+    if (!isNum(v)) return '';
+    return v <= target ? '<span class="target-ok">✓ ' + label + ' na meta</span>' : '<span class="target-bad">✕ ' + label + ' acima da meta</span>';
+  }
+  function renderIncidentes() {
+    var L = M.labels, c = M.overall.cur, p = M.overall.prev, T = D.config.targets, P = p || {};
+    var vs = L.prevYear;
+    var cards =
+      '<div class="kpi"><div class="kpi-head"><span class="eyebrow">Volume de incidentes</span>' + tile('alert', 'sm') + '</div>' +
+      '<div class="kpi-value num">' + fmtInt(c.incidents) + '</div>' + deltaHtml(deltaCount(c.incidents, p ? P.incidents : null, 'lower'), vs) +
+      '<div class="kpi-split"><div><div class="legend"><span class="sev-dot s0"></span>Sev 0</div><div class="v">' + c.sev0 + '</div>' + deltaHtml(deltaCount(c.sev0, p ? P.sev0 : null, 'lower')) + '</div>' +
+      '<div><div class="legend"><span class="sev-dot s1"></span>Sev 1</div><div class="v">' + c.sev1 + '</div>' + deltaHtml(deltaCount(c.sev1, p ? P.sev1 : null, 'lower')) + '</div></div></div>' +
+
+      '<div class="kpi"><div class="kpi-head"><span class="eyebrow">MTTR bruto</span>' + tile('clock', 'sm') + '</div>' +
+      '<div class="kpi-value num">' + fmtHM(c.mttr) + '</div>' + deltaHtml(deltaMin(c.mttr, p ? P.mttr : null), vs) +
+      '<div class="kpi-split"><div><div class="legend"><span class="sev-dot s0"></span>Sev 0 · meta ' + fmtHM(T.mttrSev0) + '</div><div class="v">' + fmtHM(c.mttr0) + '</div>' + deltaHtml(deltaMin(c.mttr0, p ? P.mttr0 : null)) + '</div>' +
+      '<div><div class="legend"><span class="sev-dot s1"></span>Sev 1 · meta ' + fmtHM(T.mttrSev1) + '</div><div class="v">' + fmtHM(c.mttr1) + '</div>' + deltaHtml(deltaMin(c.mttr1, p ? P.mttr1 : null)) + '</div></div>' +
+      '<div class="kpi-foot">' + [kpiTarget('Sev 0', c.mttr0, T.mttrSev0), kpiTarget('Sev 1', c.mttr1, T.mttrSev1)].filter(Boolean).join(' · ') + '</div></div>' +
+
+      '<div class="kpi"><div class="kpi-head"><span class="eyebrow">MTTR s/ outliers <span class="info-i" data-tip="Desconsidera incidentes com TTR ≥ ' + fmtHM(T.outlierSev0) + ' (Sev 0) e ≥ ' + fmtHM(T.outlierSev1) + ' (Sev 1). Metas: Sev 0 ≤ ' + fmtHM(T.mttrSemOutliersSev0) + ' e Sev 1 ≤ ' + fmtHM(T.mttrSemOutliersSev1) + '.">i</span></span>' + tile('target', 'sm') + '</div>' +
+      '<div class="kpi-split" style="border-top:0;padding-top:0"><div><div class="legend"><span class="sev-dot s0"></span>Sev 0 · meta ' + fmtHM(T.mttrSemOutliersSev0) + '</div><div class="kpi-value md num">' + fmtHM(c.mttrSO0) + '</div>' + deltaHtml(deltaMin(c.mttrSO0, p ? P.mttrSO0 : null)) + '<div class="legend">' + c.out0 + ' ' + plural(c.out0, 'outlier', 'outliers') + '</div></div>' +
+      '<div><div class="legend"><span class="sev-dot s1"></span>Sev 1 · meta ' + fmtHM(T.mttrSemOutliersSev1) + '</div><div class="kpi-value md num">' + fmtHM(c.mttrSO1) + '</div>' + deltaHtml(deltaMin(c.mttrSO1, p ? P.mttrSO1 : null)) + '<div class="legend">' + c.out1 + ' ' + plural(c.out1, 'outlier', 'outliers') + '</div></div></div></div>' +
+
+      '<div class="kpi' + (isNum(c.ola) && p && isNum(P.ola) && c.ola < P.ola ? ' is-alert' : '') + '"><div class="kpi-head"><span class="eyebrow">Aderência ao OLA <span class="info-i" data-tip="Incidentes resolvidos dentro do OLA: Sev 0 ≤ ' + fmtHM(T.olaSev0) + ' e Sev 1 ≤ ' + fmtHM(T.olaSev1) + ' (TTR oficial do Major Incident).">i</span></span>' + tile('check', 'sm') + '</div>' +
+      '<div class="kpi-value num">' + (isNum(c.ola) ? fmtPct(c.ola, 1) : '<span class="muted" style="font-size:16px">Sem incidentes</span>') + '</div>' + deltaHtml(deltaPP(c.ola, p ? P.ola : null, 1, 'higher'), vs) +
+      '<div class="kpi-split"><div><div class="legend"><span class="sev-dot s0"></span>Sev 0 · ≤ ' + fmtHM(T.olaSev0) + '</div><div class="v">' + fmtPct(c.ola0, 1) + '</div>' + deltaHtml(deltaPP(c.ola0, p ? P.ola0 : null, 1, 'higher')) + '</div>' +
+      '<div><div class="legend"><span class="sev-dot s1"></span>Sev 1 · ≤ ' + fmtHM(T.olaSev1) + '</div><div class="v">' + fmtPct(c.ola1, 1) + '</div>' + deltaHtml(deltaPP(c.ola1, p ? P.ola1 : null, 1, 'higher')) + '</div></div></div>' +
+
+      '<div class="kpi"><div class="kpi-head"><span class="eyebrow">Impactos nas localidades <span class="info-i" data-tip="Impacto = par Incidente + Localidade/Sistema (várias linhas de impacto do mesmo incidente na mesma localidade contam uma vez). Horas = soma da duração do impacto de cada par.">i</span></span>' + tile('pin', 'sm') + '</div>' +
+      '<div class="kpi-value num">' + fmtInt(c.pairs) + '</div>' + deltaHtml(deltaCount(c.pairs, p ? P.pairs : null, 'lower'), vs) +
+      '<div class="kpi-split"><div><div class="legend">Horas de impacto</div><div class="v">' + fmtDur(c.impactMin) + '</div>' + deltaHtml(deltaDur(c.impactMin, p ? P.impactMin : null)) + '</div>' +
+      '<div><div class="legend">Localidades / sistemas</div><div class="v">' + fmtInt(c.entities) + '</div>' + deltaHtml(deltaCount(c.entities, p ? P.entities : null, 'lower')) + '</div></div>' +
+      '<div class="kpi-foot">' + c.apdPairs + ' de ' + c.pairs + ' ' + plural(c.pairs, 'impacto apurado', 'impactos apurados') + ' no indicador de Disponibilidade</div></div>';
+
+    var unmatched = M.unmatchedCur.length ? '<div class="notice is-info" style="margin-top:14px">' + icon('info') + '<div>' + M.unmatchedCur.length + ' ' + plural(M.unmatchedCur.length, 'linha de impacto', 'linhas de impacto') + ' de O&amp;L sem fluxo mapeado pelas palavras-chave (contam no total de O&amp;L, mas não em nenhum fluxo): ' +
+      esc(uniq(M.unmatchedCur.map(function (r) { return r.imp || '(vazio)'; })).slice(0, 8).join(', ')) + '.</div></div>' : '';
+
+    var chartPanel = '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('chart') + 'Evolução mensal — ' + D.current.year + ' vs ' + D.previous.year + '</div>' +
+      '<div class="seg" id="ol-evo-metric">' + [['inc', 'Incidentes'], ['mttr', 'MTTR (h)'], ['imp', 'Horas de impacto']].map(function (o) { return '<button type="button" data-v="' + o[0] + '"' + (state.chartMetric === o[0] ? ' class="is-active"' : '') + '>' + o[1] + '</button>'; }).join('') + '</div></div>' +
+      '<div class="chart-box"><canvas id="ol-chart-evo"></canvas></div><div class="legend" style="margin-top:6px">Barras escuras = meses do período selecionado. Meses não iniciados na apuração não são exibidos.</div></div>';
+
+    var rankPanel = '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('list') + 'Principais ofensores do período</div>' +
+      '<div class="seg" id="ol-rank-tab">' + [['tec', 'Tecnologia impactada'], ['ofe', 'Ofensor'], ['loc', 'Localidade / Sistema']].map(function (o) { return '<button type="button" data-v="' + o[0] + '"' + (state.rank === o[0] ? ' class="is-active"' : '') + '>' + o[1] + '</button>'; }).join('') + '</div></div>' +
+      '<div id="ol-rank-body">' + rankHtml() + '</div></div>';
+
+    $('sec-incidentes').innerHTML = sectionHead('alert', 'Visão Geral de Incidentes de O&amp;L', 'Incidentes de O&amp;L — todos os fluxos',
+      'Mesmos KPIs da Visão Geral (Volume, MTTR, MTTR s/ outliers e Aderência ao OLA), com comparativo vs ' + esc(L.prev) + '.',
+      '<button type="button" class="btn btn-accent" data-action="open-all">' + icon('list') + 'Ver incidentes (' + c.incidents + ')</button>') +
+      '<div class="grid cols-5">' + cards + '</div>' + unmatched +
+      '<div class="grid cols-2" style="margin-top:14px">' + chartPanel + rankPanel + '</div>';
+    drawEvoChart();
+  }
+
+  function rankHtml() {
+    var keyOf = { tec: function (r) { return r.tImp; }, ofe: function (r) { return r.ofe; }, loc: function (r) { return r.entName; } }[state.rank];
+    function count(rows) {
+      var m = {};
+      (rows || []).forEach(function (r) { var k = keyOf(r); if (!k || k === 'N/A') return; (m[k] = m[k] || {})[r.inc] = true; });
+      var out = {};
+      Object.keys(m).forEach(function (k) { out[k] = Object.keys(m[k]).length; });
+      return out;
+    }
+    var cc = count(M.rowsCur), pc = M.rowsPrev ? count(M.rowsPrev) : null;
+    var keys = Object.keys(cc).sort(function (a, b) { return cc[b] - cc[a] || a.localeCompare(b); }).slice(0, 8);
+    if (!keys.length) return '<div class="empty">Sem incidentes no período.</div>';
+    var max = cc[keys[0]];
+    return '<div class="rank-head"><span>#</span><span>Item</span><span></span><span>' + esc(M.labels.curYear) + '</span><span>vs ' + esc(M.labels.prevYear) + '</span></div><ul class="rank-list">' +
+      keys.map(function (k, i) {
+        var dl = deltaCount(cc[k], pc ? (pc[k] || 0) : null, 'lower');
+        return '<li><span class="pos">' + (i + 1) + '</span><span class="nm" title="' + esc(k) + '">' + esc(k) + '</span><span class="bar"><span style="width:' + (cc[k] / max * 100).toFixed(1) + '%"></span></span><span class="ct">' + cc[k] + '</span><span class="dl">' + deltaHtml({ cls: dl.cls, arrow: dl.arrow, txt: dl.cls === 'nobase' ? '—' : fmtSigned(dl.d, 0) }) + '</span></li>';
+      }).join('') + '</ul>';
+  }
+
+  function monthlySeries(yd) {
+    var out = [];
+    for (var m = 1; m <= 12; m++) {
+      if (yd.statuses[m - 1] === 'NAO_INICIADO' || !yd.impactsFound) { out.push(null); continue; }
+      out.push(agg(yd, yd.rows.filter(function (r) { return r.m === m && passOrigem(r); })));
+    }
+    return out;
+  }
+  function drawEvoChart() {
+    var cv = $('ol-chart-evo');
+    if (!cv || !window.Chart) return;
+    var cs = monthlySeries(D.current), ps = monthlySeries(D.previous), metric = state.chartMetric;
+    var val = function (a) { if (!a) return null; if (metric === 'inc') return a.incidents; if (metric === 'mttr') return isNum(a.mttr) ? Math.round(a.mttr / 6) / 10 : null; return isNum(a.impactMin) ? Math.round(a.impactMin / 6) / 10 : 0; };
+    var inPer = function (i) { return M.months.indexOf(i + 1) !== -1; };
+    var curColors = cs.map(function (_, i) { return inPer(i) ? '#FF6D00' : 'rgba(255,109,0,.28)'; });
+    var curBorders = cs.map(function (_, i) { return D.current.statuses[i] === 'PARCIAL' ? '#7a5410' : 'transparent'; });
+    charts.evo = new Chart(cv, {
+      type: 'bar',
+      data: {
+        labels: MABBR,
+        datasets: [
+          { label: String(D.current.year), data: cs.map(val), backgroundColor: curColors, borderColor: curBorders, borderWidth: 1.5, borderRadius: 2, maxBarThickness: 26 },
+          { label: String(D.previous.year), data: ps.map(val), backgroundColor: ps.map(function (_, i) { return inPer(i) ? '#8E9A84' : 'rgba(142,154,132,.35)'; }), borderRadius: 2, maxBarThickness: 26 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', align: 'end', labels: { boxWidth: 10, boxHeight: 10, font: { size: 11 } } },
+          tooltip: { callbacks: { label: function (ctx) { var v = ctx.parsed.y; if (v === null || v === undefined) return ctx.dataset.label + ': —'; return ctx.dataset.label + ': ' + (metric === 'inc' ? v + ' incidente(s)' : fmtNum(v, 1) + ' h') + (ctx.datasetIndex === 0 && D.current.statuses[ctx.dataIndex] === 'PARCIAL' ? ' (apuração parcial)' : ''); } } },
+          datalabels: { display: function (ctx) { var v = ctx.dataset.data[ctx.dataIndex]; return v !== null && v !== undefined && v !== 0; }, anchor: 'end', align: 'end', offset: -2, font: { size: 9.5, weight: '700' }, color: '#333D20', formatter: function (v) { return metric === 'inc' ? v : fmtNum(v, 1); } }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+          y: { beginAtZero: true, grace: '12%', grid: { color: 'rgba(51,61,32,.08)' }, ticks: { precision: metric === 'inc' ? 0 : undefined, font: { size: 10 } } }
+        }
+      }
+    });
+  }
+
+  /* --------------------------------------------------------------- Fluxos */
+  function renderFlows() {
+    var L = M.labels;
+    $('ol-flows').innerHTML = M.flows.map(function (f) {
+      var d = f.disp, c = f.cur, p = f.prev, P = p || {};
+      var calc = d.cur && d.cur.official === false ? ' <span class="info-i" data-tip="Consolidado calculado pela média simples dos meses oficiais (mesmo método no ano anterior).">i</span>' : '';
+      var dispBlock = '<div class="flow-disp"><div class="eyebrow">Disponibilidade · ' + esc(L.cur) + calc + '</div>' +
+        '<div class="value num">' + (isNum(d.cv) ? fmtPct(d.cv) : '<span class="muted" style="font-size:18px">sem dado no período</span>') + '</div>' +
+        '<div class="hero-meta">' + deltaHtml(d.delta, L.prev) + (isNum(d.cv) ? chip(d.status) : '') + (d.cur && d.cur.partial ? '<span class="tag is-partial">◔ parcial</span>' : '') + '</div>' +
+        (isNum(d.gap) ? '<div class="legend">' + (d.gap === 0 ? 'na Meta' : fmtNum(Math.abs(d.gap), 2) + ' p.p. ' + (d.gap > 0 ? 'acima' : 'abaixo') + ' da Meta') + (isNum(d.pv) ? ' · ' + esc(L.prev) + ': ' + fmtPct(d.pv) : '') + '</div>' : '') +
+        '<div style="margin-top:8px">' + bandHtml(d.refs, d.cv, { lg: true, labels: true, prev: d.pv, curLabel: L.cur, prevLabel: L.prev }) + '</div>' +
+        (hasRefs(d.refs) ? bandLegend(L.cur, isNum(d.pv) ? L.prev : '') : '') + '</div>';
+
+      function mk(label, v, dl, sub) { return '<div class="mini-kpi"><span class="eyebrow">' + label + '</span><span class="v">' + v + '</span>' + deltaHtml(dl) + (sub ? '<span class="s">' + sub + '</span>' : '') + '</div>'; }
+      var kpis = '<div class="mini-kpis">' +
+        mk('Incidentes', fmtInt(c.incidents), deltaCount(c.incidents, p ? P.incidents : null, 'lower'), c.sev0 + ' Sev 0 · ' + c.sev1 + ' Sev 1' + (p ? ' · ' + L.prevYear + ': ' + P.incidents : '')) +
+        mk('Impactos', fmtInt(c.pairs), deltaCount(c.pairs, p ? P.pairs : null, 'lower'), 'Incidente × ' + (f.cfg.entityType === 'sistema' ? 'Sistema' : 'Localidade')) +
+        mk('MTTR', fmtHM(c.mttr), deltaMin(c.mttr, p ? P.mttr : null), p ? L.prevYear + ': ' + fmtHM(P.mttr) : '') +
+        mk('Aderência OLA', fmtPct(c.ola, 1), deltaPP(c.ola, p ? P.ola : null, 1, 'higher'), c.olaBase ? c.olaBase + ' ' + plural(c.olaBase, 'incidente', 'incidentes') + ' na base' : 'sem incidentes') +
+        mk('Horas de impacto', fmtDur(c.impactMin), deltaDur(c.impactMin, p ? P.impactMin : null), 'média ' + fmtDur(c.avgImpact) + ' por impacto') +
+        '</div>';
+
+      var sortMode = state.entSort[f.cfg.key] || 'impacto';
+      var toolbar = '<div class="ent-toolbar"><div class="sub-title" style="margin:0">' + icon(f.cfg.entityType === 'sistema' ? 'monitor' : 'pin') +
+        (f.cfg.entityType === 'sistema' ? 'Sistemas / Aplicações' : 'Localidades') + ' — ' + esc(L.cur) + ' vs ' + esc(L.prev) + '</div>' +
+        '<div class="seg" data-ent-sort="' + f.cfg.key + '"><button type="button" data-v="impacto"' + (sortMode === 'impacto' ? ' class="is-active"' : '') + '>Maior impacto</button><button type="button" data-v="az"' + (sortMode === 'az' ? ' class="is-active"' : '') + '>Ordem padrão</button></div></div>';
+
+      return '<section id="sec-flow-' + f.cfg.key + '" class="ol-section">' +
+        sectionHead(f.cfg.icon, 'Fluxo O&amp;L', esc(f.cfg.label), esc(FLOW_KEYWORDS_TXT[f.cfg.key] || ''),
+          '<button type="button" class="btn btn-accent" data-action="open-flow" data-flow="' + f.cfg.key + '">' + icon('list') + 'Ver incidentes (' + c.incidents + ')</button>') +
+        '<div class="flow-top">' + dispBlock + '<div>' + kpis + '</div></div>' + toolbar + entitiesHtml(f) + '</section>';
+    }).join('');
+  }
+
+  function sortEntities(list, mode) {
+    return list.slice().sort(function (a, b) {
+      if (mode === 'impacto') {
+        var d = b.cur.incidents - a.cur.incidents || (b.cur.impactMin || 0) - (a.cur.impactMin || 0);
+        if (d) return d;
+      }
+      return a.order - b.order || a.name.localeCompare(b.name);
+    });
+  }
+  function entitiesHtml(f) {
+    var mode = state.entSort[f.cfg.key] || 'impacto';
+    if (!f.entities.length) return '<div class="empty">Nenhuma localidade ou sistema mapeado para este fluxo.</div>';
+    if (f.cfg.entityType === 'sistema') return '<div class="ent-grid">' + sortEntities(f.entities, mode).map(function (e) { return entCard(f, e); }).join('') + '</div>';
+    var groups = {};
+    f.entities.forEach(function (e) { var k = e.country || 'nd'; (groups[k] = groups[k] || []).push(e); });
+    var keys = Object.keys(groups).sort(function (a, b) {
+      var ia = COUNTRY_ORDER.indexOf(a), ib = COUNTRY_ORDER.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+    if (mode === 'impacto') {
+      keys.sort(function (a, b) {
+        var sa = groups[a].reduce(function (s, e) { return s + e.cur.incidents; }, 0), sb = groups[b].reduce(function (s, e) { return s + e.cur.incidents; }, 0);
+        if (sb !== sa) return sb - sa;
+        var ia = COUNTRY_ORDER.indexOf(a), ib = COUNTRY_ORDER.indexOf(b);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      });
+    }
+    var big = keys.filter(function (k) { return groups[k].length >= 3; });
+    var small = keys.filter(function (k) { return groups[k].length < 3; });
+    return big.map(function (k) { return groupHtml(k, false); }).join('') +
+      (small.length ? '<div class="cgroups-multi">' + small.map(function (k) { return groupHtml(k, true); }).join('') + '</div>' : '');
+
+    function groupHtml(k, compact) {
+      var list = sortEntities(groups[k], mode);
+      var inc = {}, incPrev = {};
+      list.forEach(function (e) { e.curRows.forEach(function (r) { inc[r.inc] = true; }); e.prevRows.forEach(function (r) { incPrev[r.inc] = true; }); });
+      var nC = Object.keys(inc).length, nP = Object.keys(incPrev).length;
+      var cDisp = countryDisp(f.cfg.key, k);
+      return '<div class="cgroup' + (compact ? ' compact' : '') + '"><div class="cgroup-head">' + (k !== 'nd' ? flag(k, true) : icon('pin')) + '<span class="nm">' + esc(COUNTRY_NAMES[k] || (k === 'nd' ? 'País não informado' : k.toUpperCase())) + '</span>' +
+        (compact ? '' : '<span class="legend">' + list.length + ' ' + plural(list.length, 'localidade', 'localidades') + '</span>') +
+        '<span class="cg-meta">' + (cDisp && isNum(cDisp.cv) ? '<span class="legend">Disponibilidade ' + fmtPct(cDisp.cv) + '</span>' + chip(cDisp.status, true) + deltaHtml(cDisp.delta) : '') +
+        '<span class="legend">' + nC + ' ' + plural(nC, 'incidente', 'incidentes') + '</span>' + deltaHtml(deltaCount(nC, M.rowsPrev ? nP : null, 'lower')) + '</span></div>' +
+        '<div class="ent-grid">' + list.map(function (e) { return entCard(f, e); }).join('') + '</div></div>';
+    }
+  }
+  // Disponibilidade do país dentro do fluxo (nó L3 "Brasil", "Chile"...), quando existir na aba de Disponibilidade.
+  function countryDisp(flowKey, iso) {
+    var nm = fold(COUNTRY_NAMES[iso] || '');
+    if (!nm) return null;
+    var prefix = 'f:' + flowKey + '/';
+    var path = Object.keys(IDX.cur).find(function (p) { return p.indexOf(prefix) === 0 && p.split('/').length === 2 && fold(IDX.cur[p].name) === nm; });
+    return path ? dispFor(path, M.months) : null;
+  }
+
+  function entCard(f, e) {
+    var L = M.labels, c = e.cur, p = e.prev;
+    var has = c.incidents > 0;
+    var alert = e.disp && isNum(e.disp.cv) && e.disp.status.key === 'atencao';
+    var cls = 'ent-card' + (has ? ' has-inc' : ' is-zero') + (alert ? ' is-alert' : '');
+    var kind = KIND_LABEL[e.kind] || 'Localidade';
+    var meta = [];
+    meta.push(esc(kind));
+    var flagsHtml = e.kind === 'sistema' && e.countries.length ? '<div class="flags" style="margin-top:4px">' + e.countries.map(function (iso) { return flag(iso); }).join('') + '</div>' : '';
+    var tags = '';
+    if (e.catalog && e.catalog.inactiveNote) tags += '<span class="tag is-inactive">' + esc(e.catalog.inactiveNote) + '</span>';
+    if (e.retired) tags += '<span class="tag is-inactive">Até ' + esc(String(Math.max.apply(null, e.catalog.years))) + '</span>';
+    if (e.noPrevBase) tags += '<span class="tag is-new" data-tip="Sistema sem histórico em ' + esc(L.prevYear) + ': variação sem base comparável.">Sem histórico ' + esc(L.prevYear) + '</span>';
+    if (e.unnamed) tags += '<span class="tag" data-tip="Linhas de impacto sem Localidade preenchida: agrupadas pelo Mercado.">CD não nomeado</span>';
+    if (!e.catalog && !e.unnamed) tags += '<span class="tag" data-tip="Localidade encontrada na base, fora do catálogo padrão do fluxo.">Fora do catálogo</span>';
+
+    var dl = e.retired ? nobase('descontinuado') : (e.noPrevBase ? nobase('sem base') : deltaCount(c.incidents, p ? p.incidents : null, 'lower'));
+    var head = '<div class="ec-head">' + tile(entIcon(e), 'sm') + '<div style="min-width:0"><div class="ec-name">' + esc(e.name) + '</div><div class="ec-kind">' + meta.join(' · ') + tags + '</div>' + flagsHtml + '</div></div>';
+    var main = '<div class="ec-main"><div class="ec-count num">' + c.incidents + '<small>' + plural(c.incidents, 'incidente', 'incidentes') + '</small></div>' + deltaHtml(dl) + '</div>';
+    var body;
+    if (has) {
+      body = '<div class="ec-stats">' +
+        '<div><div class="k">Sev 0 · Sev 1</div><div class="v">' + c.sev0 + ' · ' + c.sev1 + '</div></div>' +
+        '<div><div class="k">Horas de impacto</div><div class="v">' + fmtDur(c.impactMin) + '</div></div>' +
+        '<div><div class="k">Tempo médio</div><div class="v">' + fmtDur(c.avgImpact) + '</div></div>' +
+        '<div><div class="k">' + esc(L.prevYear) + '</div><div class="v">' + (p && !e.noPrevBase ? p.incidents + ' · ' + fmtDur(p.impactMin) : '—') + '</div></div></div>';
+    } else {
+      body = '<div class="ec-zero">' + icon('check') + 'Sem incidentes no período</div>' +
+        (p && p.incidents && !e.noPrevBase ? '<div class="legend">' + esc(L.prev) + ': ' + p.incidents + ' ' + plural(p.incidents, 'incidente', 'incidentes') + ' · ' + fmtDur(p.impactMin) + '</div>' : '');
+    }
+    var disp = '';
+    if (e.disp && (isNum(e.disp.cv) || hasRefs(e.disp.refs))) {
+      disp = '<div class="ec-disp"><div class="ec-disp-row"><span class="legend">Disponibilidade</span><span class="v">' + fmtPct(e.disp.cv) + '</span>' + (isNum(e.disp.cv) ? chip(e.disp.status, true) : '') + '</div>' +
+        '<div class="ec-disp-row">' + deltaHtml(e.disp.delta, L.prevYear) + '</div>' +
+        bandHtml(e.disp.refs, e.disp.cv, { prev: e.disp.pv, curLabel: L.cur, prevLabel: L.prev }) + '</div>';
+    }
+    return '<div role="button" tabindex="0" class="' + cls + '" data-action="open-entity" data-flow="' + f.cfg.key + '" data-ent="' + esc(e.key) + '" aria-label="Ver incidentes de ' + esc(e.name) + '">' + head + main + body + disp + '</div>';
+  }
+
+  /* -------------------------------------------- Disponibilidade retrospectiva */
+  function granColumns() {
+    var g = state.gran, cols = [];
+    if (g === 'month') for (var m = 1; m <= 12; m++) cols.push({ key: 'm' + m, label: MABBR[m - 1], months: [m] });
+    if (g === 'quarter') for (var q = 1; q <= 4; q++) cols.push({ key: 'q' + q, label: 'Q' + q, months: range((q - 1) * 3 + 1, q * 3) });
+    if (g === 'semester') { cols.push({ key: 's1', label: '1º Sem', months: range(1, 6) }); cols.push({ key: 's2', label: '2º Sem', months: range(7, 12) }); }
+    var info = statusInfo(D.current.statuses);
+    if (g === 'ytd') {
+      if (info.closed) cols.push({ key: 'ytd', label: 'YTD Jan–' + MABBR[info.closed - 1], months: range(1, info.closed) });
+      if (info.avail > info.closed) cols.push({ key: 'ytdp', label: 'YTD Jan–' + MABBR[info.avail - 1] + ' (parcial)', months: range(1, info.avail) });
+    } else if (info.closed) {
+      cols.push({ key: 'ytd', label: 'YTD', months: range(1, info.closed), ytd: true });
+    }
+    return cols;
+  }
+  function colStatus(months) {
+    var st = D.current.statuses;
+    if (months.some(function (m) { return st[m - 1] === 'NAO_INICIADO'; })) return 'pending';
+    if (months.some(function (m) { return st[m - 1] === 'PARCIAL'; })) return 'partial';
+    return 'closed';
+  }
+  function dispRows() {
+    var out = [];
+    function push(path, depth, kind) {
+      var n = IDX.cur[path];
+      if (!n) return;
+      out.push({ path: path, node: n, depth: depth, kind: kind });
+      if (kind !== 'ol' && n.children && n.children.length && state.expanded[path]) {
+        n.children.forEach(function (c) { push(c._path, depth + 1, 'child'); });
+      }
+    }
+    if (IDX.cur.ol) push('ol', 0, 'ol');
+    D.config.flows.forEach(function (f) { push('f:' + f.key, 0, 'flow'); });
+    return out;
+  }
+  function renderDisponibilidade() {
+    var sec = $('sec-disponibilidade');
+    var dd = D.current.disponibilidade;
+    var head = sectionHead('gauge', 'Disponibilidade · Retrospectiva', 'Disponibilidade de O&amp;L — ' + D.current.year + ' vs ' + D.previous.year,
+      'Indicador oficial (aba Disponibilidade_' + D.current.year + '): resultado e variação em p.p. vs o mesmo período de ' + D.previous.year + ' em meses, trimestres, semestres e YTD. Não é afetado pelo filtro de Origem.');
+    if (!dd || !dd.found) {
+      sec.innerHTML = head + '<div class="notice">' + icon('alert') + '<div>' + (dd ? 'Nó de O&amp;L não encontrado na aba <b>' + esc(dd.sheet) + '</b>.' : 'Aba <b>Disponibilidade_' + D.current.year + '</b> não encontrada na planilha.') + ' A retrospectiva de Disponibilidade depende dessa aba.</div></div>';
+      return;
+    }
+    var noPrev = !D.previous.disponibilidade || !D.previous.disponibilidade.found;
+    var cols = granColumns();
+    var toolbar = '<div class="disp-toolbar"><div class="seg" id="ol-gran">' + [['month', 'Mensal'], ['quarter', 'Trimestral'], ['semester', 'Semestral'], ['ytd', 'YTD']].map(function (o) {
+      return '<button type="button" data-v="' + o[0] + '"' + (state.gran === o[0] ? ' class="is-active"' : '') + '>' + o[1] + '</button>'; }).join('') + '</div>' +
+      '<div class="status-legend legend">' + [STATUS.atencao, STATUS.minimo, STATUS.meta, STATUS.desafio].map(function (s) { return '<span style="display:inline-flex;align-items:center;gap:5px">' + sdot(s) + s.label + '</span>'; }).join('') +
+      '<span>◔ parcial</span><span>▲▼ variação em p.p. vs ' + D.previous.year + '</span></div></div>';
+
+    var thead = '<thead><tr><th class="rowh">Serviço</th>' + cols.map(function (c) {
+      var st = colStatus(c.months);
+      return '<th class="' + (st === 'pending' ? 'is-pending' : '') + (c.ytd ? ' c-ytd' : '') + '">' + esc(c.label) + (st === 'partial' ? ' ◔' : '') + (st === 'pending' ? '<div style="font-weight:500;text-transform:none;letter-spacing:0">não iniciado</div>' : '') + '</th>';
+    }).join('') + '</tr></thead>';
+
+    var rows = dispRows();
+    var tbody = '<tbody>' + rows.map(function (r) {
+      var n = r.node, hasKids = r.kind !== 'ol' && n.children && n.children.length;
+      var iso = r.kind === 'child' ? countryOfName(n.name) : null;
+      var fkey = r.kind === 'flow' ? r.path.slice(2) : null;
+      var fcfg = fkey ? D.config.flows.find(function (f) { return f.key === fkey; }) : null;
+      var lead = hasKids ? '<button type="button" class="caret' + (state.expanded[r.path] ? ' is-open' : '') + '" data-action="toggle-row" data-path="' + esc(r.path) + '" aria-label="Expandir">' + icon('chevron') + '</button>' : '<span class="caret-sp"></span>';
+      var nameHtml = '<div class="rh" style="padding-left:' + (r.depth * 18) + 'px">' + lead + (r.kind === 'ol' ? tile('truck', 'sm') : (fcfg ? tile(fcfg.icon, 'sm') : (iso ? flag(iso) : ''))) +
+        '<span' + (fcfg && fold(fcfg.label) !== fold(n.name) ? ' data-tip="Na aba de Disponibilidade: ' + esc(n.name) + '"' : '') + '>' + esc(r.kind === 'ol' ? 'O&L (consolidado)' : (fcfg ? fcfg.label : n.name)) + (r.kind === 'child' ? ' <span class="legend">L' + n.level + '</span>' : '') + '</span></div>';
+      var cells = cols.map(function (c) {
+        var st = colStatus(c.months);
+        if (st === 'pending') return '<td class="c-pending' + (c.ytd ? ' c-ytd' : '') + '"><div class="cell is-pending">—</div></td>';
+        var d = dispFor(r.path, c.months);
+        if (!isNum(d.cv)) return '<td' + (c.ytd ? ' class="c-ytd"' : '') + '><div class="cell is-pending" data-tip="Sem dado no período">s/ dado</div></td>';
+        var tip = (r.kind === 'ol' ? 'O&L' : n.name) + '\n' + c.label + '/' + D.current.year + ': ' + fmtPct(d.cv) + ' (' + d.status.label + ')' +
+          (hasRefs(d.refs) ? '\nMínimo ' + fmtPct(d.refs.min) + ' · Meta ' + fmtPct(d.refs.meta) + ' · Desafio ' + fmtPct(d.refs.des) : '') +
+          '\n' + c.label + '/' + D.previous.year + ': ' + (isNum(d.pv) ? fmtPct(d.pv) : 'sem dado') +
+          (d.delta.cls !== 'nobase' ? '\nVariação: ' + d.delta.txt : '') + (d.cur.partial ? '\nApuração parcial — dado provisório' : '') +
+          (d.cur.official === false ? '\nConsolidado calculado (média simples dos meses)' : '');
+        return '<td' + (c.ytd ? ' class="c-ytd"' : '') + '><div class="cell' + (d.cur.partial ? ' is-partial' : '') + '" data-tip="' + esc(tip) + '"><span class="cv">' + sdot(d.status) + fmtNum(d.cv, 2) + '</span>' +
+          '<span class="cd ' + d.delta.cls + '">' + (d.delta.cls === 'nobase' ? '—' : (d.delta.arrow === '=' ? '= ' : d.delta.arrow + ' ') + fmtSigned(d.delta.d, 2)) + '</span></div></td>';
+      }).join('');
+      return '<tr class="lv-' + r.kind + (state.sel === r.path ? ' is-selected' : '') + '" data-action="select-row" data-path="' + esc(r.path) + '"><td class="rowh">' + nameHtml + '</td>' + cells + '</tr>';
+    }).join('') + '</tbody>';
+
+    sec.innerHTML = head + (noPrev ? '<div class="notice is-info">' + icon('info') + '<div>Aba Disponibilidade_' + D.previous.year + ' não encontrada: as variações em p.p. ficam sem base.</div></div>' : '') +
+      toolbar + '<div class="matrix-wrap"><table class="matrix">' + thead + tbody + '</table></div>' +
+      '<div class="legend" style="margin-top:6px">Clique em uma linha para ver o detalhe (faixa Mínimo · Meta · Desafio, comparativos em p.p. e evolução mensal). Use ▸ para abrir países, CDs e sistemas.</div>' +
+      '<div id="ol-disp-detail"></div>';
+    renderDispDetail();
+  }
+
+  function renderDispDetail() {
+    var box = $('ol-disp-detail');
+    if (!box) return;
+    if (!IDX.cur[state.sel]) state.sel = 'ol';
+    var path = state.sel, n = IDX.cur[path];
+    if (!n) { box.innerHTML = ''; return; }
+    var fcfgSel = path.indexOf('f:') === 0 && path.indexOf('/') === -1 ? D.config.flows.find(function (f) { return 'f:' + f.key === path; }) : null;
+    var name = path === 'ol' ? 'O&L (consolidado)' : (fcfgSel ? fcfgSel.label : n.name);
+    var L = M.labels, d = dispFor(path, M.months);
+    var left = '<div><div class="eyebrow">Detalhe · ' + esc(L.cur) + '</div><div class="sub-title" style="margin:4px 0 2px;font-size:16px">' + esc(name) + '</div>' +
+      '<div class="flow-disp"><div class="value num">' + (isNum(d.cv) ? fmtPct(d.cv) : '<span class="muted" style="font-size:18px">sem dado no período</span>') + '</div>' +
+      '<div class="hero-meta">' + deltaHtml(d.delta, L.prev) + (isNum(d.cv) ? chip(d.status) : '') + '</div></div>' +
+      '<div style="margin-top:6px">' + bandHtml(d.refs, d.cv, { lg: true, labels: true, prev: d.pv, curLabel: L.cur, prevLabel: L.prev }) + '</div>' +
+      (hasRefs(d.refs) ? bandLegend(L.cur, isNum(d.pv) ? L.prev : '') : '');
+
+    left += '<div class="eyebrow" style="margin-top:16px">Comparativos em p.p. vs ' + D.previous.year + '</div>' + ppGridHtml(path) + '</div>';
+
+    var right = '<div><div class="sub-title">' + icon('chart') + 'Evolução mensal — ' + D.current.year + ' vs ' + D.previous.year + '</div><div class="chart-box"><canvas id="ol-chart-disp"></canvas></div>' +
+      '<div class="legend" style="margin-top:6px">Barras = ' + D.current.year + ' (cor do status do mês) · linha cinza = ' + D.previous.year + ' · linhas tracejadas = Meta e Mínimo de ' + D.current.year + '.</div></div>';
+    box.innerHTML = '<div class="disp-detail">' + left + right + '</div>';
+    drawDispChart(path);
+  }
+
+  // Comparativos em p.p. vs o mesmo período do ano anterior: YTD, trimestres e semestres (períodos não iniciados ficam indisponíveis).
+  function ppGridHtml(path) {
+    var info = statusInfo(D.current.statuses), periods = [];
+    if (info.closed) periods.push({ k: (info.closed === 12 ? 'Ano' : 'YTD Jan–' + MABBR[info.closed - 1]), months: range(1, info.closed) });
+    if (info.avail > info.closed) periods.push({ k: 'YTD Jan–' + MABBR[info.avail - 1], months: range(1, info.avail) });
+    for (var q = 1; q <= 4; q++) periods.push({ k: 'Q' + q, months: range((q - 1) * 3 + 1, q * 3) });
+    periods.push({ k: '1º Sem', months: range(1, 6) });
+    periods.push({ k: '2º Sem', months: range(7, 12) });
+    return '<div class="pp-grid">' + periods.map(function (pp) {
+      var st = colStatus(pp.months);
+      if (st === 'pending') return '<div class="pp-cell is-pending"><div class="k">' + esc(pp.k) + '</div><div class="v muted" style="font-size:12px">não iniciado</div></div>';
+      var x = dispFor(path, pp.months);
+      return '<div class="pp-cell' + (st === 'partial' ? ' is-partial' : '') + '" data-tip="' + esc(pp.k + '/' + D.current.year + ': ' + fmtPct(x.cv) + (x.cur && x.cur.official === false ? ' (média dos meses)' : '') + '\n' + pp.k + '/' + D.previous.year + ': ' + fmtPct(x.pv) + (st === 'partial' ? '\nInclui mês com apuração parcial' : '')) + '">' +
+        '<div class="k">' + esc(pp.k) + (st === 'partial' ? ' ◔' : '') + '</div><div class="v">' + (isNum(x.cv) ? sdot(x.status) + ' ' + fmtNum(x.cv, 2) + '%' : '—') + '</div>' +
+        '<div class="d ' + x.delta.cls + '">' + (x.delta.cls === 'nobase' ? 'sem base' : x.delta.arrow + ' ' + x.delta.txt) + '</div></div>';
+    }).join('') + '</div>';
+  }
+
+  function drawDispChart(path) {
+    var cv = $('ol-chart-disp');
+    if (!cv || !window.Chart) return;
+    if (charts.disp) { charts.disp.destroy(); charts.disp = null; }
+    var n = IDX.cur[path], pn = IDX.prev[path];
+    var refs = { min: n.min, meta: n.meta, des: n.des };
+    var cur = n.months.map(function (v, i) { return D.current.statuses[i] === 'NAO_INICIADO' ? null : (isNum(v) ? r2(v) : null); });
+    var prev = pn ? pn.months.map(function (v) { return isNum(v) ? r2(v) : null; }) : MABBR.map(function () { return null; });
+    var colors = cur.map(function (v) { return STATUS_COLOR[statusOf(v, refs).key] || STATUS_COLOR.none; });
+    var all = cur.concat(prev).filter(isNum);
+    if (hasRefs(refs)) all.push(refs.min, refs.meta);
+    var lo = all.length ? Math.min.apply(null, all) : 99, hi = all.length ? Math.max.apply(null, all) : 100;
+    var pad = Math.max(0.05, (hi - lo) * 0.25);
+    var ds = [
+      { type: 'bar', label: String(D.current.year), data: cur, backgroundColor: colors, borderColor: cur.map(function (_, i) { return D.current.statuses[i] === 'PARCIAL' ? '#7a5410' : 'transparent'; }), borderWidth: 1.5, borderRadius: 2, maxBarThickness: 30, order: 2 },
+      { type: 'line', label: String(D.previous.year), data: prev, borderColor: '#8E9A84', backgroundColor: '#8E9A84', pointRadius: 3, borderWidth: 2, tension: 0.25, spanGaps: true, order: 1 }
+    ];
+    if (hasRefs(refs)) {
+      ds.push({ type: 'line', label: 'Meta ' + fmtPct(refs.meta), data: MABBR.map(function () { return r2(refs.meta); }), borderColor: '#77985B', borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, order: 0 });
+      ds.push({ type: 'line', label: 'Mínimo ' + fmtPct(refs.min), data: MABBR.map(function () { return r2(refs.min); }), borderColor: '#691B34', borderDash: [3, 4], borderWidth: 1.2, pointRadius: 0, order: 0 });
+    }
+    charts.disp = new Chart(cv, {
+      data: { labels: MABBR, datasets: ds },
+      options: {
+        responsive: true, maintainAspectRatio: false, layout: { padding: { top: 14 } },
+        plugins: {
+          legend: { position: 'top', align: 'end', labels: { boxWidth: 10, boxHeight: 10, font: { size: 11 } } },
+          tooltip: { callbacks: { label: function (ctx) {
+            var v = ctx.parsed.y; if (!isNum(v)) return ctx.dataset.label + ': —';
+            var extra = '';
+            if (ctx.datasetIndex === 0 && isNum(prev[ctx.dataIndex])) extra = ' (' + deltaPP(v, prev[ctx.dataIndex], 2).txt + ' vs ' + D.previous.year + ')';
+            if (ctx.datasetIndex === 0 && D.current.statuses[ctx.dataIndex] === 'PARCIAL') extra += ' · parcial';
+            return ctx.dataset.label + ': ' + fmtPct(v) + extra;
+          } } },
+          datalabels: { display: function (ctx) { return ctx.datasetIndex === 0 && isNum(ctx.dataset.data[ctx.dataIndex]); }, anchor: 'end', align: 'end', offset: -1, font: { size: 9, weight: '700' }, color: '#333D20', formatter: function (v) { return fmtNum(v, 2); } }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+          y: { min: Math.max(0, Math.floor((lo - pad) * 20) / 20), max: Math.min(100, Math.ceil((hi + pad) * 20) / 20), grid: { color: 'rgba(51,61,32,.08)' }, ticks: { font: { size: 10 }, callback: function (v) { return fmtNum(v, 2) + '%'; } } }
+        }
+      }
+    });
+  }
+
+  function renderFoot() {
+    var w = (D.warnings || []).slice();
+    var dd = D.current.disponibilidade;
+    $('ol-foot').innerHTML = 'Fontes: Major_Incidents_Impactos_' + D.current.year + '/' + D.previous.year + ' · MajorIncidentes (TTR oficial) · ' + esc(dd && dd.sheet ? dd.sheet : 'Disponibilidade_' + D.current.year) + ' · Status_Apuracao' +
+      (D.statusSource === 'FALLBACK' ? ' (inferido pela data)' : '') + (w.length ? '<br>Avisos: ' + esc(w.join(' | ')) : '');
+  }
+
+  /* -------------------------------------------------------------- modal */
+  function openIncidentsModal(o) {
+    state.modal = o;
+    o.which = o.which || 'cur';
+    renderModal();
+  }
+  function closeModal() { state.modal = null; $('ol-modal-root').innerHTML = ''; document.body.style.overflow = ''; }
+  function renderModal() {
+    var o = state.modal;
+    if (!o) return;
+    var yd = o.which === 'cur' ? D.current : D.previous;
+    var rows = o.which === 'cur' ? o.rowsCur : (o.rowsPrev || []);
+    var a = agg(yd, rows);
+    o.lastAgg = a;
+    var T = D.config.targets;
+    var seg = '<div class="seg" id="ol-modal-year"><button type="button" data-v="cur"' + (o.which === 'cur' ? ' class="is-active"' : '') + '>' + esc(M.labels.cur) + ' (' + o.rowsCurCount() + ')</button>' +
+      (o.rowsPrev ? '<button type="button" data-v="prev"' + (o.which === 'prev' ? ' class="is-active"' : '') + '>' + esc(M.labels.prev) + ' (' + o.rowsPrevCount() + ')</button>' : '') + '</div>';
+    var table = a.list.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Incidente</th><th>Sev</th><th>Abertura</th><th>Fluxo</th><th>' + (o.entLabel || 'Localidade / Sistema') + '</th><th>Impacto(s)</th><th>Horas de impacto</th><th>TTR (MI)</th><th>OLA</th><th>Tecnologia impactada</th><th>Ofensor</th><th>Problem</th><th>Descrição</th></tr></thead><tbody>' +
+      a.list.map(function (I) {
+        var flows = Object.keys(I.flows).map(function (k) { var f = D.config.flows.find(function (x) { return x.key === k; }); return f ? f.short : 'Sem fluxo mapeado'; });
+        var ola = I.olaOk === null ? '<span class="muted">—</span>' : (I.olaOk ? '<span class="target-ok">✓ dentro</span>' : '<span class="target-bad">✕ fora</span>');
+        return '<tr><td class="id">' + esc(I.id) + '<div class="desc">' + esc(I.st || '') + (I.origem && I.origem !== 'N/A' ? ' · ' + esc(I.origem) : '') + '</div></td>' +
+          '<td class="nowrap"><span class="sev-dot s' + (I.sev === 0 ? '0' : '1') + '"></span>Sev ' + (isNum(I.sev) ? I.sev : '—') + '</td>' +
+          '<td class="nowrap">' + fmtDate(I.ab) + '</td><td>' + esc(flows.join(', ')) + '</td>' +
+          '<td>' + esc(Object.keys(I.ents).join(', ')) + (Object.keys(I.mks).length ? '<div class="flags" style="display:flex;margin-top:4px">' + Object.keys(I.mks).map(function (k) { return flag(k); }).join('') + '</div>' : '') + '</td>' +
+          '<td>' + esc(Object.keys(I.imps).join(', ')) + '</td><td class="nowrap">' + fmtDur(I.impactMin) + '</td>' +
+          '<td class="nowrap">' + fmtHM(I.ttr) + (I.outlier ? ' <span class="tag" data-tip="TTR ≥ limiar de outlier (Sev 0 ≥ ' + fmtHM(T.outlierSev0) + ' · Sev 1 ≥ ' + fmtHM(T.outlierSev1) + ')">outlier</span>' : '') + (!I.foundMI ? '<div class="desc">não consta em MajorIncidentes</div>' : '') + '</td>' +
+          '<td class="nowrap">' + ola + '</td><td>' + esc(Object.keys(I.tImp).join(', ') || '—') + '</td><td>' + esc(Object.keys(I.ofe).join(', ') || '—') + '</td>' +
+          '<td class="nowrap">' + esc(Object.keys(I.prb).join(', ') || '—') + '</td>' +
+          '<td class="wrap">' + (I.tit ? '<b>' + esc(I.tit) + '</b>' : '') + (I.dImp ? '<div class="desc">' + esc(I.dImp) + '</div>' : '') + (I.dOf ? '<div class="desc"><b>Ofensor:</b> ' + esc(I.dOf) + '</div>' : '') + '</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<div class="empty">Sem incidentes neste período.</div>';
+    var sum = '<div class="legend">' + a.incidents + ' ' + plural(a.incidents, 'incidente', 'incidentes') + ' · ' + a.sev0 + ' Sev 0 · ' + a.sev1 + ' Sev 1 · MTTR ' + fmtHM(a.mttr) + ' · OLA ' + fmtPct(a.ola, 1) + ' · ' + a.pairs + ' ' + plural(a.pairs, 'impacto', 'impactos') + ' · ' + fmtDur(a.impactMin) + ' de impacto</div>';
+    $('ol-modal-root').innerHTML = '<div class="modal-overlay" data-action="modal-bg"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="ol-modal-title">' +
+      '<div class="modal-head">' + tile(o.icon || 'list') + '<div class="titles"><div class="eyebrow">' + esc(o.eyebrow || 'Incidentes de O&L') + '</div><h3 id="ol-modal-title">' + esc(o.title) + '</h3>' + sum + '</div>' +
+      '<button type="button" class="close-x" data-action="modal-close" aria-label="Fechar">' + icon('close') + '</button></div>' +
+      '<div class="modal-body"><div class="modal-tools">' + seg + '<button type="button" class="btn" data-action="modal-export">' + icon('download') + 'Exportar Excel</button></div>' + table + '</div></div></div>';
+    document.body.style.overflow = 'hidden';
+  }
+  function exportModal() {
+    var o = state.modal;
+    if (!o || !o.lastAgg || !window.XLSX) return;
+    var data = o.lastAgg.list.map(function (I) {
+      return {
+        'Incidente': I.id, 'Stream': I.st, 'Severidade': isNum(I.sev) ? 'Sev ' + I.sev : '', 'Abertura': fmtDate(I.ab),
+        'Fluxo(s)': Object.keys(I.flows).map(function (k) { var f = D.config.flows.find(function (x) { return x.key === k; }); return f ? f.short : 'Sem fluxo'; }).join(', '),
+        'Localidade(s) / Sistema(s)': Object.keys(I.ents).join(', '), 'Mercado(s)': Object.keys(I.mks).join(', ').toUpperCase(),
+        'Impacto(s)': Object.keys(I.imps).join(', '), 'Horas de impacto': fmtDur(I.impactMin), 'TTR (MI)': fmtHM(I.ttr),
+        'Dentro do OLA': I.olaOk === null ? '' : (I.olaOk ? 'Sim' : 'Não'), 'Origem da Detecção': I.origem,
+        'Tecnologia impactada': Object.keys(I.tImp).join(', '), 'Ofensor': Object.keys(I.ofe).join(', '), 'Problem': Object.keys(I.prb).join(', '),
+        'Título': I.tit, 'Descrição do impacto': I.dImp, 'Descrição do ofensor': I.dOf, 'Solução': I.sol
+      };
+    });
+    var ws = XLSX.utils.json_to_sheet(data), wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Incidentes');
+    XLSX.writeFile(wb, ('OL_' + (o.title || 'incidentes') + '_' + (o.which === 'cur' ? M.labels.cur : M.labels.prev)).replace(/[^\w\-]+/g, '_') + '.xlsx');
+  }
+  function countIncs(rows) { var s = {}; (rows || []).forEach(function (r) { s[r.inc] = true; }); return Object.keys(s).length; }
+  function modalOpts(title, eyebrow, ic, rowsCur, rowsPrev, entLabel) {
+    return { title: title, eyebrow: eyebrow, icon: ic, rowsCur: rowsCur, rowsPrev: rowsPrev, entLabel: entLabel,
+      rowsCurCount: function () { return countIncs(rowsCur); }, rowsPrevCount: function () { return countIncs(rowsPrev); } };
+  }
+
+  /* ------------------------------------------------------------ eventos */
+  function onClick(ev) {
+    var t = ev.target.closest('[data-action], .seg button');
+    if (!t) return;
+    var segEl = t.closest('.seg');
+    if (segEl && t.tagName === 'BUTTON' && !t.hasAttribute('data-action')) { onSeg(segEl, t.getAttribute('data-v')); return; }
+    var a = t.getAttribute('data-action');
+    if (a === 'goto') { var el = $(t.getAttribute('data-target')); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    else if (a === 'open-all') openIncidentsModal(modalOpts('Todos os fluxos de O&L', 'Incidentes de O&L', 'truck', M.rowsCur, M.rowsPrev));
+    else if (a === 'open-flow') {
+      var f = M.flows.find(function (x) { return x.cfg.key === t.getAttribute('data-flow'); });
+      if (f) openIncidentsModal(modalOpts(f.cfg.label, 'Incidentes do fluxo', f.cfg.icon, f.rowsCur, f.rowsPrev));
+    } else if (a === 'open-entity') {
+      var fl = M.flows.find(function (x) { return x.cfg.key === t.getAttribute('data-flow'); });
+      var e = fl && fl.entities.find(function (x) { return x.key === t.getAttribute('data-ent'); });
+      if (e) openIncidentsModal(modalOpts(e.name, fl.cfg.short, entIcon(e), e.curRows, fl.rowsPrev ? e.prevRows : null));
+    } else if (a === 'toggle-row') {
+      ev.stopPropagation();
+      var p = t.getAttribute('data-path');
+      state.expanded[p] = !state.expanded[p];
+      renderDisponibilidade();
+    } else if (a === 'select-row') {
+      state.sel = t.getAttribute('data-path');
+      Array.prototype.forEach.call(document.querySelectorAll('.matrix tbody tr'), function (tr) { tr.classList.toggle('is-selected', tr.getAttribute('data-path') === state.sel); });
+      renderDispDetail();
+    } else if (a === 'modal-close') closeModal();
+    else if (a === 'modal-bg') { if (ev.target === t) closeModal(); }
+    else if (a === 'modal-export') exportModal();
+  }
+  function onSeg(segEl, v) {
+    var id = segEl.id;
+    if (id === 'ol-origem') { if (state.origem === v) return; state.origem = v; setSegActive(segEl, v); renderAll(); }
+    else if (id === 'ol-evo-metric') { state.chartMetric = v; setSegActive(segEl, v); if (charts.evo) { charts.evo.destroy(); charts.evo = null; } drawEvoChart(); }
+    else if (id === 'ol-rank-tab') { state.rank = v; setSegActive(segEl, v); $('ol-rank-body').innerHTML = rankHtml(); }
+    else if (id === 'ol-gran') { state.gran = v; renderDisponibilidade(); }
+    else if (id === 'ol-modal-year') { state.modal.which = v; renderModal(); }
+    else if (segEl.hasAttribute('data-ent-sort')) {
+      var key = segEl.getAttribute('data-ent-sort');
+      state.entSort[key] = v;
+      var y = window.scrollY;
+      renderFlows();
+      window.scrollTo(0, y);
+    }
+  }
+  function setSegActive(segEl, v) { Array.prototype.forEach.call(segEl.querySelectorAll('button'), function (b) { b.classList.toggle('is-active', b.getAttribute('data-v') === v); }); }
+  function onKey(ev) {
+    if (ev.key === 'Escape' && state.modal) { closeModal(); return; }
+    if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.getAttribute && ev.target.getAttribute('role') === 'button' && ev.target.hasAttribute('data-action')) { ev.preventDefault(); ev.target.click(); }
+  }
+
+  // Tooltip flutuante para [data-tip]
+  var tipEl = null;
+  function onOver(ev) {
+    var t = ev.target.closest('[data-tip]');
+    if (!t) return;
+    tipEl = tipEl || $('ol-tooltip');
+    tipEl.textContent = t.getAttribute('data-tip');
+    tipEl.hidden = false;
+    var r = t.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+    var x = Math.min(window.innerWidth - w - 8, Math.max(8, r.left + r.width / 2 - w / 2));
+    var y = r.top - h - 8;
+    if (y < 8) y = r.bottom + 8;
+    tipEl.style.left = x + 'px'; tipEl.style.top = y + 'px';
+  }
+  function onOut(ev) {
+    var t = ev.target.closest('[data-tip]');
+    if (!t || (ev.relatedTarget && t.contains(ev.relatedTarget))) return;
+    if (tipEl) tipEl.hidden = true;
+  }
+
+  var spy = null;
+  function setupScrollSpy() {
+    if (spy || !('IntersectionObserver' in window)) return;
+    var links = Array.prototype.slice.call(document.querySelectorAll('#ol-nav a'));
+    spy = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        links.forEach(function (l) { l.classList.toggle('is-active', l.getAttribute('data-sec') === en.target.id); });
+      });
+    }, { rootMargin: '-150px 0px -60% 0px' });
+    links.forEach(function (l) { var s = $(l.getAttribute('data-sec')); if (s) spy.observe(s); });
+  }
+  function rebindSpy() { if (spy) { spy.disconnect(); spy = null; } setupScrollSpy(); }
+
+  function destroyCharts() { Object.keys(charts).forEach(function (k) { if (charts[k]) charts[k].destroy(); charts[k] = null; }); }
+
+  /* ------------------------------------------------------------- carga */
+  function setLoading(on) { $('ol-loading').hidden = !on; }
+  function showError(msg) {
+    setLoading(false);
+    var box = $('ol-error');
+    box.hidden = false;
+    box.innerHTML = '<div class="error-box"><div class="sub-title" style="color:#691B34">' + icon('alert') + 'Não foi possível carregar a Visão O&amp;L</div><p>' + esc(msg) + '</p><button type="button" class="btn btn-accent" id="ol-retry">Tentar novamente</button></div>';
+    $('ol-retry').onclick = function () { box.hidden = true; load(state.year); };
+  }
+  function fillSelectors() {
+    var ys = $('ol-year');
+    var years = (D.availableYears && D.availableYears.length ? D.availableYears : [D.year]).slice();
+    if (years.indexOf(D.year) === -1) years.unshift(D.year);
+    ys.innerHTML = years.map(function (y) { return '<option value="' + y + '"' + (y === D.year ? ' selected' : '') + '>' + y + '</option>'; }).join('');
+    ys.disabled = false;
+    var ps = $('ol-period'), list = buildPeriods(D.current.statuses), groups = {};
+    list.forEach(function (p) { (groups[p.group] = groups[p.group] || []).push(p); });
+    ps.innerHTML = ['YTD', 'Trimestres', 'Semestres', 'Meses'].filter(function (g) { return groups[g]; }).map(function (g) {
+      return '<optgroup label="' + g + '">' + groups[g].map(function (p) {
+        return '<option value="' + p.key + '"' + (p.disabled ? ' disabled' : '') + (p.key === state.periodKey ? ' selected' : '') + '>' + esc(p.label) + (p.disabled ? ' · não iniciado' : (p.partial && p.key !== 'ytdp' ? ' · parcial' : '')) + '</option>';
+      }).join('') + '</optgroup>';
+    }).join('');
+    ps.disabled = false;
+  }
+  function onData(res) {
+    setLoading(false);
+    if (!res || !res.ok) { showError((res && res.error) || 'Resposta vazia do servidor.'); return; }
+    CACHE[res.year] = res;
+    applyData(res);
+  }
+  function applyData(res) {
+    D = res;
+    state.year = res.year;
+    IDX = { cur: indexDisp(res.current.disponibilidade), prev: indexDisp(res.previous.disponibilidade) };
+    var p = getPeriod(state.periodKey);
+    if (!state.periodKey || p.key !== state.periodKey || p.disabled) state.periodKey = defaultPeriodKey();
+    fillSelectors();
+    $('ol-error').hidden = true;
+    renderAll();
+    rebindSpy();
+  }
+  function load(year) {
+    if (year && CACHE[year]) { applyData(CACHE[year]); return; }
+    setLoading(true);
+    if (!(window.google && google.script && google.script.run)) { showError('google.script.run indisponível (abra pela URL do Web App).'); return; }
+    google.script.run.withSuccessHandler(onData).withFailureHandler(function (e) { showError(e && e.message ? e.message : String(e)); }).getOperacaoLogisticaData(year || null);
+  }
+
+  function init() {
+    if (window.Chart && window.ChartDataLabels) { Chart.register(window.ChartDataLabels); Chart.defaults.set('plugins.datalabels', { display: false }); }
+    if (window.Chart) { Chart.defaults.font.family = "'Aptos', 'Segoe UI', system-ui, sans-serif"; Chart.defaults.color = '#333D20'; }
+    Array.prototype.forEach.call(document.querySelectorAll('#ol-nav a'), function (a) {
+      a.insertAdjacentHTML('afterbegin', icon(a.getAttribute('data-icon')));
+      a.addEventListener('click', function (ev) { ev.preventDefault(); var s = $(a.getAttribute('data-sec')); if (s) s.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+    });
+    var portal = $('ol-portal-link');
+    if (portal) portal.href = BASE_URL || '#';
+    document.addEventListener('click', onClick);
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mouseover', onOver);
+    document.addEventListener('mouseout', onOut);
+    window.addEventListener('scroll', function () { if (tipEl) tipEl.hidden = true; }, { passive: true });
+    $('ol-year').addEventListener('change', function () { var y = Number(this.value); state.sel = 'ol'; load(y); });
+    $('ol-period').addEventListener('change', function () { state.periodKey = this.value; renderAll(); });
+    load(null);
+  }
+
+  window.OL_DEBUG = { getState: function () { return state; }, getModel: function () { return M; }, getData: function () { return D; } };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>

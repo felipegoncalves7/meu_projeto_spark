@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Indicadores ITSM — Portal</title>
+  <?!= include('dashboardOL.css'); ?>
+  <style>
+    .portal-hero { padding: 40px 0 26px; }
+    .portal-hero h1 { font-family: var(--font-display); font-size: 40px; font-weight: 300; line-height: 1.15; margin: 6px 0 10px; }
+    .portal-hero p { max-width: 760px; margin: 0; font-size: 14px; color: var(--product-text-secondary); }
+    .views { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    @media (max-width: 860px) { .views { grid-template-columns: minmax(0, 1fr); } .portal-hero h1 { font-size: 30px; } }
+    .view-card { position: relative; display: flex; flex-direction: column; gap: 14px; padding: 24px 26px; background: var(--product-surface-default); border: var(--border-hairline); border-radius: var(--radius-sm); text-decoration: none; color: inherit; min-height: 250px; }
+    a.view-card:hover { background: #FCFBF8; border-color: rgba(51, 61, 32, .3); }
+    a.view-card:hover .cta { background: var(--brand-verde-noite); color: #fff; border-color: var(--brand-verde-noite); }
+    .view-card .vc-top { display: flex; align-items: flex-start; gap: 14px; }
+    .view-card h2 { margin: 2px 0 0; font-size: 20px; font-weight: 600; line-height: 1.3; }
+    .view-card .desc { font-size: 13px; color: var(--product-text-secondary); margin: 0; }
+    .view-card ul { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+    .view-card li { display: flex; gap: 7px; align-items: flex-start; font-size: 12.5px; }
+    .view-card li .ico { width: 15px; height: 15px; margin-top: 2px; color: var(--brand-verde-tarde); }
+    .view-card .cta { margin-top: auto; align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border: 1px solid var(--product-accent-interactive); border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; }
+    .view-card .cta .ico { width: 16px; height: 16px; }
+    .view-card.is-soon { background: #FAFBF9; border-style: dashed; }
+    .view-card.is-soon h2, .view-card.is-soon .ico-tile { opacity: .6; }
+    .view-card .accent { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; border-radius: 3px 0 0 3px; }
+    .view-card .vc-tags { margin-left: auto; display: flex; gap: 6px; }
+    .tag.is-soon { background: var(--product-surface-subtle); }
+    .portal-foot { margin-top: 26px; text-align: center; }
+  </style>
+</head>
+<body data-base-url="<?= baseUrl ?>">
+
+<header class="ol-head" role="banner">
+  <div class="ol-head-inner" style="padding-bottom:6px">
+    <div class="brand">
+      <img class="brand-logo" src="<?!= include('LogoData').trim() ?>" alt="Natura">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <div class="brand-title">
+        <span class="eyebrow">Tecnologia Digital · ITSM</span>
+        <span class="title">Indicadores ITSM</span>
+        <span class="stamp" id="portal-stamp"></span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="ol-main">
+  <div class="portal-hero">
+    <div class="eyebrow">Portal de indicadores</div>
+    <h1>Escolha a visão</h1>
+    <p>Indicadores executivos de Major Incidents, Problemas e Disponibilidade, organizados por visão de negócio.
+      Cada visão compara o resultado do ano com o mesmo período do ano anterior, considerando apenas os períodos apurados.</p>
+  </div>
+
+  <div class="views">
+    <a class="view-card" data-view="geral" href="#" target="_top">
+      <span class="accent" style="background:#1B472A"></span>
+      <div class="vc-top">
+        <span class="ico-tile lg" aria-hidden="true" data-icon="dashboard"></span>
+        <div>
+          <div class="eyebrow">Visão Geral</div>
+          <h2>Gestão de Incidentes e Problemas ITSM</h2>
+        </div>
+      </div>
+      <p class="desc">Visão executiva de Major Incidents e Major Problems de toda a operação.</p>
+      <ul>
+        <li data-icon="check">Volume, MTTR e Aderência ao OLA</li>
+        <li data-icon="check">Jornadas &amp; Países</li>
+        <li data-icon="check">Origem da Detecção</li>
+        <li data-icon="check">Mudanças e Qualidade</li>
+        <li data-icon="check">Problemas &amp; RCA</li>
+        <li data-icon="check">Evolução &amp; Tecnologia</li>
+      </ul>
+      <span class="cta">Acessar Visão Geral <span data-icon="arrow"></span></span>
+    </a>
+
+    <a class="view-card" data-view="ol" href="#" target="_top">
+      <span class="accent" style="background:#FE772C"></span>
+      <div class="vc-top">
+        <span class="ico-tile lg" aria-hidden="true" data-icon="truck"></span>
+        <div>
+          <div class="eyebrow">Visão O&amp;L</div>
+          <h2>Operação &amp; Logística</h2>
+        </div>
+        <div class="vc-tags"><span class="tag is-new">Novo</span></div>
+      </div>
+      <p class="desc">YTD vs mesmo período do ano anterior para incidentes e Disponibilidade de O&amp;L, por fluxo e localidade.</p>
+      <ul>
+        <li data-icon="check">Separação, Faturamento e Transporte</li>
+        <li data-icon="check">Manufatura</li>
+        <li data-icon="check">Atendimento (CRM e URA)</li>
+        <li data-icon="check">Planejamento (SAP APO / O9)</li>
+        <li data-icon="check">CDs, HUBs, PEAs e Plantas</li>
+        <li data-icon="check">Mínimo · Meta · Desafio</li>
+      </ul>
+      <span class="cta">Acessar Visão O&amp;L <span data-icon="arrow"></span></span>
+    </a>
+
+    <div class="view-card is-soon" aria-disabled="true">
+      <span class="accent" style="background:#D26378"></span>
+      <div class="vc-top">
+        <span class="ico-tile lg" aria-hidden="true" data-icon="beauty"></span>
+        <div>
+          <div class="eyebrow">Visão Jornada CB</div>
+          <h2>Jornada da Consultora de Beleza</h2>
+        </div>
+        <div class="vc-tags"><span class="tag is-soon">Em breve</span></div>
+      </div>
+      <p class="desc">Captação, Relacionamento e canais da Consultoria de Beleza, com a mesma leitura executiva YTD.</p>
+    </div>
+
+    <div class="view-card is-soon" aria-disabled="true">
+      <span class="accent" style="background:#466E85"></span>
+      <div class="vc-top">
+        <span class="ico-tile lg" aria-hidden="true" data-icon="bag"></span>
+        <div>
+          <div class="eyebrow">Visão Jornada CF</div>
+          <h2>Jornada do Consumidor Final</h2>
+        </div>
+        <div class="vc-tags"><span class="tag is-soon">Em breve</span></div>
+      </div>
+      <p class="desc">Vendas, E-commerce e Social Commerce, com a mesma leitura executiva YTD.</p>
+    </div>
+  </div>
+
+  <div class="portal-foot legend">Fonte: base ITSM (Major Incidents, Major Problems, Impactos e Disponibilidade dos Serviços Críticos).</div>
+</main>
+
+<script>
+  (function () {
+    var ICONS = {
+      dashboard: '<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><path class="dots" d="M13 13h7v7h-7z"/>',
+      truck: '<path d="M3 6.5h11v9H3zM14 9.5h3.6l3 3.2v2.8H14"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/><path class="dots" d="M5 10h6"/>',
+      beauty: '<circle cx="9" cy="8" r="3.2"/><path d="M3.8 19.5c.6-3.6 2.6-5.6 5.2-5.6 1.2 0 2.3.4 3.1 1.2"/><path d="M16 9.5h3v4h-3z"/><path d="M15.5 13.5h4l-.6 6h-2.8z"/><path class="dots" d="M17.5 6.5v3"/>',
+      bag: '<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/><path class="dots" d="M9 12.5h6"/>',
+      check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+      arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>'
+    };
+    function icon(n) { return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + (ICONS[n] || '') + '</svg>'; }
+    var base = document.body.getAttribute('data-base-url') || '';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-icon]'), function (el) {
+      if (el.tagName === 'LI') el.insertAdjacentHTML('afterbegin', icon(el.getAttribute('data-icon')));
+      else el.innerHTML = icon(el.getAttribute('data-icon'));
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('a[data-view]'), function (a) {
+      a.href = (base || '') + '?view=' + a.getAttribute('data-view');
+    });
+    if (window.google && google.script && google.script.run) {
+      google.script.run.withSuccessHandler(function (cfg) {
+        if (cfg && cfg.lastUpdated) document.getElementById('portal-stamp').textContent = 'Atualizado em ' + cfg.lastUpdated;
+      }).getInitialConfig();
+    }
+  })();
+</script>
+</body>
+</html>

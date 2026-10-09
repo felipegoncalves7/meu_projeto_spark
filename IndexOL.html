@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visão O&amp;L — Operação &amp; Logística</title>
+  <!-- Bandeiras (flag-icons), gráficos (Chart.js + datalabels) e exportação Excel (SheetJS) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/css/flag-icons.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <?!= include('dashboardOL.css'); ?>
+</head>
+<body data-base-url="<?= baseUrl ?>">
+
+<header class="ol-head" role="banner">
+  <div class="ol-head-inner">
+    <div class="brand">
+      <img class="brand-logo" src="<?!= include('LogoData').trim() ?>" alt="Natura">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <div class="brand-title">
+        <span class="eyebrow">Indicadores ITSM · Visão O&amp;L</span>
+        <span class="title">Operação &amp; Logística</span>
+        <span class="stamp" id="ol-stamp" aria-live="polite"></span>
+      </div>
+    </div>
+
+    <div class="head-controls" role="group" aria-label="Filtros">
+      <label class="field"><span class="eyebrow">Ano</span>
+        <select id="ol-year" disabled aria-label="Ano"></select></label>
+      <label class="field"><span class="eyebrow">Período</span>
+        <select id="ol-period" disabled aria-label="Período (YTD, trimestre, semestre ou mês)"></select></label>
+      <div class="field">
+        <span class="eyebrow">Origem dos incidentes</span>
+        <div class="seg on-dark" id="ol-origem" role="group" aria-label="Origem dos incidentes">
+          <button type="button" data-v="tec" class="is-active" data-tip="Somente incidentes com origem em Tecnologia (mesmo critério da Visão Geral).">Tecnologia</button>
+          <button type="button" data-v="all" data-tip="Todos os incidentes de O&amp;L, independentemente da origem (Tecnologia, Não Tecnologia, Outro).">Todas</button>
+        </div>
+      </div>
+      <a id="ol-portal-link" class="btn btn-ghost-dark" href="#" target="_top" title="Voltar ao Portal de Indicadores ITSM">&larr; Portal</a>
+    </div>
+  </div>
+
+  <nav class="ol-nav" id="ol-nav" aria-label="Seções">
+    <a href="#sec-resumo" data-sec="sec-resumo" data-icon="spark">Resumo Executivo</a>
+    <a href="#sec-incidentes" data-sec="sec-incidentes" data-icon="alert">Incidentes O&amp;L</a>
+    <a href="#sec-flow-separacao" data-sec="sec-flow-separacao" data-icon="box">Separação, Faturamento &amp; Transporte</a>
+    <a href="#sec-flow-manufatura" data-sec="sec-flow-manufatura" data-icon="factory">Manufatura</a>
+    <a href="#sec-flow-atendimento" data-sec="sec-flow-atendimento" data-icon="headset">Atendimento</a>
+    <a href="#sec-flow-planejamento" data-sec="sec-flow-planejamento" data-icon="calendar">Planejamento</a>
+    <a href="#sec-disponibilidade" data-sec="sec-disponibilidade" data-icon="gauge">Disponibilidade</a>
+  </nav>
+</header>
+
+<main class="ol-main" id="ol-app" aria-live="polite">
+  <div id="ol-error" hidden></div>
+  <section id="sec-resumo" class="ol-section"></section>
+  <section id="sec-incidentes" class="ol-section"></section>
+  <div id="ol-flows"></div>
+  <section id="sec-disponibilidade" class="ol-section"></section>
+  <div class="foot legend" id="ol-foot"></div>
+</main>
+
+<div id="ol-loading" class="loading" role="status">
+  <div class="spinner" aria-hidden="true"></div>
+  <div class="legend">Carregando a Visão O&amp;L…</div>
+</div>
+<div id="ol-tooltip" class="tooltip" role="tooltip" hidden></div>
+<div id="ol-modal-root"></div>
+
+<?!= include('dashboardOL.js'); ?>
+</body>
+</html>
