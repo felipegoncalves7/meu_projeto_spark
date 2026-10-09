@@ -235,7 +235,7 @@
   var IDX = { cur: {}, prev: {} };
   var CACHE = {};
   var charts = {};
-  var state = { year: null, periodKey: null, outMode: 'com', gran: 'month', sel: 'ol', expanded: {}, chartMetric: 'inc', rank: 'tec', entSort: {}, modal: null, outScope: 'ol', outMonth: null, showOla: false, card: 'exc' };
+  var state = { year: null, periodKey: null, outMode: 'com', gran: 'month', sel: 'ol', expanded: {}, chartMetric: 'inc', rank: 'tec', entSort: {}, modal: null, outScope: 'ol', outMonth: null, showOla: false, card: 'exc', iperiodKey: 'ihoje' };
   // Outliers: set = incidentes desconsiderados na visão "sem outliers"; rule = incidentes com >= 1.000 min;
   // suggested = sugestão estatística (minutos apurados acima de Q3 + 1,5·IQR no ano). ver invalida os caches.
   var OUT = { set: {}, official: {}, suggested: {}, ver: 0, source: 'none' };
@@ -600,10 +600,8 @@
   // fim do dia de hoje; o ano anterior é cortado no mesmo dia. Não depende da Status_Apuracao (que vale só para a Disponibilidade).
   function incidentWindow(per) {
     var now = new Date(), cy = D.current.year, ty = now.getFullYear(), cm = now.getMonth() + 1;
-    var isYtd = per.key === 'ytd' || per.key === 'ytdp';
     var months = per.months.slice(), cutCur = null, cutPrev = null, untilToday = false, todayTxt = '';
     if (cy === ty) {
-      if (isYtd) months = range(1, cm);
       if (months.some(function (m) { return m >= cm; })) {
         var d = now.getDate(), pad = function (n) { return (n < 10 ? '0' : '') + n; };
         untilToday = true;
@@ -616,12 +614,33 @@
     return { months: months, cutCur: cutCur, cutPrev: cutPrev, untilToday: untilToday, todayTxt: todayTxt };
   }
 
+  // Períodos do filtro de Incidentes: não dependem da Status_Apuracao; só ficam indisponíveis os meses ainda não iniciados no calendário.
+  function buildIncidentPeriods() {
+    var now = new Date(), cy = D.current.year, ty = now.getFullYear(), cm = now.getMonth() + 1;
+    var maxM = cy < ty ? 12 : (cy === ty ? cm : 0), cur = cy === ty, list = [];
+    function add(key, label, months, group) {
+      list.push({ key: key, label: label, months: months, group: group, disabled: !months.length || months[0] > maxM, today: cur && months.some(function (m) { return m >= cm; }) });
+    }
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    add('ihoje', cur ? 'YTD · Jan–' + MABBR[cm - 1] + ' (até hoje ' + pad(now.getDate()) + '/' + pad(cm) + ')' : 'Ano completo · Jan–Dez', range(1, cur ? cm : 12), 'YTD');
+    for (var m = 1; m <= 12; m++) if (!(cur && m >= cm) && m >= 2 && m < (cur ? cm : 12)) add('iy' + m, 'YTD · Jan–' + MABBR[m - 1], range(1, m), 'YTD');
+    for (var q = 1; q <= 4; q++) add('iq' + q, 'Q' + q + ' · ' + MABBR[(q - 1) * 3] + '–' + MABBR[(q - 1) * 3 + 2], range((q - 1) * 3 + 1, q * 3), 'Trimestres');
+    add('is1', '1º Semestre · Jan–Jun', range(1, 6), 'Semestres');
+    add('is2', '2º Semestre · Jul–Dez', range(7, 12), 'Semestres');
+    for (var k = 1; k <= 12; k++) add('im' + k, MONTHS[k - 1], [k], 'Meses');
+    return list;
+  }
+  function getIncidentPeriod(key) {
+    var list = buildIncidentPeriods();
+    return list.find(function (p) { return p.key === key && !p.disabled; }) || list[0];
+  }
+
   function computeModel() {
     var cur = D.current, prev = D.previous;
     var per = getPeriod(state.periodKey);
     var months = per.months;
     // Duas janelas: Disponibilidade vai até o último mês apurado (months); a volumetria de incidentes vai até hoje (iw).
-    var iw = incidentWindow(per);
+    var iw = incidentWindow(getIncidentPeriod(state.iperiodKey));
     var prevOk = !!prev.impactsFound && iw.months.every(function (m) { return prev.statuses[m - 1] !== 'NAO_INICIADO'; });
     var dlabels = { cur: rangeLabel(months, cur.year), prev: rangeLabel(months, prev.year) };
     var labels = { cur: rangeLabel(iw.months, cur.year) + (iw.untilToday ? ' (até ' + iw.todayTxt + ')' : ''), prev: rangeLabel(iw.months, prev.year) + (iw.untilToday ? ' (até ' + iw.todayTxt + ')' : ''), curYear: String(cur.year), prevYear: String(prev.year) };
@@ -669,7 +688,7 @@
 
   function periodNotices() {
     var h = '', per = M.per, info = statusInfo(D.current.statuses);
-    h += '<div class="notice is-info">' + icon('clock') + '<div><b>Duas janelas de tempo:</b> a <b>volumetria de incidentes</b> vai <b>até hoje</b> (' + esc(M.labels.cur) + ', comparada com ' + esc(M.labels.prev) + ') e a <b>Disponibilidade</b> vai <b>até o último mês apurado</b> (' + esc(M.dlabels.cur) + ', comparada com ' + esc(M.dlabels.prev) + ').</div></div>';
+    h += '<div class="notice is-info">' + icon('clock') + '<div><b>Dois filtros de período:</b> a <b>volumetria de incidentes</b> segue o filtro <i>Incidentes · período</i> (' + esc(M.labels.cur) + ', comparada com ' + esc(M.labels.prev) + '; não depende da apuração) e a <b>Disponibilidade</b> segue o filtro <i>Disponibilidade · período</i> (' + esc(M.dlabels.cur) + ', comparada com ' + esc(M.dlabels.prev) + '; só meses apurados).' + '</div></div>';
     if (state.outMode === 'sem') {
       var ids = Object.keys(OUT.set);
       h += '<div class="notice is-out">' + icon('target') + '<div><b>Visão sem outliers (simulação):</b> ' + ids.length + ' ' + plural(ids.length, 'incidente desconsiderado', 'incidentes desconsiderados') + (ids.length ? ' (' + esc(ids.slice(0, 6).join(', ')) + (ids.length > 6 ? '…' : '') + ')' : '') +
@@ -679,7 +698,7 @@
       var pm = per.months.filter(function (m) { return D.current.statuses[m - 1] === 'PARCIAL'; }).map(function (m) { return MONTHS[m - 1]; });
       h += '<div class="notice">' + icon('alert') + '<div><b>Apuração parcial:</b> o período inclui ' + esc(pm.join(', ')) + ' com apuração parcial — incidentes e disponibilidade ainda podem mudar (dados provisórios).</div></div>';
     } else if (state.periodKey === 'ytd' && info.avail > info.closed) {
-      h += '<div class="notice is-info">' + icon('info') + '<div>' + esc(MONTHS[info.avail - 1]) + ' está em apuração parcial e não entra no YTD fechado. Para incluí-lo, selecione <b>YTD · Jan–' + MABBR[info.avail - 1] + ' (inclui parcial)</b> no filtro de Período.</div></div>';
+      h += '<div class="notice is-info">' + icon('info') + '<div>' + esc(MONTHS[info.avail - 1]) + ' está em apuração parcial e não entra no YTD fechado. Para incluí-lo, selecione <b>YTD · Jan–' + MABBR[info.avail - 1] + ' (inclui parcial)</b> no filtro de Disponibilidade.</div></div>';
     }
     if (!D.previous.impactsFound) h += '<div class="notice is-info">' + icon('info') + '<div>Aba <b>Major_Incidents_Impactos_' + D.previous.year + '</b> não encontrada: os comparativos de incidentes com ' + D.previous.year + ' ficam sem base.</div></div>';
     if (!D.current.impactsFound) h += '<div class="notice">' + icon('alert') + '<div>Aba <b>Major_Incidents_Impactos_' + D.current.year + '</b> não encontrada na planilha.</div></div>';
@@ -731,7 +750,7 @@
     var insHtml = ins.length ? '<div class="insights"><div class="eyebrow">' + icon('spark').replace('class="ico"', 'class="ico" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px"') + 'Leitura executiva</div><ul>' + ins.map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ul></div>' : '';
 
     $('sec-resumo').innerHTML = sectionHead('truck', 'Visão O&amp;L · Resumo executivo', 'Operação &amp; Logística — ' + esc(M.labels.curYear) + ' vs ' + esc(M.labels.prevYear),
-      'Comparativos sempre contra o mesmo período do ano anterior. Incidentes até hoje; Disponibilidade até o último mês apurado (aba Status_Apuracao).') +
+      'Comparativos sempre contra o mesmo período do ano anterior. Incidentes e Disponibilidade têm filtros de período independentes (a Disponibilidade só aceita meses apurados, conforme a aba Status_Apuracao).') +
       periodNotices() + '<div class="hero">' + heroLeft + heroRight + '</div>' + tiles + insHtml;
   }
 
@@ -1705,6 +1724,15 @@
       }).join('') + '</optgroup>';
     }).join('');
     ps.disabled = false;
+    var is = $('ol-iperiod'), il = buildIncidentPeriods(), ig = {};
+    if (!getIncidentPeriod(state.iperiodKey) || getIncidentPeriod(state.iperiodKey).key !== state.iperiodKey) state.iperiodKey = 'ihoje';
+    il.forEach(function (p) { (ig[p.group] = ig[p.group] || []).push(p); });
+    is.innerHTML = ['YTD', 'Trimestres', 'Semestres', 'Meses'].filter(function (g) { return ig[g]; }).map(function (g) {
+      return '<optgroup label="' + g + '">' + ig[g].map(function (p) {
+        return '<option value="' + p.key + '"' + (p.disabled ? ' disabled' : '') + (p.key === state.iperiodKey ? ' selected' : '') + '>' + esc(p.label) + (p.disabled ? ' · ainda não iniciado' : (p.today && p.key !== 'ihoje' ? ' · até hoje' : '')) + '</option>';
+      }).join('') + '</optgroup>';
+    }).join('');
+    is.disabled = false;
   }
   function onData(res) {
     setLoading(false);
@@ -1755,6 +1783,7 @@
     window.addEventListener('scroll', function () { if (tipEl) tipEl.hidden = true; }, { passive: true });
     $('ol-year').addEventListener('change', function () { var y = Number(this.value); state.sel = 'ol'; load(y); });
     $('ol-period').addEventListener('change', function () { state.periodKey = this.value; renderAll(); });
+    $('ol-iperiod').addEventListener('change', function () { state.iperiodKey = this.value; renderAll(); });
     load(null);
   }
 
