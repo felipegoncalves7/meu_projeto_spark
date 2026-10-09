@@ -299,8 +299,8 @@
   function isOutlier(inc) { return !!OUT.set[inc]; }
   function outCount() { return Object.keys(OUT.set).length; }
   function passRow(r, mode) { return passOrigem(r) && !((mode || state.outMode) === 'sem' && isOutlier(r.inc)); }
-  function filterRows(rows, months, mode) {
-    return rows.filter(function (r) { return months.indexOf(r.m) !== -1 && passRow(r, mode); });
+  function filterRows(rows, months, mode, cut) {
+    return rows.filter(function (r) { return months.indexOf(r.m) !== -1 && (!cut || !isNum(r.ab) || r.ab <= cut) && passRow(r, mode); });
   }
 
   // Agrega linhas de impacto: Incidentes únicos (KPIs de MTTR/OLA pelo TTR oficial) e pares
@@ -596,13 +596,36 @@
   }
 
   /* --------------------------------------------------------------- modelo */
+  // Janela de incidentes "até hoje": no ano corrente, o período em andamento (YTD) vai de janeiro até o mês de hoje e o corte é o
+  // fim do dia de hoje; o ano anterior é cortado no mesmo dia. Não depende da Status_Apuracao (que vale só para a Disponibilidade).
+  function incidentWindow(per) {
+    var now = new Date(), cy = D.current.year, ty = now.getFullYear(), cm = now.getMonth() + 1;
+    var isYtd = per.key === 'ytd' || per.key === 'ytdp';
+    var months = per.months.slice(), cutCur = null, cutPrev = null, untilToday = false, todayTxt = '';
+    if (cy === ty) {
+      if (isYtd) months = range(1, cm);
+      if (months.some(function (m) { return m >= cm; })) {
+        var d = now.getDate(), pad = function (n) { return (n < 10 ? '0' : '') + n; };
+        untilToday = true;
+        todayTxt = pad(d) + '/' + pad(cm);
+        cutCur = new Date(ty, cm - 1, d, 23, 59, 59, 999).getTime();
+        var dim = new Date(ty - 1, cm, 0).getDate();
+        cutPrev = new Date(ty - 1, cm - 1, Math.min(d, dim), 23, 59, 59, 999).getTime();
+      }
+    }
+    return { months: months, cutCur: cutCur, cutPrev: cutPrev, untilToday: untilToday, todayTxt: todayTxt };
+  }
+
   function computeModel() {
     var cur = D.current, prev = D.previous;
     var per = getPeriod(state.periodKey);
     var months = per.months;
-    var prevOk = !!prev.impactsFound && months.every(function (m) { return prev.statuses[m - 1] !== 'NAO_INICIADO'; });
-    var labels = { cur: rangeLabel(months, cur.year), prev: rangeLabel(months, prev.year), curYear: String(cur.year), prevYear: String(prev.year) };
-    var rowsCur = filterRows(cur.rows, months), rowsPrev = prevOk ? filterRows(prev.rows, months) : null;
+    // Duas janelas: Disponibilidade vai até o último mês apurado (months); a volumetria de incidentes vai até hoje (iw).
+    var iw = incidentWindow(per);
+    var prevOk = !!prev.impactsFound && iw.months.every(function (m) { return prev.statuses[m - 1] !== 'NAO_INICIADO'; });
+    var dlabels = { cur: rangeLabel(months, cur.year), prev: rangeLabel(months, prev.year) };
+    var labels = { cur: rangeLabel(iw.months, cur.year) + (iw.untilToday ? ' (até ' + iw.todayTxt + ')' : ''), prev: rangeLabel(iw.months, prev.year) + (iw.untilToday ? ' (até ' + iw.todayTxt + ')' : ''), curYear: String(cur.year), prevYear: String(prev.year) };
+    var rowsCur = filterRows(cur.rows, iw.months, undefined, iw.cutCur), rowsPrev = prevOk ? filterRows(prev.rows, iw.months, undefined, iw.cutPrev) : null;
     var overall = { cur: agg(cur, rowsCur), prev: rowsPrev ? agg(prev, rowsPrev) : null };
     // Fluxos de Localidade (Separação/Manufatura) consideram ESTRITAMENTE as Localidades do catálogo do fluxo;
     // as demais linhas (unm) ficam fora do fluxo e são listadas como aviso.
@@ -614,7 +637,7 @@
       return { cfg: f, rowsCur: rc, rowsPrev: rp, unmCur: unm, cur: agg(cur, rc), prev: rp ? agg(prev, rp) : null, disp: dispFor('f:' + f.key, months), entities: buildEntities(f, rc, rp, months) };
     });
     return {
-      per: per, months: months, prevOk: prevOk, labels: labels, rowsCur: rowsCur, rowsPrev: rowsPrev, overall: overall, flows: flows,
+      per: per, months: months, imonths: iw.months, iw: iw, prevOk: prevOk, labels: labels, dlabels: dlabels, rowsCur: rowsCur, rowsPrev: rowsPrev, overall: overall, flows: flows,
       olDisp: dispFor('ol', months), unmatchedCur: rowsCur.filter(function (r) { return r.flow === 'outros'; })
     };
   }
@@ -646,6 +669,7 @@
 
   function periodNotices() {
     var h = '', per = M.per, info = statusInfo(D.current.statuses);
+    h += '<div class="notice is-info">' + icon('clock') + '<div><b>Duas janelas de tempo:</b> a <b>volumetria de incidentes</b> vai <b>até hoje</b> (' + esc(M.labels.cur) + ', comparada com ' + esc(M.labels.prev) + ') e a <b>Disponibilidade</b> vai <b>até o último mês apurado</b> (' + esc(M.dlabels.cur) + ', comparada com ' + esc(M.dlabels.prev) + ').</div></div>';
     if (state.outMode === 'sem') {
       var ids = Object.keys(OUT.set);
       h += '<div class="notice is-out">' + icon('target') + '<div><b>Visão sem outliers (simulação):</b> ' + ids.length + ' ' + plural(ids.length, 'incidente desconsiderado', 'incidentes desconsiderados') + (ids.length ? ' (' + esc(ids.slice(0, 6).join(', ')) + (ids.length > 6 ? '…' : '') + ')' : '') +
@@ -664,16 +688,16 @@
 
   /* ------------------------------------------------------- Resumo executivo */
   function renderResumo() {
-    var L = M.labels, od = M.olDisp, c = M.overall.cur, p = M.overall.prev;
+    var DL = M.dlabels, L = M.labels, od = M.olDisp, c = M.overall.cur, p = M.overall.prev;
     var tag = od.cur && od.cur.partial ? '<span class="tag is-partial">◔ Apuração parcial</span>' : (isNum(od.cv) ? '<span class="tag is-closed">● Período fechado</span>' : '');
     var gapTxt = isNum(od.gap) ? (od.gap === 0 ? 'na Meta' : fmtNum(Math.abs(od.gap), 2) + ' p.p. ' + (od.gap > 0 ? 'acima' : 'abaixo') + ' da Meta') : '';
     var calc = od.cur && od.cur.official === false ? ' <span class="info-i" data-tip="Consolidado do período calculado pela média simples dos meses oficiais da aba Disponibilidade_' + D.current.year + ' (mesmo método aplicado ao ano anterior).">i</span>' : '';
-    var heroLeft = '<div class="hero-kpi"><div class="eyebrow">Disponibilidade O&amp;L · ' + esc(L.cur) + calc + '</div>' +
+    var heroLeft = '<div class="hero-kpi"><div class="eyebrow">Disponibilidade O&amp;L · ' + esc(DL.cur) + calc + '</div>' +
       '<div class="value num">' + (isNum(od.cv) ? fmtNum(od.cv, 2) + '<small>%</small>' : '<span class="muted" style="font-size:22px">sem dado no período</span>') + '</div>' +
-      '<div class="hero-meta">' + deltaHtml(od.delta, L.prev) + (isNum(od.cv) ? chip(od.status) : '') + tag + '</div>' + outAltLine(L) +
-      (gapTxt ? '<div class="legend">' + esc(gapTxt) + (isNum(od.pv) ? ' · ' + esc(L.prev) + ': ' + fmtPct(od.pv) : '') + '</div>' : '') +
-      '<div class="hero-ruler">' + bandHtml(od.refs, od.cv, { lg: true, labels: true, prev: od.pv, curLabel: L.cur, prevLabel: L.prev }) + '</div>' +
-      (hasRefs(od.refs) ? bandLegend(L.cur, isNum(od.pv) ? L.prev + ' (mesmo período)' : '') : '') +
+      '<div class="hero-meta">' + deltaHtml(od.delta, DL.prev) + (isNum(od.cv) ? chip(od.status) : '') + tag + '</div>' + outAltLine(DL) +
+      (gapTxt ? '<div class="legend">' + esc(gapTxt) + (isNum(od.pv) ? ' · ' + esc(DL.prev) + ': ' + fmtPct(od.pv) : '') + '</div>' : '') +
+      '<div class="hero-ruler">' + bandHtml(od.refs, od.cv, { lg: true, labels: true, prev: od.pv, curLabel: DL.cur, prevLabel: DL.prev }) + '</div>' +
+      (hasRefs(od.refs) ? bandLegend(DL.cur, isNum(od.pv) ? DL.prev + ' (mesmo período)' : '') : '') +
       (IDX.cur.ol ? '<div class="eyebrow" style="margin-top:18px">Disponibilidade O&amp;L · comparativos em p.p. vs ' + D.previous.year + '</div>' + ppGridHtml('ol') : '') + '</div>';
 
     function row(label, cv, pv, dl, cls) {
@@ -697,7 +721,7 @@
         '<div class="ft-head">' + tile(f.cfg.icon, 'sm') + '<span class="ft-name">' + esc(f.cfg.short) + '</span></div>' +
         '<div class="ft-row"><span class="ft-val num">' + (isNum(d.cv) ? fmtPct(d.cv) : '<span class="muted" style="font-size:14px">sem dado</span>') + '</span>' + (isNum(d.cv) ? chip(st, true) : '') + '</div>' +
         '<div class="ft-row">' + deltaHtml(d.delta, L.prevYear) + '</div>' +
-        bandHtml(d.refs, d.cv, { prev: d.pv, curLabel: L.cur, prevLabel: L.prev }) +
+        bandHtml(d.refs, d.cv, { prev: d.pv, curLabel: DL.cur, prevLabel: DL.prev }) +
         '<div class="ft-inc"><div class="ft-inc-main"><span class="n num">' + f.cur.incidents + '</span><span class="u">' + plural(f.cur.incidents, 'incidente', 'incidentes') + '</span></div>' +
         '<div class="ft-inc-cmp">' + deltaHtml(deltaCount(f.cur.incidents, f.prev ? f.prev.incidents : null, 'lower')) + (f.prev ? '<span class="vs">vs ' + f.prev.incidents + ' em ' + esc(L.prev) + '</span>' : '') + '</div></div>' +
         '</button>';
@@ -706,25 +730,25 @@
     var ins = buildInsights();
     var insHtml = ins.length ? '<div class="insights"><div class="eyebrow">' + icon('spark').replace('class="ico"', 'class="ico" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px"') + 'Leitura executiva</div><ul>' + ins.map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ul></div>' : '';
 
-    $('sec-resumo').innerHTML = sectionHead('truck', 'Visão O&amp;L · Resumo executivo', 'Operação &amp; Logística — ' + esc(L.cur) + ' vs ' + esc(L.prev),
-      'Comparativos sempre contra o mesmo período do ano anterior. Períodos considerados conforme a aba Status_Apuracao.') +
+    $('sec-resumo').innerHTML = sectionHead('truck', 'Visão O&amp;L · Resumo executivo', 'Operação &amp; Logística — ' + esc(M.labels.curYear) + ' vs ' + esc(M.labels.prevYear),
+      'Comparativos sempre contra o mesmo período do ano anterior. Incidentes até hoje; Disponibilidade até o último mês apurado (aba Status_Apuracao).') +
       periodNotices() + '<div class="hero">' + heroLeft + heroRight + '</div>' + tiles + insHtml;
   }
 
-  function outAltLine(L) {
+  function outAltLine(DL) {
     if (!outCount() || !hasApuracao('cur')) return '';
     var alt = dispFor('ol', M.months, state.outMode === 'sem' ? 'com' : 'sem');
     if (!isNum(alt.cv)) return '';
     return '<div class="out-alt" role="button" tabindex="0" data-action="goto" data-target="sec-outliers">' + icon('target') +
       '<span>' + (state.outMode === 'sem' ? 'Oficial (com outliers)' : 'Sem os ' + outCount() + ' ' + plural(outCount(), 'outlier', 'outliers')) + ': <b>' + fmtPct(alt.cv) + '</b></span>' +
-      chip(alt.status, true) + deltaHtml(alt.delta, L.prev) + '<span class="legend">ver impacto isolado →</span></div>';
+      chip(alt.status, true) + deltaHtml(alt.delta, DL.prev) + '<span class="legend">ver impacto isolado →</span></div>';
   }
 
   function buildInsights() {
-    var L = M.labels, od = M.olDisp, out = [], c = M.overall.cur, p = M.overall.prev;
+    var DL = M.dlabels, L = M.labels, od = M.olDisp, out = [], c = M.overall.cur, p = M.overall.prev;
     if (isNum(od.cv)) {
-      out.push('Disponibilidade de O&amp;L em ' + esc(L.cur) + ': <b>' + fmtPct(od.cv) + '</b>' +
-        (isNum(od.pv) ? ' (<b>' + esc(od.delta.txt) + '</b> vs ' + esc(L.prev) + ')' : '') + ' — status <b>' + esc(od.status.label) + '</b>' +
+      out.push('Disponibilidade de O&amp;L em ' + esc(DL.cur) + ': <b>' + fmtPct(od.cv) + '</b>' +
+        (isNum(od.pv) ? ' (<b>' + esc(od.delta.txt) + '</b> vs ' + esc(DL.prev) + ')' : '') + ' — status <b>' + esc(od.status.label) + '</b>' +
         (isNum(od.gap) ? ' (' + fmtSigned(od.gap, 2) + ' p.p. vs Meta)' : '') + '.');
     }
     var fl = M.flows.filter(function (f) { return isNum(f.disp.cv) && isNum(f.disp.pv); }).map(function (f) { return { f: f, d: f.disp.delta.d }; });
@@ -746,7 +770,7 @@
     if (outCount() && hasApuracao('cur') && state.outMode === 'com') {
       var ws = dispFor('ol', M.months, 'sem');
       if (isNum(ws.cv) && isNum(od.cv) && r2(ws.cv) > r2(od.cv)) {
-        out.push('Sem os <b>' + outCount() + ' ' + plural(outCount(), 'outlier', 'outliers') + '</b>, O&amp;L fecharia ' + esc(L.cur) + ' em <b>' + fmtPct(ws.cv) + '</b> (' + esc(deltaPP(ws.cv, od.cv, 2).txt) + ' sobre o oficial; status <b>' + esc(ws.status.label) + '</b>' + (isNum(ws.pv) ? '; ' + esc(ws.delta.txt) + ' vs ' + esc(L.prev) : '') + ').');
+        out.push('Sem os <b>' + outCount() + ' ' + plural(outCount(), 'outlier', 'outliers') + '</b>, O&amp;L fecharia ' + esc(DL.cur) + ' em <b>' + fmtPct(ws.cv) + '</b> (' + esc(deltaPP(ws.cv, od.cv, 2).txt) + ' sobre o oficial; status <b>' + esc(ws.status.label) + '</b>' + (isNum(ws.pv) ? '; ' + esc(ws.delta.txt) + ' vs ' + esc(DL.prev) : '') + ').');
       }
     }
     var all = [];
@@ -811,7 +835,7 @@
     var sec = $('sec-outliers');
     if (!sec) return;
     if (charts.wf) { charts.wf.destroy(); charts.wf = null; }
-    var L = M.labels, cy = D.current.year;
+    var DL = M.dlabels, L = M.labels, cy = D.current.year;
     var scopes = outScopes();
     if (!scopes.find(function (x) { return x.key === state.outScope; })) state.outScope = 'ol';
     var avail = outMonthsAvailable();
@@ -846,14 +870,14 @@
       var g = deltaPP(b.cv, a.cv, 2, 'higher');
       return g.cls === 'nobase' ? '' : '<div class="ov-gain">' + deltaHtml({ cls: g.d > 0 ? 'good' : 'flat', arrow: g.d > 0 ? '▲' : '=', txt: (g.d > 0 ? g.txt : '0,00 p.p.') + ' sem outliers' }) + '</div>';
     }
-    var rc = scopeRows(filterRows(D.current.rows, M.months, 'com'), scope);
+    var rc = scopeRows(filterRows(D.current.rows, M.imonths, 'com', M.iw.cutCur), scope);
     var aOff = agg(D.current, rc), aSem = agg(D.current, rc.filter(function (r) { return !isOutlier(r.inc); }));
     function krow(label, a, b) { return '<tr><td>' + label + '</td><td class="num">' + a + '</td><td class="num strong">' + b + '</td></tr>'; }
     var cards = '<div class="grid cols-3 out-cards">' +
       '<div class="kpi"><div class="kpi-head"><span class="eyebrow">Mês · ' + esc(mLbl) + ' · ' + esc(scopeLabel(scope)) + '</span></div><div class="ov-row">' + valBlock('Oficial', mOff) + '<span class="ov-arrow">→</span>' + valBlock('Sem outliers', mSem) + '</div>' + gainHtml(mOff, mSem) +
         '<div class="kpi-foot">' + esc(MABBR[month - 1] + '/' + D.previous.year) + ': ' + fmtPct(mOff.pv) + ' · oficial ' + esc(mOff.delta.txt) + ' · sem outliers ' + esc(mSem.delta.txt) + '</div></div>' +
-      '<div class="kpi"><div class="kpi-head"><span class="eyebrow">Período · ' + esc(L.cur) + '</span></div><div class="ov-row">' + valBlock('Oficial', pOff) + '<span class="ov-arrow">→</span>' + valBlock('Sem outliers', pSem) + '</div>' + gainHtml(pOff, pSem) +
-        '<div class="kpi-foot">vs ' + esc(L.prev) + ' (' + fmtPct(pOff.pv) + '): oficial ' + deltaHtml(pOff.delta) + ' · sem outliers ' + deltaHtml(pSem.delta) + '</div></div>' +
+      '<div class="kpi"><div class="kpi-head"><span class="eyebrow">Período · ' + esc(DL.cur) + '</span></div><div class="ov-row">' + valBlock('Oficial', pOff) + '<span class="ov-arrow">→</span>' + valBlock('Sem outliers', pSem) + '</div>' + gainHtml(pOff, pSem) +
+        '<div class="kpi-foot">vs ' + esc(DL.prev) + ' (' + fmtPct(pOff.pv) + '): oficial ' + deltaHtml(pOff.delta) + ' · sem outliers ' + deltaHtml(pSem.delta) + '</div></div>' +
       '<div class="kpi"><div class="kpi-head"><span class="eyebrow">Incidentes · ' + esc(L.cur) + '</span><span class="legend">' + nOut + ' ' + plural(nOut, 'outlier', 'outliers') + '</span></div>' +
         '<table class="cmp-table ov-table"><thead><tr><th></th><th>Oficial</th><th>Sem outliers</th></tr></thead><tbody>' +
         krow('Incidentes', fmtInt(aOff.incidents), fmtInt(aSem.incidents)) + krow('MTTR', fmtHM(aOff.mttr), fmtHM(aSem.mttr)) +
@@ -881,7 +905,7 @@
 
     // resumo por fluxo: período oficial x sem outliers
     var flowRows = [{ key: 'ol', label: 'O&L (consolidado)', icon: 'truck' }].concat(D.config.flows.map(function (f) { return { key: 'f:' + f.key, label: f.label, icon: f.icon }; })).filter(function (x) { return IDX.cur[x.key]; });
-    var flowTable = '<div class="tbl-scroll"><table class="cmp-table out-flows"><thead><tr><th>Escopo</th><th>' + esc(L.cur) + ' oficial</th><th>Sem outliers</th><th>Ganho</th><th>vs ' + esc(L.prev) + ' (oficial)</th><th>vs ' + esc(L.prev) + ' (sem outliers)</th></tr></thead><tbody>' +
+    var flowTable = '<div class="tbl-scroll"><table class="cmp-table out-flows"><thead><tr><th>Escopo</th><th>' + esc(DL.cur) + ' oficial</th><th>Sem outliers</th><th>Ganho</th><th>vs ' + esc(DL.prev) + ' (oficial)</th><th>vs ' + esc(DL.prev) + ' (sem outliers)</th></tr></thead><tbody>' +
       flowRows.map(function (x) {
         var o = dispFor(x.key, M.months, 'com'), w = dispFor(x.key, M.months, 'sem'), g = deltaPP(w.cv, o.cv, 2, 'higher');
         return '<tr' + (x.key === scope ? ' class="is-sel"' : '') + '><td><span class="rh-inline">' + tile(x.icon, 'sm') + esc(x.label) + '</span></td>' +
@@ -891,7 +915,7 @@
 
     sec.innerHTML = head + notes + toolbar + cards +
       '<div style="margin-top:14px">' + wfPanel + '</div><div style="margin-top:14px">' + listPanel + '</div>' +
-      '<div class="sub-title" style="margin-top:22px">' + icon('layers') + 'Período ' + esc(L.cur) + ' com e sem outliers, por fluxo</div>' + flowTable +
+      '<div class="sub-title" style="margin-top:22px">' + icon('layers') + 'Período ' + esc(DL.cur) + ' com e sem outliers, por fluxo</div>' + flowTable +
       '<div class="legend" style="margin-top:10px">Método: a indisponibilidade oficial do mês (100% − resultado da aba Disponibilidade_' + cy + ') é repartida entre os incidentes na proporção dos minutos apurados na aba apuracao_' + cy + ' para o mesmo Fluxo/País/Serviço. "Sem outliers" devolve a fatia desses incidentes; períodos usam a média dos meses. É uma estimativa — o resultado oficial continua sendo o da planilha.</div>';
     if (iso.items.length) drawWaterfall(scope, iso, mSem);
   }
@@ -951,7 +975,7 @@
     return v <= target ? '<span class="target-ok">✓ ' + label + ' na meta</span>' : '<span class="target-bad">✕ ' + label + ' acima da meta</span>';
   }
   function renderIncidentes() {
-    var L = M.labels, c = M.overall.cur, p = M.overall.prev, T = D.config.targets, P = p || {};
+    var DL = M.dlabels, L = M.labels, c = M.overall.cur, p = M.overall.prev, T = D.config.targets, P = p || {};
     var vs = L.prevYear;
     var cards =
       '<div class="kpi"><div class="kpi-head"><span class="eyebrow">Volume de incidentes</span>' + tile('alert', 'sm') + '</div>' +
@@ -984,7 +1008,7 @@
 
     var chartPanel = '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('chart') + 'Evolução mensal — ' + D.current.year + ' vs ' + D.previous.year + '</div>' +
       '<div class="seg" id="ol-evo-metric">' + [['inc', 'Incidentes'], ['mttr', 'MTTR (h)']].map(function (o) { return '<button type="button" data-v="' + o[0] + '"' + (state.chartMetric === o[0] ? ' class="is-active"' : '') + '>' + o[1] + '</button>'; }).join('') + '</div></div>' +
-      '<div class="chart-box"><canvas id="ol-chart-evo"></canvas></div><div class="legend" style="margin-top:6px">Barras escuras = meses do período selecionado. Meses não iniciados na apuração não são exibidos.</div></div>';
+      '<div class="chart-box"><canvas id="ol-chart-evo"></canvas></div><div class="legend" style="margin-top:6px">Barras escuras = meses do período selecionado. Incidentes até hoje; o mês corrente está em andamento e os meses futuros não aparecem.</div></div>';
 
     var rankPanel = '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('list') + 'Principais ofensores do período</div>' +
       '<div class="seg" id="ol-rank-tab">' + [['tec', 'Tecnologia impactada'], ['ofe', 'Ofensor'], ['loc', 'Localidade / Sistema']].map(function (o) { return '<button type="button" data-v="' + o[0] + '"' + (state.rank === o[0] ? ' class="is-active"' : '') + '>' + o[1] + '</button>'; }).join('') + '</div></div>' +
@@ -1003,7 +1027,7 @@
   // até os que entram nos números gerais (origem Tecnologia).
   function reconcileHtml() {
     var u = function (list) { var m = {}; list.forEach(function (r) { m[r.inc] = true; }); return Object.keys(m).length; };
-    var rowsP = D.current.rows.filter(function (r) { return M.months.indexOf(r.m) !== -1; });
+    var rowsP = D.current.rows.filter(function (r) { return M.imonths.indexOf(r.m) !== -1 && (!M.iw.cutCur || !isNum(r.ab) || r.ab <= M.iw.cutCur); });
     var rowsY = D.current.rows;
     var nP = u(rowsP), tP = u(rowsP.filter(function (r) { return r.tec; })), cP = u(rowsP.filter(function (r) { return r.tec && r.card; }));
     var nY = u(rowsY), tY = u(rowsY.filter(function (r) { return r.tec; }));
@@ -1038,8 +1062,9 @@
 
   function monthlySeries(yd) {
     var out = [];
+    var now = new Date(), futureFrom = yd.year === now.getFullYear() ? now.getMonth() + 2 : (yd.year > now.getFullYear() ? 1 : 13);
     for (var m = 1; m <= 12; m++) {
-      if (yd.statuses[m - 1] === 'NAO_INICIADO' || !yd.impactsFound) { out.push(null); continue; }
+      if (m >= futureFrom || !yd.impactsFound) { out.push(null); continue; }
       out.push(agg(yd, yd.rows.filter(function (r) { return r.m === m && passRow(r); })));
     }
     return out;
@@ -1049,7 +1074,7 @@
     if (!cv || !window.Chart) return;
     var cs = monthlySeries(D.current), ps = monthlySeries(D.previous), metric = state.chartMetric;
     var val = function (a) { if (!a) return null; if (metric === 'inc') return a.incidents; if (metric === 'mttr') return isNum(a.mttr) ? Math.round(a.mttr / 6) / 10 : null; return isNum(a.impactMin) ? Math.round(a.impactMin / 6) / 10 : 0; };
-    var inPer = function (i) { return M.months.indexOf(i + 1) !== -1; };
+    var inPer = function (i) { return M.imonths.indexOf(i + 1) !== -1; };
     var curColors = cs.map(function (_, i) { return inPer(i) ? '#FF6D00' : 'rgba(255,109,0,.28)'; });
     var curBorders = cs.map(function (_, i) { return D.current.statuses[i] === 'PARCIAL' ? '#7a5410' : 'transparent'; });
     charts.evo = new Chart(cv, {
@@ -1078,16 +1103,16 @@
 
   /* --------------------------------------------------------------- Fluxos */
   function renderFlows() {
-    var L = M.labels;
+    var DL = M.dlabels, L = M.labels;
     $('ol-flows').innerHTML = M.flows.map(function (f) {
       var d = f.disp, c = f.cur, p = f.prev, P = p || {};
       var calc = d.cur && d.cur.official === false ? ' <span class="info-i" data-tip="Consolidado calculado pela média simples dos meses oficiais (mesmo método no ano anterior).">i</span>' : '';
-      var dispBlock = '<div class="flow-disp"><div class="eyebrow">Disponibilidade · ' + esc(L.cur) + calc + '</div>' +
+      var dispBlock = '<div class="flow-disp"><div class="eyebrow">Disponibilidade · ' + esc(DL.cur) + calc + '</div>' +
         '<div class="value num">' + (isNum(d.cv) ? fmtPct(d.cv) : '<span class="muted" style="font-size:18px">sem dado no período</span>') + '</div>' +
-        '<div class="hero-meta">' + deltaHtml(d.delta, L.prev) + (isNum(d.cv) ? chip(d.status) : '') + (d.cur && d.cur.partial ? '<span class="tag is-partial">◔ parcial</span>' : '') + '</div>' +
-        (isNum(d.gap) ? '<div class="legend">' + (d.gap === 0 ? 'na Meta' : fmtNum(Math.abs(d.gap), 2) + ' p.p. ' + (d.gap > 0 ? 'acima' : 'abaixo') + ' da Meta') + (isNum(d.pv) ? ' · ' + esc(L.prev) + ': ' + fmtPct(d.pv) : '') + '</div>' : '') +
-        '<div style="margin-top:8px">' + bandHtml(d.refs, d.cv, { lg: true, labels: true, prev: d.pv, curLabel: L.cur, prevLabel: L.prev }) + '</div>' +
-        (hasRefs(d.refs) ? bandLegend(L.cur, isNum(d.pv) ? L.prev : '') : '') + '</div>';
+        '<div class="hero-meta">' + deltaHtml(d.delta, DL.prev) + (isNum(d.cv) ? chip(d.status) : '') + (d.cur && d.cur.partial ? '<span class="tag is-partial">◔ parcial</span>' : '') + '</div>' +
+        (isNum(d.gap) ? '<div class="legend">' + (d.gap === 0 ? 'na Meta' : fmtNum(Math.abs(d.gap), 2) + ' p.p. ' + (d.gap > 0 ? 'acima' : 'abaixo') + ' da Meta') + (isNum(d.pv) ? ' · ' + esc(DL.prev) + ': ' + fmtPct(d.pv) : '') + '</div>' : '') +
+        '<div style="margin-top:8px">' + bandHtml(d.refs, d.cv, { lg: true, labels: true, prev: d.pv, curLabel: DL.cur, prevLabel: DL.prev }) + '</div>' +
+        (hasRefs(d.refs) ? bandLegend(DL.cur, isNum(d.pv) ? DL.prev : '') : '') + '</div>';
 
       function mk(label, v, dl, sub) { return '<div class="mini-kpi"><span class="eyebrow">' + label + '</span><span class="v">' + v + '</span>' + deltaHtml(dl) + (sub ? '<span class="s">' + sub + '</span>' : '') + '</div>'; }
       var kpis = '<div class="mini-kpis">' +
@@ -1099,7 +1124,7 @@
 
       var sortMode = state.entSort[f.cfg.key] || 'impacto';
       var toolbar = '<div class="ent-toolbar"><div class="sub-title" style="margin:0">' + icon(f.cfg.entityType === 'sistema' ? 'monitor' : 'pin') +
-        (f.cfg.entityType === 'sistema' ? 'Sistemas / Aplicações' : 'Localidades') + ' — ' + esc(L.cur) + ' vs ' + esc(L.prev) + '</div>' +
+        (f.cfg.entityType === 'sistema' ? 'Sistemas / Aplicações' : 'Localidades') + ' — incidentes ' + esc(L.cur) + ' vs ' + esc(L.prev) + ' · Disponibilidade ' + esc(DL.cur) + '</div>' +
         '<div class="seg" data-ent-sort="' + f.cfg.key + '"><button type="button" data-v="impacto"' + (sortMode === 'impacto' ? ' class="is-active"' : '') + '>Mais incidentes</button><button type="button" data-v="az"' + (sortMode === 'az' ? ' class="is-active"' : '') + '>Ordem padrão</button></div></div>';
 
       return '<section id="sec-flow-' + f.cfg.key + '" class="ol-section">' +
@@ -1182,7 +1207,7 @@
   }
 
   function entCard(f, e) {
-    var L = M.labels, c = e.cur, p = e.prev;
+    var DL = M.dlabels, L = M.labels, c = e.cur, p = e.prev;
     var has = c.incidents > 0;
     var alert = e.disp && isNum(e.disp.cv) && e.disp.status.key === 'atencao';
     var cls = 'ent-card' + (has ? ' has-inc' : ' is-zero') + (alert ? ' is-alert' : '');
@@ -1213,7 +1238,7 @@
     if (e.disp && (isNum(e.disp.cv) || hasRefs(e.disp.refs))) {
       disp = '<div class="ec-disp"><div class="ec-disp-row"><span class="legend">Disponibilidade</span><span class="v">' + fmtPct(e.disp.cv) + '</span>' + (isNum(e.disp.cv) ? chip(e.disp.status, true) : '') + '</div>' +
         '<div class="ec-disp-row">' + deltaHtml(e.disp.delta, L.prevYear) + '</div>' +
-        bandHtml(e.disp.refs, e.disp.cv, { prev: e.disp.pv, curLabel: L.cur, prevLabel: L.prev }) + '</div>';
+        bandHtml(e.disp.refs, e.disp.cv, { prev: e.disp.pv, curLabel: DL.cur, prevLabel: DL.prev }) + '</div>';
     }
     return '<div role="button" tabindex="0" class="' + cls + '" data-action="open-entity" data-flow="' + f.cfg.key + '" data-ent="' + esc(e.key) + '" aria-label="Ver incidentes de ' + esc(e.name) + '">' + head + main + body + disp + '<div class="ec-more">Ver incidentes e ' + esc(L.prevYear) + ' ' + icon('chevron') + '</div></div>';
   }
@@ -1318,12 +1343,12 @@
     if (!n) { box.innerHTML = ''; return; }
     var fcfgSel = path.indexOf('f:') === 0 && path.indexOf('/') === -1 ? D.config.flows.find(function (f) { return 'f:' + f.key === path; }) : null;
     var name = path === 'ol' ? 'O&L (consolidado)' : (fcfgSel ? fcfgSel.label : n.name);
-    var L = M.labels, d = dispFor(path, M.months);
-    var left = '<div><div class="eyebrow">Detalhe · ' + esc(L.cur) + '</div><div class="sub-title" style="margin:4px 0 2px;font-size:16px">' + esc(name) + '</div>' +
+    var DL = M.dlabels, L = M.labels, d = dispFor(path, M.months);
+    var left = '<div><div class="eyebrow">Detalhe · ' + esc(DL.cur) + '</div><div class="sub-title" style="margin:4px 0 2px;font-size:16px">' + esc(name) + '</div>' +
       '<div class="flow-disp"><div class="value num">' + (isNum(d.cv) ? fmtPct(d.cv) : '<span class="muted" style="font-size:18px">sem dado no período</span>') + '</div>' +
-      '<div class="hero-meta">' + deltaHtml(d.delta, L.prev) + (isNum(d.cv) ? chip(d.status) : '') + '</div></div>' +
-      '<div style="margin-top:6px">' + bandHtml(d.refs, d.cv, { lg: true, labels: true, prev: d.pv, curLabel: L.cur, prevLabel: L.prev }) + '</div>' +
-      (hasRefs(d.refs) ? bandLegend(L.cur, isNum(d.pv) ? L.prev : '') : '');
+      '<div class="hero-meta">' + deltaHtml(d.delta, DL.prev) + (isNum(d.cv) ? chip(d.status) : '') + '</div></div>' +
+      '<div style="margin-top:6px">' + bandHtml(d.refs, d.cv, { lg: true, labels: true, prev: d.pv, curLabel: DL.cur, prevLabel: DL.prev }) + '</div>' +
+      (hasRefs(d.refs) ? bandLegend(DL.cur, isNum(d.pv) ? DL.prev : '') : '');
 
     left += '<div class="eyebrow" style="margin-top:16px">Comparativos em p.p. vs ' + D.previous.year + '</div>' + ppGridHtml(path) + '</div>';
 
@@ -1486,8 +1511,9 @@
     if (!rows.some(function (r) { return r.tec; })) return { st: 'tec', label: 'Origem não é Tecnologia', det: 'Coluna P = ' + tecTxt, m: m };
     if (!m) return { st: 'nomes', label: 'Sem mês identificado', det: 'Colunas J (Mês) e K (Abertura) sem mês válido', m: m };
     var stt = D.current.statuses[m - 1];
-    if (stt === 'NAO_INICIADO') return { st: 'mes', label: 'Mês não iniciado', det: mon + ' está "Não iniciado" na Status_Apuracao (' + D.current.year + ')', m: m };
-    if (M.months.indexOf(m) === -1) return { st: 'per', label: 'Fora do período selecionado', det: mon + ' não está em ' + M.labels.cur, m: m };
+    if (M.imonths.indexOf(m) === -1) return { st: 'per', label: 'Fora do período selecionado', det: mon + ' não está em ' + M.labels.cur, m: m };
+    var ab = rows[0].ab;
+    if (M.iw.cutCur && isNum(ab) && ab > M.iw.cutCur) return { st: 'per', label: 'Depois de hoje', det: 'Abertura em ' + fmtDate(ab), m: m };
     return { st: 'ok', label: stt === 'PARCIAL' ? 'Contado (mês parcial)' : 'Contado', det: mon + ' · ' + (rows[0].st || ''), m: m, partial: stt === 'PARCIAL', card: rows.every(function (r) { return r.card; }) };
   }
   function runCheck() {
@@ -1508,7 +1534,7 @@
     var found = r.items.length - cnt('nf') - cnt('ano') - cnt('stream');
     var sum = '<div class="check-sum"><div><span class="n num">' + r.n + '</span><span class="legend">na sua lista</span></div>' +
       '<div><span class="n num ok">' + cnt('ok') + '</span><span class="legend">contados no período</span></div>' +
-      '<div><span class="n num">' + (cnt('mes') + cnt('per') + cnt('nomes')) + '</span><span class="legend">fora por mês/período</span></div>' +
+      '<div><span class="n num">' + (cnt('per') + cnt('nomes')) + '</span><span class="legend">fora por mês/período</span></div>' +
       '<div><span class="n num">' + (cnt('tec') + cnt('stream')) + '</span><span class="legend">fora por Stream/origem</span></div>' +
       '<div><span class="n num">' + (cnt('nf') + cnt('ano')) + '</span><span class="legend">não encontrados no ano</span></div>' +
       '<div><span class="n num">' + r.extra.length + '</span><span class="legend">na tela, fora da lista</span></div></div>';
@@ -1518,7 +1544,7 @@
       '<div class="empty">Todos os ' + r.n + ' incidentes da lista entram nos números do período selecionado.</div>';
     var ex = r.extra.length ? '<div class="sub-title" style="margin-top:14px">' + icon('alert') + 'Na tela (origem Tecnologia, ' + D.current.year + ') e fora da sua lista</div><div class="legend">' + esc(r.extra.slice(0, 60).map(function (e) { return e.id + ' (' + e.month + ')'; }).join(', ')) + (r.extra.length > 60 ? '…' : '') + '</div>' : '';
     return sum + '<div class="sub-title" style="margin-top:14px">' + icon('list') + 'Incidentes da lista que não entram nos números do período' + '</div>' + tbl + ex +
-      '<div class="legend" style="margin-top:10px">Encontrados na aba: ' + found + ' de ' + r.n + '. "Contados no período" respeitam o período, a Status_Apuracao e a origem Tecnologia; o filtro CARD não altera o total geral.</div>';
+      '<div class="legend" style="margin-top:10px">Encontrados na aba: ' + found + ' de ' + r.n + '. "Contados no período" respeitam o período (incidentes até hoje) e a origem Tecnologia; o filtro CARD não altera o total geral.</div>';
   }
   function exportCheck() {
     if (!CHECK.res || !window.XLSX) return;
