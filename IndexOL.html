@@ -31,24 +31,17 @@
       <label class="field"><span class="eyebrow">Período</span>
         <select id="ol-period" disabled aria-label="Período (YTD, trimestre, semestre ou mês)"></select></label>
       <div class="field">
-        <span class="eyebrow">Origem</span>
-        <div class="seg on-dark" id="ol-origem" role="group" aria-label="Origem dos incidentes">
-          <button type="button" data-v="tec" class="is-active" data-tip="Somente incidentes com origem em Tecnologia (mesmo critério da Visão Geral).">Tecnologia</button>
-          <button type="button" data-v="all" data-tip="Todos os incidentes de O&amp;L, independentemente da origem (Tecnologia, Não Tecnologia, Outro).">Todas</button>
-        </div>
-      </div>
-      <div class="field">
         <span class="eyebrow">CARD</span>
         <div class="seg on-dark" id="ol-card" role="group" aria-label="Países CARD">
-          <button type="button" data-v="exc" class="is-active" data-tip="Exclui os incidentes que impactaram países CARD (América Central e República Dominicana), em 2026 e 2025.">Excluir</button>
+          <button type="button" data-v="exc" class="is-active" data-tip="Exclui dos fluxos e localidades os incidentes que impactaram países CARD (América Central e República Dominicana), em 2026 e 2025. O total geral de O&amp;L considera todas as localidades.">Excluir</button>
           <button type="button" data-v="inc" data-tip="Inclui os incidentes que impactaram países CARD (Guatemala, El Salvador, Honduras, Nicarágua, Panamá, Costa Rica e República Dominicana).">Incluir</button>
         </div>
       </div>
       <div class="field">
-        <span class="eyebrow">Outliers</span>
-        <div class="seg on-dark" id="ol-outmode" role="group" aria-label="Outliers">
+        <span class="eyebrow">Outliers de Disponibilidade</span>
+        <div class="seg on-dark" id="ol-outmode" role="group" aria-label="Outliers de Disponibilidade">
           <button type="button" data-v="com" class="is-active" data-tip="Resultado oficial, com todos os incidentes.">Considerar</button>
-          <button type="button" data-v="sem" data-tip="Simula o resultado sem os incidentes classificados como Outlier (ver seção Impacto isolado &amp; Outliers).">Desconsiderar</button>
+          <button type="button" data-v="sem" data-tip="Simula o resultado sem os Outliers de Disponibilidade: incidentes com 1.000 minutos ou mais de indisponibilidade apurada (ver seção Impacto isolado &amp; Outliers).">Desconsiderar</button>
         </div>
       </div>
       <a id="ol-portal-link" class="btn btn-ghost-dark" href="#" target="_top" title="Voltar ao Portal de Indicadores ITSM">&larr; Portal</a>

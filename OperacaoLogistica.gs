@@ -15,8 +15,6 @@
 const OL_IMPACT_SHEET_PREFIX = 'Major_Incidents_Impactos_';
 const OL_DISP_SHEET_PREFIXES = ['Disponibilidade_', 'DISP_'];
 const OL_STATUS_SHEET = 'Status_Apuracao';
-// Aba opcional com os Incidentes que o negócio classifica como Outlier (A: Incidente, B: Motivo, C: Ano).
-const OL_OUTLIERS_SHEET = 'Outliers_OL';
 // Marca considerada na apuração (o indicador de Disponibilidade é da Natura; linhas de outras marcas são ignoradas).
 const OL_APURACAO_BRAND = 'natura';
 
@@ -172,6 +170,16 @@ function olParseDuration(display) {
   if (s.indexOf(':') !== -1) return parseDurationString(s);
   const num = parseFloat(s.replace(',', '.'));
   return isFinite(num) ? Math.round(num) : null;
+}
+
+/** Stream de O&L: "O&L" ou "Planejamento Logístico" (aceita variações de caixa, espaços e sufixos). Retorna a chave ou ''. */
+function olStreamKey(raw) {
+  const k = olFold(raw).replace(/\s+/g, '');
+  if (!k) return '';
+  if (OL_STREAMS[k]) return k;
+  if (k.indexOf('planejamentologistico') === 0) return 'planejamentologistico';
+  if (k === 'ol' || /(^|[^a-z])o&l($|[^a-z])/.test(olFold(raw))) return 'o&l';
+  return '';
 }
 
 function olParseSeveridade(v) {
@@ -336,6 +344,7 @@ function olReadImpactos(ss, year, callerMap) {
   const incidents = {};
   const unmatched = {};
   const anySim = {};   // incidente -> alguma linha com Tecnologia = Sim na própria aba de Impactos
+  const hasP = {};     // incidente -> alguma linha com a coluna Tecnologia preenchida
   const txt = (v, max) => {
     const s = String(v === null || v === undefined ? '' : v).trim();
     return max && s.length > max ? s.slice(0, max) + '…' : s;
@@ -345,8 +354,8 @@ function olReadImpactos(ss, year, callerMap) {
     const r = values[i];
     const inc = txt(r[OL_COL_INCIDENTE]);
     if (!inc) continue;
-    const streamKey = olFold(r[OL_COL_STREAM]).replace(/\s+/g, '');
-    if (!OL_STREAMS[streamKey]) continue;
+    const streamKey = olStreamKey(r[OL_COL_STREAM]);
+    if (!streamKey) continue;
 
     const abertura = olIsDate(r[OL_COL_ABERTURA]) ? r[OL_COL_ABERTURA] : null;
     const encerramento = olIsDate(r[OL_COL_ENCERRAMENTO]) ? r[OL_COL_ENCERRAMENTO] : null;
@@ -363,6 +372,7 @@ function olReadImpactos(ss, year, callerMap) {
     if (dur === null && abertura && encerramento && encerramento > abertura) dur = Math.round((encerramento - abertura) / 60000);
     const mi = miMap[inc];
     const tecRaw = olFold(r[OL_COL_TECNOLOGIA]);
+    if (tecRaw) hasP[inc] = true;
     if (tecRaw === 'sim') anySim[inc] = true;
     const sev = olParseSeveridade(r[OL_COL_SEVERIDADE]);
 
@@ -413,17 +423,17 @@ function olReadImpactos(ss, year, callerMap) {
     }
   }
 
-  // Origem Tecnologia no nível do INCIDENTE: mesma fonte da Visão Geral (MajorIncidentes, "Tecnologia = SIM");
-  // se o incidente não existir lá, vale a coluna Tecnologia da própria aba de Impactos.
+  // Origem Tecnologia no nível do INCIDENTE: vale a coluna Tecnologia (origem) da aba de Impactos (alguma linha = Sim);
+  // se ela estiver em branco para o incidente, vale a MajorIncidentes ("Tecnologia = SIM", como na Visão Geral).
   const stats = { incidents: 0, tecMI: 0, tecImpactos: 0, divergent: 0, notInMI: 0 };
   Object.keys(incidents).forEach(inc => {
     const mi = miMap[inc], byP = !!anySim[inc];
-    const tec = mi ? mi.tec : byP;
+    const tec = hasP[inc] ? byP : (mi ? mi.tec : false);
     incidents[inc].tec = tec;
     stats.incidents++;
     if (tec) stats.tecMI++;
     if (byP) stats.tecImpactos++;
-    if (!mi) stats.notInMI++; else if (mi.tec !== byP) stats.divergent++;
+    if (!mi) stats.notInMI++; else if (hasP[inc] && mi.tec !== byP) stats.divergent++;
   });
   rows.forEach(r => { r.tec = !!incidents[r.inc].tec; });
 
@@ -578,9 +588,9 @@ function olReadApuracao(ss, year) {
     out.stats.rows++;
     const marca = olFold(d[C.marca]);
     if (marca && marca !== OL_APURACAO_BRAND) { out.stats.otherBrand++; continue; }
-    const streamKey = olFold(d[C.stream]).replace(/\s+/g, '');
+    const streamKey = olStreamKey(d[C.stream]);
     const flow = olFlowKeyFromName(d[C.fluxo]);
-    if (!OL_STREAMS[streamKey] && !(streamKey === '' && flow)) { out.stats.otherStream++; continue; }
+    if (!streamKey && !(olFold(d[C.stream]) === '' && flow)) { out.stats.otherStream++; continue; }
     let m = parseInt(String(d[C.mes]).trim(), 10);
     if (!(m >= 1 && m <= 12)) m = olIsDate(v[C.data]) ? v[C.data].getMonth() + 1 : null;
     if (!m) { out.stats.noMonth++; continue; }
@@ -598,24 +608,6 @@ function olReadApuracao(ss, year) {
     });
   }
   return out;
-}
-
-/** Lê a aba Outliers_OL (opcional): Incidentes classificados pelo negócio como Outlier. */
-function olReadOutliers(ss) {
-  const res = { found: false, items: [] };
-  let sheet = ss.getSheetByName(OL_OUTLIERS_SHEET);
-  if (!sheet) ss.getSheets().forEach(sh => { const f = olFold(sh.getName()).replace(/[\s_&-]/g, ''); if (!sheet && (f === 'outliersol' || f === 'outliers')) sheet = sh; });
-  if (!sheet) return res;
-  res.found = true; res.sheet = sheet.getName();
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 1) return res;
-  const values = sheet.getRange(1, 1, lastRow, Math.max(1, Math.min(3, sheet.getLastColumn()))).getValues();
-  values.forEach(r => {
-    const inc = String(r[0] || '').trim();
-    if (!/^INC\d+$/i.test(inc)) return; // ignora cabeçalho e linhas vazias
-    res.items.push({ inc: inc.toUpperCase(), motivo: String(r[1] || '').trim(), ano: Number(r[2]) || null });
-  });
-  return res;
 }
 
 function olListYears(ss) {
@@ -674,7 +666,6 @@ function getOperacaoLogisticaData(year) {
       warnings: statusInfo.warnings,
       current: buildYear(year),
       previous: buildYear(year - 1),
-      outliers: olReadOutliers(ss),
       config: {
         flows: OL_FLOW_DISPLAY_ORDER.map(k => {
           const f = OL_FLOWS.find(x => x.key === k);

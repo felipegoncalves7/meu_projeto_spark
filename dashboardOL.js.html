@@ -235,8 +235,8 @@
   var IDX = { cur: {}, prev: {} };
   var CACHE = {};
   var charts = {};
-  var state = { year: null, periodKey: null, origem: 'tec', outMode: 'com', gran: 'month', sel: 'ol', expanded: {}, chartMetric: 'inc', rank: 'tec', entSort: {}, modal: null, outScope: 'ol', outMonth: null, showOla: false, card: 'exc' };
-  // Outliers: set = incidentes desconsiderados na visão "sem outliers"; official = aba Outliers_OL (inc -> motivo);
+  var state = { year: null, periodKey: null, outMode: 'com', gran: 'month', sel: 'ol', expanded: {}, chartMetric: 'inc', rank: 'tec', entSort: {}, modal: null, outScope: 'ol', outMonth: null, showOla: false, card: 'exc' };
+  // Outliers: set = incidentes desconsiderados na visão "sem outliers"; rule = incidentes com >= 1.000 min;
   // suggested = sugestão estatística (minutos apurados acima de Q3 + 1,5·IQR no ano). ver invalida os caches.
   var OUT = { set: {}, official: {}, suggested: {}, ver: 0, source: 'none' };
   var APUC = { cur: {}, prev: {} }, ADJ = {};
@@ -293,7 +293,9 @@
 
   /* ---------------------------------------------------------- agregações */
   // Origem Tecnologia (por incidente, mesma regra da Visão Geral) e países CARD (excluídos por padrão).
-  function passOrigem(r) { return (state.origem === 'all' || r.tec) && (state.card === 'inc' || !r.card); }
+  // Somente incidentes de origem Tecnologia. O total geral de O&L ignora Localidade/Impacto/CARD; o filtro CARD vale para fluxos e localidades.
+  function passOrigem(r) { return !!r.tec; }
+  function cardOk(r) { return state.card === 'inc' || !r.card; }
   function isOutlier(inc) { return !!OUT.set[inc]; }
   function outCount() { return Object.keys(OUT.set).length; }
   function passRow(r, mode) { return passOrigem(r) && !((mode || state.outMode) === 'sem' && isOutlier(r.inc)); }
@@ -495,31 +497,25 @@
     return { path: path, node: node, pnode: pnode, cur: c, prev: p, cv: cv, pv: pv, refs: refs, adjusted: !!((c && c.adjusted) || (p && p.adjusted)), status: statusOf(cv, refs), delta: deltaPP(cv, pv, 2, 'higher'), gap: isNum(cv) && hasRefs(refs) ? r2(cv) - r2(refs.meta) : null };
   }
 
-  // Outliers padrão: aba Outliers_OL (oficial). Sem a aba, usa a sugestão estatística do ano corrente.
+  // Outliers de Disponibilidade: incidentes com 1.000 minutos ou mais de indisponibilidade apurada (soma da aba apuracao_[Ano];
+  // sem a aba, usa o TTR oficial). Vale para o ano atual e o anterior, para a comparação seguir o mesmo critério.
+  var OUT_MIN = 1000;
   function initOutliers() {
-    OUT = { set: {}, official: {}, suggested: {}, ver: (OUT.ver || 0) + 1, source: 'none' };
+    OUT = { set: {}, rule: {}, ver: (OUT.ver || 0) + 1 };
     APUC = { cur: {}, prev: {} }; ADJ = {};
-    var o = D.outliers || {};
-    (o.items || []).forEach(function (it) { OUT.official[it.inc] = it.motivo || 'Classificado como Outlier na aba ' + (o.sheet || 'Outliers_OL'); });
-    var tot = {};
-    apuRows('cur').forEach(function (r) { if (r.isInc) tot[r.inc] = (tot[r.inc] || 0) + r.min; });
-    var vals = Object.keys(tot).map(function (k) { return tot[k]; }).sort(function (a, b) { return a - b; });
-    if (vals.length >= 8) {
-      var qt = function (p) { var i = (vals.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i); return vals[lo] + (vals[hi] - vals[lo]) * (i - lo); };
-      var q1 = qt(0.25), q3 = qt(0.75), lim = q3 + 1.5 * (q3 - q1);
-      Object.keys(tot).forEach(function (k) { if (tot[k] > lim) OUT.suggested[k] = { min: tot[k], lim: lim }; });
-    }
-    if (o.found) { Object.keys(OUT.official).forEach(function (k) { OUT.set[k] = true; }); OUT.source = 'sheet'; }
-    else { Object.keys(OUT.suggested).forEach(function (k) { OUT.set[k] = true; }); OUT.source = 'suggested'; }
+    ['cur', 'prev'].forEach(function (which) {
+      var yd = which === 'cur' ? D.current : D.previous, tot = {};
+      if (hasApuracao(which)) apuRows(which).forEach(function (r) { if (r.isInc) tot[r.inc] = (tot[r.inc] || 0) + r.min; });
+      else Object.keys(yd.incidents || {}).forEach(function (k) { if (isNum(yd.incidents[k].ttr)) tot[k] = yd.incidents[k].ttr; });
+      Object.keys(tot).forEach(function (k) { if (tot[k] >= OUT_MIN) { OUT.rule[k] = { min: tot[k], year: which === 'cur' ? yd.year : yd.year }; OUT.set[k] = true; } });
+    });
   }
   function setOutlier(inc, on) {
     if (on) OUT.set[inc] = true; else delete OUT.set[inc];
     OUT.ver++; ADJ = {};
   }
   function outSetIsDefault() {
-    var def = OUT.source === 'sheet' ? OUT.official : OUT.suggested;
-    var a = Object.keys(OUT.set).sort().join(','), b = Object.keys(def).sort().join(',');
-    return a === b;
+    return Object.keys(OUT.set).sort().join(',') === Object.keys(OUT.rule).sort().join(',');
   }
   // Casa a entidade (Localidade/Sistema) com um nó da aba de Disponibilidade. which: 'cur' | 'prev'.
   // No ano anterior valem os nomes antigos (ex.: "CD Itupeva" = HUB Itupeva) e o predecessor (SAP APO -> O9).
@@ -611,10 +607,10 @@
     // Fluxos de Localidade (Separação/Manufatura) consideram ESTRITAMENTE as Localidades do catálogo do fluxo;
     // as demais linhas (unm) ficam fora do fluxo e são listadas como aviso.
     var flows = D.config.flows.map(function (f) {
-      var inFlow = function (r) { return r.flow === f.key && !r.unm; };
+      var inFlow = function (r) { return r.flow === f.key && !r.unm && cardOk(r); };
       var rc = rowsCur.filter(inFlow);
       var rp = rowsPrev ? rowsPrev.filter(inFlow) : null;
-      var unm = rowsCur.filter(function (r) { return r.flow === f.key && r.unm; });
+      var unm = rowsCur.filter(function (r) { return r.flow === f.key && r.unm && cardOk(r); });
       return { cfg: f, rowsCur: rc, rowsPrev: rp, unmCur: unm, cur: agg(cur, rc), prev: rp ? agg(prev, rp) : null, disp: dispFor('f:' + f.key, months), entities: buildEntities(f, rc, rp, months) };
     });
     return {
@@ -693,7 +689,7 @@
       '</tbody></table></div>' + (olaOn() ? '' : '<div class="ola-hint">' + icon('eye-off') + '<span>' + OLA_NAME + ' oculto</span>' + olaShowBtn(true) + '</div>');
     var heroRight = '<div><div class="eyebrow" style="margin-bottom:10px">' + esc(L.cur) + ' vs mesmo período de ' + esc(L.prevYear) + '</div>' + table +
       '<div class="legend" style="margin-top:8px">Incidentes de O&amp;L = Stream O&amp;L ou Planejamento Logístico (aba Major_Incidents_Impactos_' + D.current.year + ')' +
-      (state.origem === 'tec' ? ', origem Tecnologia' : ', todas as origens') + (state.card === 'exc' ? ', sem países CARD' : ', com países CARD') + '. MTTR' + (olaOn() ? ' e OLA' : '') + ' pelo TTR oficial do Incidente (MajorIncidentes).</div></div>';
+      ', origem Tecnologia, qualquer Localidade/Impacto. MTTR' + (olaOn() ? ' e OLA' : '') + ' pelo TTR oficial do Incidente (MajorIncidentes).</div></div>';
 
     var tiles = '<div class="flow-tiles">' + M.flows.map(function (f) {
       var d = f.disp, st = d.status;
@@ -788,7 +784,7 @@
   function scopeRows(rows, scope) {
     if (scope === 'ol') return rows;
     var key = scope.slice(2);
-    return rows.filter(function (r) { return r.flow === key; });
+    return rows.filter(function (r) { return r.flow === key && !r.unm && cardOk(r); });
   }
   function scopeLabel(scope) {
     if (scope === 'ol') return 'O&L (consolidado)';
@@ -821,14 +817,15 @@
     var avail = outMonthsAvailable();
     if (!state.outMonth || avail.indexOf(state.outMonth) === -1) state.outMonth = avail.indexOf(1) !== -1 ? 1 : (avail[0] || 1);
     var scope = state.outScope, month = state.outMonth;
-    var restore = outSetIsDefault() ? '' : '<button type="button" class="btn" data-action="out-restore">' + icon('layers') + 'Restaurar outliers ' + (OUT.source === 'sheet' ? 'oficiais' : 'sugeridos') + '</button>';
-    var head = sectionHead('target', 'Disponibilidade · Impacto isolado', 'Impacto isolado dos incidentes e Outliers',
-      'Quanto cada incidente custou à Disponibilidade no mês e como ficaria o resultado se os Outliers não tivessem acontecido.', restore);
+    var restore = outSetIsDefault() ? '' : '<button type="button" class="btn" data-action="out-restore">' + icon('layers') + 'Restaurar Outliers (≥ 1.000 min)</button>';
+    var head = sectionHead('target', 'Disponibilidade · Impacto isolado', 'Impacto isolado dos incidentes e Outliers de Disponibilidade',
+      'Quanto cada incidente custou à Disponibilidade no mês e como ficaria o resultado se os Outliers de Disponibilidade não tivessem acontecido.', restore);
 
     var notes = '';
     var nOut = outCount();
-    if (OUT.source === 'sheet') notes += '<div class="notice is-info">' + icon('info') + '<div>Outliers oficiais: aba <b>' + esc((D.outliers && D.outliers.sheet) || 'Outliers_OL') + '</b> (' + Object.keys(OUT.official).length + '). Marque/desmarque abaixo para simular outros cenários — a seleção da tela não altera a planilha.</div></div>';
-    else notes += '<div class="notice">' + icon('alert') + '<div>Aba <b>Outliers_OL</b> não encontrada: pré-selecionados os <b>Outliers sugeridos</b> (minutos apurados acima de Q3 + 1,5 × IQR dos incidentes de ' + cy + '). Para oficializar, crie a aba <b>Outliers_OL</b> com A: Incidente, B: Motivo, C: Ano.</div></div>';
+    var nCur = Object.keys(OUT.rule).filter(function (k) { return OUT.rule[k].year === cy; }).length, nPrev = Object.keys(OUT.rule).length - nCur;
+    notes += '<div class="notice is-info">' + icon('info') + '<div><b>Outliers de Disponibilidade</b> = incidentes com <b>1.000 minutos ou mais</b> de indisponibilidade apurada (soma na aba apuracao_[Ano]): <b>' + nCur + '</b> em ' + cy + ' e <b>' + nPrev + '</b> em ' + D.previous.year + '. ' +
+      'Marque/desmarque na tabela para simular outros cenários — a seleção da tela não altera a planilha.</div></div>';
     if (!hasApuracao('cur')) {
       sec.innerHTML = head + notes + '<div class="notice">' + icon('alert') + '<div>Aba <b>apuracao_' + cy + '</b> não encontrada (ou sem linhas de O&amp;L): sem os minutos apurados por incidente não é possível isolar o impacto na Disponibilidade.</div></div>';
       return;
@@ -864,12 +861,11 @@
       '</div>';
 
     var maxPer = M.months.length;
-    var table = iso.items.length ? '<div class="tbl-wrap" style="max-height:440px"><table class="tbl out-tbl"><thead><tr><th>Outlier</th><th>Incidente</th><th>Minutos apurados</th><th>% da indisponibilidade</th><th>Impacto no mês</th><th>Impacto em ' + esc(L.cur) + '</th></tr></thead><tbody>' +
-      iso.items.map(function (it) {
-        var info = it.isInc ? incInfo(it.inc) : null, on = isOutlier(it.inc);
-        var tags = (OUT.official[it.inc] ? '<span class="tag is-off" data-tip="' + esc(OUT.official[it.inc]) + '">Oficial</span>' : '') +
-          (OUT.suggested[it.inc] ? '<span class="tag is-sug" data-tip="' + esc('Sugestão estatística: ' + fmtInt(OUT.suggested[it.inc].min) + ' min apurados no ano (limite ' + fmtInt(OUT.suggested[it.inc].lim) + ' min = Q3 + 1,5 × IQR)') + '">Sugerido</span>' : '') +
-          (!it.isInc ? '<span class="tag">Janela programada</span>' : '');
+    var listItems = iso.items.filter(function (it) { return it.isInc; });
+    var table = listItems.length ? '<div class="tbl-wrap" style="max-height:440px"><table class="tbl out-tbl"><thead><tr><th>Outlier</th><th>Incidente</th><th>Minutos apurados</th><th>% da indisponibilidade</th><th>Impacto no mês</th><th>Impacto em ' + esc(L.cur) + '</th></tr></thead><tbody>' +
+      listItems.map(function (it) {
+        var info = incInfo(it.inc), on = isOutlier(it.inc);
+        var tags = OUT.rule[it.inc] ? '<span class="tag is-off" data-tip="' + esc('Outlier de Disponibilidade: ' + fmtInt(OUT.rule[it.inc].min) + ' min de indisponibilidade apurada (≥ 1.000 min)') + '">Outlier ≥ 1.000 min</span>' : '';
         var sub = info ? [isNum(info.sev) ? 'Sev ' + info.sev : '', Object.keys(info.ents).slice(0, 3).join(', ')].filter(Boolean).join(' · ') : '';
         return '<tr class="' + (on ? 'is-out' : '') + '"><td>' + (it.isInc ? '<label class="ck"><input type="checkbox" data-action="toggle-outlier" data-inc="' + esc(it.inc) + '"' + (on ? ' checked' : '') + ' aria-label="Marcar ' + esc(it.inc) + ' como Outlier"></label>' : '') + '</td>' +
           '<td><div class="id">' + esc(it.inc) + ' ' + tags + '</div>' + (info && info.tit ? '<div class="desc">' + esc(info.tit) + '</div>' : '') + (sub ? '<div class="desc">' + esc(sub) + (info && Object.keys(info.mks).length ? ' ' + Object.keys(info.mks).map(function (k) { return flag(k); }).join('') : '') + '</div>' : '') + '</td>' +
@@ -881,7 +877,7 @@
 
     var wfPanel = '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('chart') + 'Cascata · ' + esc(mLbl) + ' · ' + esc(scopeLabel(scope)) + '</div></div>' +
       (iso.items.length ? '<div class="chart-box"><canvas id="ol-chart-wf"></canvas></div><div class="legend" style="margin-top:6px">De 100% ao resultado oficial: cada barra é a fatia do incidente na indisponibilidade do mês (vinho = Outlier). A última barra é o resultado sem os Outliers.</div>' : '<div class="empty">Sem composição de indisponibilidade para exibir.</div>') + '</div>';
-    var listPanel = '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('list') + 'Incidentes de ' + esc(mLbl) + ' por impacto</div><span class="legend">' + iso.items.length + ' ' + plural(iso.items.length, 'item', 'itens') + ' · ' + fmtInt(iso.total) + ' min apurados</span></div>' + table + '</div>';
+    var listPanel = '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('list') + 'Incidentes de ' + esc(mLbl) + ' por impacto</div><span class="legend">' + listItems.length + ' ' + plural(listItems.length, 'incidente', 'incidentes') + ' · ' + fmtInt(iso.total) + ' min apurados no escopo (inclui manutenções programadas)</span></div>' + table + '</div>';
 
     // resumo por fluxo: período oficial x sem outliers
     var flowRows = [{ key: 'ol', label: 'O&L (consolidado)', icon: 'truck' }].concat(D.config.flows.map(function (f) { return { key: 'f:' + f.key, label: f.label, icon: f.icon }; })).filter(function (x) { return IDX.cur[x.key]; });
@@ -904,7 +900,8 @@
     var cv = $('ol-chart-wf');
     if (!cv || !window.Chart) return;
     var node = IDX.cur[scope], refs = { min: node.min, meta: node.meta, des: node.des };
-    var top = iso.items.slice(0, 8), rest = iso.items.slice(8);
+    var incItems = iso.items.filter(function (it) { return it.isInc; }), winPP = iso.items.filter(function (it) { return !it.isInc; }).reduce(function (s0, it) { return s0 + it.pp; }, 0);
+    var top = incItems.slice(0, 8), rest = incItems.slice(8);
     var labels = ['100%'], data = [], colors = [], tips = [];
     var A = iso.A, Asem = mSem.cv;
     var lo = Math.min(A, isNum(Asem) ? Asem : A, hasRefs(refs) ? refs.min : A);
@@ -923,6 +920,7 @@
       labels.push('Demais (' + rest.length + ')'); data.push([level - pp, level]); level -= pp; colors.push(anyOut ? '#9C5A6E' : '#E8B48C');
       tips.push(rest.length + ' itens · −' + fmtNum(pp, 3) + ' p.p.');
     }
+    if (winPP > 0) { labels.push('Manutenções'); data.push([level - winPP, level]); level -= winPP; colors.push('#8FA3AD'); tips.push('Manutenções programadas (não são incidentes) · −' + fmtNum(winPP, 3) + ' p.p.'); }
     labels.push('Oficial'); data.push([ymin, A]); colors.push('#333D20'); tips.push('Resultado oficial: ' + fmtPct(A));
     labels.push('Sem outliers'); data.push([ymin, isNum(Asem) ? Asem : A]); colors.push('#77985B'); tips.push('Sem outliers (estimado): ' + fmtPct(Asem));
     var ds = [{ type: 'bar', label: 'Disponibilidade', data: data, backgroundColor: colors, borderRadius: 2, maxBarThickness: 34, order: 2 }];
@@ -1000,16 +998,21 @@
     drawEvoChart();
   }
 
-  // Conciliação do período: de quantos incidentes únicos na aba de Impactos até os que aparecem na tela.
+  // Conciliação: de quantos incidentes únicos na aba de Impactos (Stream O&L e Planejamento Logístico, qualquer Localidade ou Impacto)
+  // até os que entram nos números gerais (origem Tecnologia).
   function reconcileHtml() {
-    var rows = D.current.rows.filter(function (r) { return M.months.indexOf(r.m) !== -1; });
     var u = function (list) { var m = {}; list.forEach(function (r) { m[r.inc] = true; }); return Object.keys(m).length; };
-    var nAll = u(rows), tec = rows.filter(function (r) { return r.tec; }), nTec = u(tec), nTecNoCard = u(tec.filter(function (r) { return !r.card; })),
-      nCard = u(rows.filter(function (r) { return r.card; })), nAllNoCard = u(rows.filter(function (r) { return !r.card; }));
+    var rowsP = D.current.rows.filter(function (r) { return M.months.indexOf(r.m) !== -1; });
+    var rowsY = D.current.rows;
+    var nP = u(rowsP), tP = u(rowsP.filter(function (r) { return r.tec; })), cP = u(rowsP.filter(function (r) { return r.tec && r.card; }));
+    var nY = u(rowsY), tY = u(rowsY.filter(function (r) { return r.tec; }));
+    var noM = u(rowsY.filter(function (r) { return !r.m; }));
     var st = D.current.incStats, extra = '';
-    if (st && st.divergent) extra = ' · ' + st.divergent + ' ' + plural(st.divergent, 'incidente tem', 'incidentes têm') + ' "Tecnologia" diferente entre a aba de Impactos e a MajorIncidentes (vale a MajorIncidentes, como na Visão Geral)';
-    return '<div class="reconcile legend">' + icon('info') + '<span><b>Base do período</b> (' + esc(M.labels.cur) + '): ' + nAll + ' ' + plural(nAll, 'incidente único', 'incidentes únicos') + ' em O&amp;L/Planejamento Logístico → <b>' + nTec + '</b> com origem Tecnologia → <b>' + nTecNoCard + '</b> sem países CARD' +
-      ' · CARD no período: ' + nCard + ' (' + (state.card === 'exc' ? 'excluídos; use o filtro CARD para incluir' : 'incluídos') + ') · todas as origens sem CARD: ' + nAllNoCard + extra + '.</span></div>';
+    if (st && st.divergent) extra += ' · ' + st.divergent + ' ' + plural(st.divergent, 'incidente tem', 'incidentes têm') + ' "Tecnologia" diferente entre a aba de Impactos e a MajorIncidentes (vale a aba de Impactos)';
+    if (noM) extra += ' · ' + noM + ' sem mês identificado (fora de qualquer período)';
+    return '<div class="reconcile legend">' + icon('info') + '<span><b>Conciliação ' + esc(M.labels.curYear) + '</b> — Stream O&amp;L e Planejamento Logístico, qualquer Localidade/Impacto/Sistema, origem Tecnologia: ' +
+      '<b>ano inteiro (' + esc(M.labels.curYear) + ' com todos os meses da aba): ' + tY + ' de ' + nY + ' incidentes únicos</b> · período selecionado (' + esc(M.labels.cur) + '): <b>' + tP + ' de ' + nP + '</b>' +
+      ' · desses ' + tP + ', ' + cP + ' impactaram países CARD (' + (state.card === 'exc' ? 'ficam fora dos fluxos e localidades; contam no total geral' : 'incluídos nos fluxos') + ')' + extra + '.</span></div>';
   }
 
   function rankHtml() {
@@ -1517,8 +1520,7 @@
   }
   function onSeg(segEl, v) {
     var id = segEl.id;
-    if (id === 'ol-origem') { if (state.origem === v) return; state.origem = v; setSegActive(segEl, v); renderAll(); }
-    else if (id === 'ol-card') { if (state.card === v) return; state.card = v; setSegActive(segEl, v); ADJ = {}; var y3 = window.scrollY; renderAll(); window.scrollTo(0, y3); }
+    if (id === 'ol-card') { if (state.card === v) return; state.card = v; setSegActive(segEl, v); ADJ = {}; var y3 = window.scrollY; renderAll(); window.scrollTo(0, y3); }
     else if (id === 'ol-outmode') { if (state.outMode === v) return; state.outMode = v; setSegActive(segEl, v); ADJ = {}; var y1 = window.scrollY; renderAll(); window.scrollTo(0, y1); }
     else if (id === 'ol-out-scope') { state.outScope = v; renderOutliers(); }
     else if (id === 'ol-out-month') { state.outMonth = Number(v); renderOutliers(); }
