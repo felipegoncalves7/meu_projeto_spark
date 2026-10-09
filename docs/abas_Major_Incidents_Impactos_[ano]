@@ -1,0 +1,65 @@
+# Documentação Técnica: Schema da Tabela  das abas `Major_Incidents_Impactos_2025`e `Major_Incidents_Impactos_2026`
+
+## 1. Visão Geral e Contexto de Negócio
+Esta aba armazena a visão granular de impactos gerados por incidentes críticos (Major Incidents / Sev 0 e Sev 1).
+
+### Regra Fundamental de Granularidade (1:N):
+- **Um Incidente pode ter múltiplos impactos (linhas).**
+- O código identificador do incidente (`Incidente`) se repete quando afeta mais de um mercado, mais de uma localidade, ou múltiplos serviços/sistemas simultaneamente.
+- Em consultas e agregações:
+  - Para contar **Incidentes únicos**, utiliza-se `COUNTUNIQUE(Incidente)`.
+  - Para calcular volumetria de **Impactos**, conta-se o total de linhas (`COUNTA(Incidente)`).
+
+---
+
+## 2. Dicionário de Dados e Colunas
+
+A tabela abrange as colunas de **A** até **Y** (25 colunas no total):
+
+| Letra | Nome da Coluna | Tipo de Dado | Exemplo de Valores | Descrição e Regras de Negócio |
+| :---: | :--- | :---: | :--- | :--- |
+| **A** | `Incidente` | Texto | `INC0830657`, `INC0847608` | Identificador único do chamado de incidente no ServiceNow (chave de relacionamento). Pode repetir em várias linhas. |
+| **B** | `Stream` | Categoria / Dropdown | `O&L`, `Jornada CB (Captação)`, `Jornada CB (Relacionamento)`, `Corporativo/BackOffice` | Macrofluxo ou vertical de negócio afetada. |
+| **C** | `Mercado` | Sigla (2 letras) | `BR`, `AR`, `CL`, `CO`, `PE`, `MX`, `GT`, `DO`, `EQ`, `HN`, `NI`, `PA`, `SV` | País/Mercado onde a operação ou os clientes sofreram o impacto. |
+| **D** | `Localidade` | Texto | `CD Cabreúva`, `CD Guarne`, `CD Pudahuel`, `HUB Itupeva`, `CD Celaya`, *(Vazio)* | Local físico afetado. Preenchido principalmente em operações de logística e manufatura (`O&L`). Para impactos globais/digitais, costuma ficar em branco. |
+| **E** | `Impacto` | Categoria / Dropdown | `FACTURACIÓN / SEPARACIÓN`, `SEPARAÇÃO`, `FATURAMENTO`, `EXPEDIÇÃO`, `APP MI NEGOCIO`, `Captación Web`, `Processos Fiscais`, `Indicadores FV` | Processo, funcionalidade ou etapa de negócio diretamente indisponibilizada ou degradada. |
+| **F** | `Sintoma` | Categoria / Dropdown | `Indisponibilidade`, `Erro`, `Lentidão`, `Intermitência` | Como a falha se manifestou para o usuário/operação. |
+| **G** | `Apurado no Indicador de Disponibilidade ?` | Booleano / Dropdown | `SIM`, `NÃO` | Define se o impacto consome e entra na fórmula oficial de SLA / Indicador de Disponibilidade da companhia. |
+| **H** | `Se sim, qual é o Status` | Categoria / Dropdown | `Apurado 100%`, `Apurado 0%`, `Em apuração`, *(Vazio)* | Percentual ou estágio da contabilização do impacto no cálculo do indicador de disponibilidade. |
+| **I** | `Severidade` | Numérico | `0`, `1` | Severidade atribuída ao incidente (Sev 0 = Altíssimo impacto/Crítico; Sev 1 = Alto impacto). |
+| **J** | `Mês` | Texto (Minúsculo) | `janeiro`, `fevereiro`, ..., `dezembro` | Mês de referência do impacto para agrupamentos temporais. |
+| **K** | `Abertura` | Data/Hora | `2026-01-03 11:49:00` | Timestamp exato de início ou abertura do incidente. |
+| **L** | `Encerramento` | Data/Hora | `2026-01-03 14:43:00` | Timestamp de encerramento/normalização do incidente. |
+| **M** | `Duração Impacto` | Duração / Formato ISO ou HH:MM | `PT02H54M00.000S` ou `02:54` | Duração bruta total do impacto nesta linha específica. |
+| **N** | `Duração Impacto (CD's)` | Duração / HH:MM | `PT02H54M00.000S` ou *(Vazio)* | Duração considerada exclusivamente para Centros de Distribuição (preenchido geralmente apenas na primeira ocorrência da localidade para evitar dupla contagem). |
+| **O** | `Duração Impacto (MI)` | Duração / HH:MM | `PT02H54M00.000S` ou *(Vazio)* | Duração considerada na apuração consolidada de Major Incidents. Evita duplicações em métricas somadas. |
+| **P** | `Tecnologia` *(Origem)* | Categoria / Dropdown | `Sim`, `Não`, `Outro` | Indica se a causa raiz/ofensor foi comprovadamente originada por uma falha de Tecnologia. |
+| **Q** | `Titulo` | Texto | `Servicios`, `Captación de Pedidos VD`, `Obligación Fiscal` | Título padronizado do incidente ou serviço atingido. |
+| **R** | `Descrição Impacto` | Texto Longo | *"CD con indisponibilidad para separar..."* | Relato detalhado das consequências para as operações ou usuários. |
+| **S** | `Descrição Ofensor` | Texto Longo | *"Trabamiento del servidor Orion..."* | Descrição técnica detalhada da causa raiz ou evento gerador da falha. |
+| **T** | `Solução` | Texto Longo | *"Reinicio del servidor..."* | Ação técnica aplicada para restabelecer o ambiente. |
+| **U** | `Problem` | Texto | `PRB0047135`, `PRB0047167`, *(Vazio)* | Código do registro de Gerenciamento de Problemas (Problem Management) associado para análise de causa raiz (RCA). |
+| **V** | `Tecnologia` *(Impactada)* | Texto / Categoria | `Oracle`, `Mi Negocio`, `GERA`, `CAPTA`, `LEGO GCP`, `WAMAS`, `Knapp` | Nome da tecnologia, plataforma, ERP ou sistema ofensor/impactado. *(Nota: Nome de coluna repetido em relação à coluna P).* |
+| **W** | `Ofensor` | Categoria / Dropdown | `Orion`, `Parametrização`, `Regra Negócio`, `Radius`, `JOB`, `Conectividade`, `Queda de Energia`, `Query`, `Mudança` | Categoria normalizada da causa primária da falha para relatórios de Pareto e Ranking. |
+| **X** | `OBS` | Texto Livre | Ex: `PRB0047167 - Cobrar definição da Origem` | Observações operacionais, notas de acompanhamento ou links para outros tickets. |
+| **Y** | `MSG Disp` | Texto Formatado | Bloco de texto pré-formatado | Mensagem padronizada pronta para comunicação aos comitês e stakeholders sobre a disponibilidade. |
+
+---
+
+## 3. Peculiaridades para Análise e Automação (Dicas para o Modelo)
+
+1. **Colunas com Cabeçalhos Duplicados:**
+   - A coluna **P** e a coluna **V** possuem o nome literal `Tecnologia`.
+     - **Coluna P:** É um indicador de classificação (`Sim`, `Não`, `Outro`), respondendo se o incidente teve origem em Tecnologia.
+     - **Coluna V:** Contém o nome do sistema ou componente tecnológico (`Oracle`, `CAPTA`, `SAP`, etc.).
+   - Em queries SQL, Pandas ou fórmulas, referencie por índice/letra (`Col P` vs `Col V`).
+
+2. **Duração do Impacto e Não-Duplicação de Horas:**
+   - Para calcular tempo total de indisponibilidade de um incidente ou MTTR (Mean Time to Resolve), **não some** a coluna `Duração Impacto` de todas as linhas de um mesmo incidente, pois o mesmo período de interrupção pode estar desdobrado em várias linhas de mercados/impactos simultâneos.
+   - Utilize a coluna `Duração Impacto (MI)` (coluna O) ou faça agregações baseadas no `MAX()` do período (`Encerramento` - `Abertura`) por `Incidente`.
+
+3. **Valores Nulos / Vazios:**
+   - As colunas `Duração Impacto (CD's)` e `Duração Impacto (MI)` costumam estar vazias nas linhas duplicadas do mesmo incidente para não inflar as somas globais.
+   - A coluna `Localidade` só é preenchida quando o impacto é regionalizado (ex.: galpões logísticos ou centros de distribuição).
+
+```

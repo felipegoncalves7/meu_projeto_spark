@@ -1,0 +1,95 @@
+# Estrutura de Dados: Aba "Disponibilidade_2026" (Natura 2026)
+
+## 1. Visão Geral da Planilha
+* **Aba:** `Disponibilidade_2026`
+* **Dimensões:** Intervalo ativo de `A1` até `W168` (23 colunas e 168 linhas).
+* **Objetivo:** Monitoramento mensal, trimestral (Q1 a Q4) e anual dos índices percentuais de disponibilidade dos serviços críticos de tecnologia e operações da Natura, comparando o desempenho com metas e SLAs acordados.
+
+---
+
+## 2. Estrutura de Cabeçalho e Linhas Iniciais
+
+* **Linhas 1 a 3 (Merged A1:W3):** Título principal: `"Disponibilidade dos Serviços Críticos - Natura (2026)"`.
+* **Linha 4:** Cabeçalho oficial das colunas (descrito na seção a seguir).
+* **Linhas 5 a 168:** Registros de serviços organizados em níveis hierárquicos.
+* **Recursos de visualização:** A aba utiliza grupos expansíveis de linhas (Sheets Row Grouping `[+]` e `[-]`) para recolher e detalhar fluxos.
+
+---
+
+## 3. Dicionário de Colunas (A até W)
+
+| Coluna | Nome no Cabeçalho | Tipo de Dado | Descrição / Regra de Negócio |
+| :---: | :--- | :--- | :--- |
+| **A** | `Serviço` (Nível) | Texto | Código do nível hierárquico (`L0`, `L1`, `L2`, `L3`, `L4`, `L5`). |
+| **B** | `Serviço` (Nome) | Texto | Nome da entidade, jornada, fluxo, país ou aplicação/sistema monitorado. |
+| **C** | `Janeiro` | Percentual (`0.00%`) | Disponibilidade apurada no mês. |
+| **D** | `Fevereiro` | Percentual (`0.00%`) | Disponibilidade apurada no mês. |
+| **E** | `Março` | Percentual (`0.00%`) | Disponibilidade apurada no mês. |
+| **F** | `Q1` | Percentual (`0.00%`) | Média / consolidado do 1º Trimestre (Jan, Fev, Mar). |
+| **G** | `Abril` | Percentual (`0.00%`) | Disponibilidade apurada no mês. |
+| **H** | `Maio` | Percentual (`0.00%`) | Disponibilidade apurada no mês. |
+| **I** | `Junho` | Percentual (`0.00%`) | Disponibilidade apurada no mês. |
+| **J** | `Q2` | Percentual (`0.00%`) | Média / consolidado do 2º Trimestre (Abr, Mai, Jun). |
+| **K** | `Julho` | Percentual (`0.00%`) | Disponibilidade apurada no mês. |
+| **L** | `Agosto` | Percentual (`0.00%`) | Disponibilidade apurada no mês. |
+| **M** | `Setembro` | Percentual (`0.00%`) | Disponibilidade apurada no mês. |
+| **N** | `Q3` | Percentual (`0.00%`) | Média / consolidado do 3º Trimestre (Jul, Ago, Set). |
+| **O** | `Outubro` | Percentual (`0.00%`) | Disponibilidade apurada no mês. |
+| **P** | `Novembro` | Percentual (`0.00%`) | Disponibilidade apurada no mês. |
+| **Q** | `Dezembro` | Percentual (`0.00%`) | Disponibilidade apurada no mês. |
+| **R** | `Q4` | Percentual (`0.00%`) | Média / consolidado do 4º Trimestre (Out, Nov, Dez). |
+| **S** | `Consolidado YTD` | Percentual (`0.00%`) | Disponibilidade acumulada do início do ano até o último mês medido. |
+| **T** | `Consolidado Ano` | Percentual (`0.00%`) | Projeção / consolidação do fechamento anual de 2026. |
+| **U** | `Mínimo` | Percentual (`0.00%`) | SLA mínimo aceitável (ex.: `99.79%`). |
+| **V** | `Meta` | Percentual (`0.00%`) | SLA meta oficial da organização (ex.: `99.86%`). |
+| **W** | `Desafio` | Percentual (`0.00%`) | SLA de nível desafio/otimizado (ex.: `99.92%`). |
+
+---
+
+## 4. Hierarquia de Serviços (Coluna A e Coluna B)
+
+A coluna `A` define a granularidade da linha e orienta a árvore de consolidação:
+
+1. **`L0` (Macro / Visão Executiva e Geográfica Geral):**
+   * Linha 5: Visão corporativa consolidada (`Natura`).
+   * Linhas 6 a 12: Quebra por país no nível mais alto (`Brasil`, `Argentina`, `Chile`, `México`, `Colômbia`, `Peru`, `Equador`).
+2. **`L1` (Grandes Jornadas de Negócio):**
+   * Exemplo: `Jornada CB` (Consultora de Beleza), `Jornada CF` (Consumidor Final).
+3. **`L2` (Fluxos Operacionais / Core Capabilities):**
+   * Exemplo: `Fluxo de Captação`, `Fluxo de Relacionamento`, `Fluxo de Vendas`, `Social Commerce`, `O&L`, `Fluxo de Fabricação`, `Fluxo de Separação, Faturamento e Transporte`, `Fluxo de Atendimento`, `Fluxo de Planejamento`.
+4. **`L3` (Segmentação Geográfica ou por Domínio dentro do Fluxo):**
+   * Quebra do fluxo por país (ex.: `Brasil`, `Argentina`, etc.) ou por plataforma centralizada (ex.: `Brasil - CRM`, `Brasil - URA`, `Brasil - O9 APT/Supply`).
+5. **`L4` (Sistemas, Aplicações e Centros de Distribuição):**
+   * Aplicações de captação/vendas: `Captação Web (CAPTA)`, `APP Consultoria`, `CobNet`, `Revista Digital`, `APP Mi Negocio`, `Mi Negocio Web`, `Painel ADM`.
+   * Centros de Distribuição e Logística: `CD Murici`, `CD Castanhal`, `CD Simões Filho`, `CD Matias Barbosa`, `CD Uberlândia`, `CD São Paulo`, `CD Cabreúva`, `HUB Itupeva`, `CD Cajamar`, `PEA Manaus`, `Faturamento CD...`, `Transporte (Multitracking)`, `Separación/Facturación`.
+6. **`L5` (Funcionalidades / Módulos Específicos da Aplicação):**
+   * Granularidade de componentes da aplicação: `Home`, `Menus`, `Explosão de Objetivos`, `Gestão de Eventos`, `Indicadores FV`, `Cadastro`, `Eventos`.
+
+---
+
+## 5. Padrões Visuais e Cores
+
+* **Cabeçalho Principal:** Fundo azul escuro com texto em branco.
+* **Linhas L0:** Destaque em tom salmão/laranja suave.
+* **Linhas L1:** Faixas em azul royal com texto contrastante.
+* **Linhas L2:** Faixas de transição (amarelo/dourado escuro ou azul petróleo).
+* **Linhas L3 a L5:** Fundo neutro com linhas de grade para detalhamento analítico.
+* **Colunas de SLA (`U`, `V`, `W`):** Fundo verde e azul com tipografia destacada para fácil comparação visual contra o `Consolidado YTD` (coluna `S`).
+
+---
+
+## 6. Orientações para o Claude ao Analisar ou Processar esta Aba
+
+1. **Evitar duplicação de dados em agregações:**
+   * Nunca somar ou tirar média simples de toda a coluna `C:R` sem filtrar a coluna `A` (`Serviço / Nível`).
+   * Para análises executivas, filtre apenas por `A = "L0"` ou `A = "L1"`.
+   * Para análises de sistemas e causas-raiz de indisponibilidade, filtre por `A = "L4"` ou `A = "L5"`.
+2. **Comparação com SLAs:**
+   * A coluna de referência atual é a **Coluna S (`Consolidado YTD`)**.
+   * Compare `Coluna S` contra `Coluna U` (Mínimo) e `Coluna V` (Meta) para identificar serviços ofensores ou abaixo da meta anual.
+3. **Identificação de Países:**
+   * A entidade "País" aparece em múltiplos níveis:
+     * No nível macro consolidado (`L0`).
+     * Dentro de cada fluxo (`L3`) para delimitar a operação regional daquele fluxo específico.
+
+```

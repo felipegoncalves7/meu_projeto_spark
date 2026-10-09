@@ -1,0 +1,65 @@
+# Estrutura das Abas "apuracao_2025" e "apuracao_2026"
+## 1. Visão Geral
+A aba **04_Apuração** é a tabela central de registro de incidentes de indisponibilidade de sistemas e serviços operacionais para o ano de 2025. O objetivo desta estrutura é consolidar o tempo de parada (*downtime*) em minutos e categorizar as ocorrências para cálculo de SLAs e indicadores por marca, stream de negócio, fluxo, país e serviço.
+
+- **Volume de Registros:** 799 linhas de apuração.
+- **Incidentes Únicos:** 181 chamados únicos (um mesmo chamado/incidente pode gerar múltiplos registros se impactar mais de um serviço ou país).
+- **Período de Referência:** Janeiro a Dezembro de 2025 (Meses 1 a 12).
+
+---
+
+## 2. Dicionário de Dados
+
+| Coluna | Tipo de Dado | Exemplo | Descrição e Regras de Negócio |
+| :--- | :--- | :--- | :--- |
+| **Incidente** | Texto / Código | `INC0240264` | Identificador único do chamado de incidente no sistema ITSM. Pode aparecer em múltiplas linhas caso o evento tenha afetado múltiplos serviços/países. |
+| **Data de Abertura** | Data (`YYYY-MM-DD`) | `2025-01-02` | Data oficial de abertura/registro do incidente. |
+| **Marca** | Texto | `Natura` | Marca da operação associada (atualmente padronizada como `Natura`). |
+| **Stream** | Texto | `Jornada CB` | Frente/área de trabalho responsável. Valores principais: `Jornada CB`, `Jornada CF` e `O&L` (Operações e Logística). |
+| **Fluxo** | Texto | `Fluxo de Captação` | Macroprocesso de negócio afetado pelo evento (ex: Captação, Relacionamento, Vendas, Separação/Faturamento/Transporte, Fabricação, Atendimento). |
+| **País** | Texto | `Brasil` | País de operação impactado pelo incidente (ex: Brasil, Peru, Colômbia, Chile, México, Argentina, Equador). |
+| **Serviço** | Texto | `Mi Negocio Web` | Aplicação, portal, sistema ou centro de distribuição (CD) impactado. |
+| **Tempo** | Numérico (Inteiro) | `310` | Duração da indisponibilidade em **minutos**. |
+| **Concat** | Texto (Chave Composta) | `Fluxo de Captação - Equador - Captación Web1` | Chave concatenada de busca e agrupamento criada pela regra: `[Fluxo] - [País] - [Serviço][Mês]`. Usada para cruzamentos e consolidação de SLAs mensais. |
+| **Mês** | Numérico (Inteiro) | `1` | Mês numérico de referência do evento (1 a 12). |
+
+---
+
+## 3. Detalhamento dos Campos e Distribuições
+
+### 3.1. Streams de Negócio
+- **Jornada CB:** Maior volume de registros (~491 ocorrências).
+- **Jornada CF:** ~178 ocorrências.
+- **O&L (Operações e Logística):** ~130 ocorrências.
+
+### 3.2. Fluxos Mapeados (6 valores)
+1. `Fluxo de Captação`
+2. `Fluxo de Relacionamento`
+3. `Fluxo de Vendas`
+4. `Fluxo de Separação, Faturamento e Transporte`
+5. `Fluxo de Atendimento`
+6. `Fluxo de Fabricação`
+
+### 3.3. Países Atendidos (7 países)
+`Brasil`, `Peru`, `Colômbia`, `Chile`, `México`, `Argentina` e `Equador`.
+
+### 3.4. Duração de Indisponibilidade (`Tempo`)
+- **Unidade de medida:** Minutos.
+- **Média por registro:** ~77,8 minutos.
+- **Mediana:** 34 minutos.
+- **Variação:** De 0 a 1.740 minutos (~29 horas).
+
+### 3.5. Chave de Agrupamento (`Concat`)
+- **Fórmula:** `=[Fluxo] & " - " & [País] & " - " & [Serviço] & [Mês]`
+- **Propósito:** Permitir agrupamentos exatos, consolidações mensais e pesquisas via `PROCV` / `XLOOKUP` / `SOMASE` para apuração percentual de disponibilidade de cada serviço em cada país e mês.
+
+---
+
+## 4. Orientações de Análise para o Claude
+
+Ao realizar cálculos ou responder dúvidas sobre esta aba, considere as seguintes diretrizes:
+1. **Contagem de Incidentes:** Para saber o número real de problemas ocorridos, use a contagem distinta de `Incidente`, pois um único incidente afetando 5 serviços gera 5 linhas na tabela.
+2. **Tempo Total de Indisponibilidade (Downtime):** Somar diretamente a coluna `Tempo` ao filtrar por um determinado serviço, país, fluxo ou mês.
+3. **Agrupamentos:** Utilize a coluna `Concat` para relacionar estes dados com tabelas de meta ou apurações de disponibilidade por serviço-mês.
+
+```
