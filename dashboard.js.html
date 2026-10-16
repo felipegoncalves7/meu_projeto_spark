@@ -702,7 +702,7 @@
         window.wtdChartInstance = new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: labels.map(l => weekAxisLabel(l, CURRENT_FILTERS.year)),
+                labels: labels,
                 datasets: [
                     { label: 'Resolvidos', data: resolved, backgroundColor: '#045473', order: 1 },
                     { label: 'Aging Médio', data: aging, type: 'line', borderColor: '#112E22', backgroundColor: '#112E22', borderWidth: 2, pointRadius: 4, order: 0, yAxisID: 'y-aging' }
@@ -712,7 +712,6 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    x: { ticks: weekAxisTicks(labels.length) },
                     y: {
                         beginAtZero: true,
                         title: { display: true, text: 'Resolvidos' },
@@ -727,9 +726,6 @@
                     }
                 },
                 plugins: {
-                    tooltip: {
-                        callbacks: { title: (items) => items.length ? weekTooltipTitle(labels[items[0].dataIndex], CURRENT_FILTERS.year) : '' }
-                    },
                     datalabels: {
                         color: '#FFFFFF',
                         backgroundColor: (context) => context.dataset.type === 'line' ? '#112E22' : null,
@@ -3392,6 +3388,8 @@
                 // Item 1: o botão de Incidentes com MTTR > 18h só aparece na Evolução Semanal
                 const mttrOutliersBtn = document.getElementById('btn-open-mttr-outliers');
                 if (mttrOutliersBtn) mttrOutliersBtn.classList.toggle('hidden', group !== 'weekly');
+                const weekNote = document.getElementById('evolution-week-note');
+                if (weekNote) weekNote.classList.toggle('hidden', group !== 'weekly');
 
                 renderEvolutionByCurrentDimension();
             });
@@ -3481,8 +3479,8 @@
 
     // Ordena os rótulos de período (mês/semana/trimestre) de um objeto de breakdown, igual ao gráfico padrão
     // Visão Semanal: as semanas seguem a ISO 8601, igual a getWeekNumber no backend (segunda a domingo;
-    // a W1 é a semana da primeira quinta-feira do ano). Devolve o intervalo de datas de "W42" (ou
-    // "Semana 42") no ano selecionado, limitado ao próprio ano, já que a W1 pode começar em dezembro.
+    // a W1 é a semana da primeira quinta-feira do ano). Devolve o intervalo de datas de "W42" no ano
+    // selecionado, limitado ao próprio ano, já que a W1 pode começar em dezembro. Usado no pop-up da semana.
     function getIsoWeekRange(label, year) {
         const week = parseInt(String(label).replace(/\D/g, ''), 10);
         const y = parseInt(year, 10) || new Date().getFullYear();
@@ -3498,43 +3496,14 @@
         range.inProgress = today >= range.start && today <= range.end;
         return range;
     }
-    function formatWeekRange(range, long) {
-        const pad = n => String(n).padStart(2, '0');
-        const dm = d => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
-        if (long) return `${dm(range.start)} a ${dm(range.end)}/${range.end.getFullYear()}`;
-        return range.start.getMonth() === range.end.getMonth()
-            ? `${pad(range.start.getDate())}–${dm(range.end)}`
-            : `${dm(range.start)}–${dm(range.end)}`;
-    }
-    // Rótulo do eixo X: só a semana em andamento ganha a 2ª linha com o intervalo (["W42", "12–18/10"]);
-    // as demais ficam só com "W41". O intervalo de qualquer semana aparece no pop-up ao clicar na barra.
-    function weekAxisLabel(label, year) {
-        const text = String(label).charAt(0).toUpperCase() + String(label).slice(1);
-        const range = getIsoWeekRange(label, year);
-        return range && range.inProgress ? [text, formatWeekRange(range, false)] : text;
-    }
-    // Eixo X semanal: com muitas semanas o Chart.js pula rótulos e podia esconder a semana atual. Aqui o
-    // espaçamento é contado a partir da última semana, que sempre aparece (mesma densidade de antes).
-    function weekAxisTicks(count) {
-        const step = Math.max(1, Math.ceil(count / 21));
-        return {
-            autoSkip: false,
-            callback: function (value, index) {
-                return (count - 1 - index) % step === 0 ? this.getLabelForValue(value) : '';
-            }
-        };
-    }
-    // Título do tooltip: intervalo completo só para a semana em andamento
-    function weekTooltipTitle(label, year) {
-        const range = getIsoWeekRange(label, year);
-        return range && range.inProgress ? weekLongLabel(label, year) : String(label).charAt(0).toUpperCase() + String(label).slice(1);
-    }
-    // Título do tooltip / pop-up: "W42 · 12/10 a 18/10/2026 (semana em andamento)"
+    // "W42 · 12/10 a 18/10/2026 (semana em andamento)"
     function weekLongLabel(label, year) {
         const text = String(label).charAt(0).toUpperCase() + String(label).slice(1);
         const range = getIsoWeekRange(label, year);
         if (!range) return text;
-        return `${text} · ${formatWeekRange(range, true)}${range.inProgress ? ' (semana em andamento)' : ''}`;
+        const pad = n => String(n).padStart(2, '0');
+        const dm = d => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+        return `${text} · ${dm(range.start)} a ${dm(range.end)}/${range.end.getFullYear()}${range.inProgress ? ' (semana em andamento)' : ''}`;
     }
 
     function getSortedPeriodLabels(dataObj, group) {
@@ -3714,14 +3683,10 @@
             `).join('');
         }
 
-        const isWeekly = group === 'weekly';
-        const axisLabels = isWeekly ? labels.map(l => weekAxisLabel(l, CURRENT_FILTERS.year)) : displayLabels;
-        if (isWeekly) scales.x.ticks = weekAxisTicks(labels.length);
-
         if (window[chartKey]) window[chartKey].destroy();
         window[chartKey] = new Chart(canvas.getContext('2d'), {
             type: 'bar',
-            data: { labels: axisLabels, datasets: datasets },
+            data: { labels: displayLabels, datasets: datasets },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -3732,7 +3697,6 @@
                     tooltip: {
                         mode: 'index', intersect: false,
                         callbacks: {
-                            title: (items) => items.length ? (isWeekly ? weekTooltipTitle(labels[items[0].dataIndex], CURRENT_FILTERS.year) : displayLabels[items[0].dataIndex]) : '',
                             // Item 4: MTTR no tooltip em HH:mm, igual ao resto do site (o dataset guarda horas decimais só para o eixo)
                             label: (ctx) => ctx.dataset.label === 'MTTR (h)'
                                 ? `MTTR: ${formatDecimalHoursToHHMM(Number(ctx.raw))}`
@@ -3777,7 +3741,6 @@
         const quartersOrder = ["Q1", "Q2", "Q3", "Q4"];
 
         let labels = [];
-        const isWeekly = !title.includes("Mensal") && !title.includes("Trimestral");
         if (title.includes("Mensal")) {
             labels = monthsOrder.filter(m => metrics[m] !== undefined);
         } else if (title.includes("Trimestral")) {
@@ -3791,7 +3754,6 @@
         }
 
         const displayLabels = labels.map(l => l.charAt(0).toUpperCase() + l.slice(1));
-        const axisLabels = isWeekly ? labels.map(l => weekAxisLabel(l, CURRENT_FILTERS.year)) : displayLabels;
         const counts = labels.map(l => metrics[l].count);
         const mttrs = labels.map(l => { const v = mttrData[l]; return v !== undefined ? v.toFixed(2) : 0; });
 
@@ -3804,7 +3766,7 @@
         window[chartKey] = new Chart(canvas.getContext('2d'), {
             type: 'bar',
             data: {
-                labels: axisLabels,
+                labels: displayLabels,
                 datasets: [
                     {
                         label: 'Incidentes', data: counts, backgroundColor: '#1B472A', order: 2, yAxisID: 'y-count',
@@ -3827,7 +3789,6 @@
                     }
                 },
                 scales: {
-                    x: isWeekly ? { ticks: weekAxisTicks(labels.length) } : {},
                     'y-count': {
                         position: 'left',
                         beginAtZero: true,
@@ -3849,7 +3810,6 @@
                     },
                     tooltip: {
                         callbacks: {
-                            title: (items) => items.length ? (isWeekly ? weekTooltipTitle(labels[items[0].dataIndex], CURRENT_FILTERS.year) : displayLabels[items[0].dataIndex]) : '',
                             label: function (context) {
                                 const label = context.dataset.label || '';
                                 const value = context.parsed.y;
@@ -4564,6 +4524,8 @@
 
     function switchMudancaEvolution(group) {
         MUDANCA_EVOLUTION_GROUPING = group;
+        const weekNote = document.getElementById('mudanca-week-note');
+        if (weekNote) weekNote.classList.toggle('hidden', group !== 'weekly');
         const btns = ['weekly', 'monthly', 'quarterly'];
         btns.forEach(b => {
             const btn = document.getElementById(`mudanca-btn-${b}`);
@@ -4736,13 +4698,11 @@
             }
         }
 
-        const isWeekly = group === 'weekly';
-        const axisLabels = isWeekly ? labels.map(l => weekAxisLabel(l, CURRENT_FILTERS.year)) : displayLabels;
         const newCtx = document.getElementById('mudanca-chart-evolution').getContext('2d');
         MUDANCA_CHART = new Chart(newCtx, {
             type: 'bar',
             data: {
-                labels: axisLabels,
+                labels: displayLabels,
                 datasets: [
                     {
                         type: 'line',
@@ -4793,7 +4753,6 @@
                     },
                     tooltip: {
                         callbacks: {
-                            title: (items) => items.length ? (isWeekly ? weekTooltipTitle(labels[items[0].dataIndex], CURRENT_FILTERS.year) : displayLabels[items[0].dataIndex]) : '',
                             label: function (context) {
                                 let label = context.dataset.label || '';
                                 if (label) {
@@ -4814,7 +4773,6 @@
                     }
                 },
                 scales: {
-                    x: isWeekly ? { ticks: weekAxisTicks(labels.length) } : {},
                     y: { beginAtZero: true, position: 'left', title: { display: true, text: 'Volume' } },
                     y1: {
                         beginAtZero: true,

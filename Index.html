@@ -888,7 +888,8 @@
                         </div>
                     </div>
                     <!-- Item 1: só visível na Evolução Semanal -->
-                    <div class="flex justify-end -mt-2 mb-2">
+                    <div class="flex flex-wrap items-center justify-end gap-2 -mt-2 mb-2">
+                        <p id="evolution-week-note" class="hidden mr-auto text-[11px] text-slate-500 italic">Semana de segunda a domingo: cada incidente é contado na semana da sua data de abertura. Clique na barra para ver o período e os incidentes da semana.</p>
                         <button type="button" id="btn-open-mttr-outliers"
                             class="hidden inline-flex items-center gap-2 text-xs font-bold text-natura-red-buriti hover:text-natura-red-boca transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
@@ -1642,7 +1643,7 @@
                             Aging (WTD)</h2>
                         <p class="text-xs text-slate-500 mb-6 italic">
                             Mede o volume de problemas Resolvidos (barra azul) e o Aging médio (linha verde) para os
-                            problemas que foram resolvidos a cada semana.
+                            problemas que foram resolvidos a cada semana (de segunda a domingo, pela data de resolução).
                         </p>
                         <div class="relative w-full h-80 sm:h-96"><canvas id="majorProblemsWeeklyWTD"></canvas></div>
                     </div>
@@ -2570,6 +2571,7 @@
                                             class="px-3 py-1 text-[10px] font-bold rounded-md text-slate-500 transition-colors">Trimestral</button>
                                     </div>
                                 </div>
+                                <p id="mudanca-week-note" class="hidden -mt-2 mb-3 text-[11px] text-slate-500 italic">Semana de segunda a domingo: cada incidente é contado na semana da sua data de abertura.</p>
                                 <div class="relative w-full h-64"><canvas id="mudanca-chart-evolution"></canvas></div>
                             </div>
                             <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col h-full">
