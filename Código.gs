@@ -415,6 +415,28 @@ function getQualidadeMudancaData(year) {
 }
 
 /**
+ * Carimbo de tempo (ms) da Abertura do Incidente, usado para ordenar as listas dos pop-ups do mais novo
+ * para o mais antigo. Além de células de data, aceita datas gravadas como texto na planilha
+ * ("dd/mm/aaaa hh:mm" ou "aaaa-mm-dd hh:mm"), que antes ficavam com carimbo 0 e iam para o fim da lista.
+ */
+function incidentOpenTimestamp(val) {
+  if (Object.prototype.toString.call(val) === '[object Date]') return isNaN(val.getTime()) ? 0 : val.getTime();
+  const s = String(val == null ? '' : val).trim();
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (m) return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)).getTime() || 0;
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)).getTime() || 0;
+  return 0;
+}
+
+/** Abertura do Incidente no formato exibido pelo dashboard ("dd/mm/aaaa hh:mm"). */
+function formatIncidentOpenDate(val) {
+  if (Object.prototype.toString.call(val) !== '[object Date]') return val ? String(val) : 'N/A';
+  const pad = n => n.toString().padStart(2, '0');
+  return `${pad(val.getDate())}/${pad(val.getMonth() + 1)}/${val.getFullYear()} ${pad(val.getHours())}:${pad(val.getMinutes())}`;
+}
+
+/**
  * Busca os detalhes de um conjunto de Incidentes (por ticket) em todas as abas MajorIncidentes{ano}
  * disponíveis. Usado no drill-down: ao clicar numa Causa Raiz ou Processo de Origem recorrente,
  * mostra o período e os detalhes dos incidentes que compartilham aquele valor.
@@ -451,7 +473,6 @@ function getIncidentsByIds(ids) {
         const ticketId = String(row[0] || '').trim();
         if (!ticketId || !idSet[ticketId]) return;
 
-        const openDate = row[COL_ABERTURA] instanceof Date ? row[COL_ABERTURA] : null;
         const durRaw = durationDisplayValues[i] ? durationDisplayValues[i][0] : "00:00";
 
         results.push({
@@ -463,7 +484,7 @@ function getIncidentsByIds(ids) {
           descOfensor: String(row[10] || '').trim() || "N/A",
           solucao: String(row[11] || '').trim() || "N/A",
           dataDefinicao: formatDate(row[COL_ABERTURA]),
-          dataAberturaTimestamp: openDate ? openDate.getTime() : 0,
+          dataAberturaTimestamp: incidentOpenTimestamp(row[COL_ABERTURA]),
           dataEncerramento: formatDate(row[3]),
           ttr: durRaw,
           jornada: String(row[5] || '').trim() || "N/A",
@@ -1289,7 +1310,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             metrics.sev0DentroOLA++;
         } else {
             metrics.incidentesForaOLA.push(Object.assign({
-                id: ticketId, severidade: severidade, ttr: durRaw, metaMin: OLA_TARGET_SEV0_MIN
+                id: ticketId, severidade: severidade, ttr: durRaw, metaMin: OLA_TARGET_SEV0_MIN,
+                dataDefinicao: formatIncidentOpenDate(row[COL_ABERTURA]), dataAberturaTimestamp: incidentOpenTimestamp(row[COL_ABERTURA])
             }, getIncidentEnrichment(ticketId)));
         }
         metrics.monthlyBySeveridade[mes].sev0++;
@@ -1308,7 +1330,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             metrics.sev1DentroOLA++;
         } else {
             metrics.incidentesForaOLA.push(Object.assign({
-                id: ticketId, severidade: severidade, ttr: durRaw, metaMin: OLA_TARGET_SEV1_MIN
+                id: ticketId, severidade: severidade, ttr: durRaw, metaMin: OLA_TARGET_SEV1_MIN,
+                dataDefinicao: formatIncidentOpenDate(row[COL_ABERTURA]), dataAberturaTimestamp: incidentOpenTimestamp(row[COL_ABERTURA])
             }, getIncidentEnrichment(ticketId)));
         }
         metrics.monthlyBySeveridade[mes].sev1++;
@@ -1336,7 +1359,9 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
                     metrics.divergenciasSevPrio.push(Object.assign({
                         id: ticketId,
                         severidade: severidade,
-                        priority: priority
+                        priority: priority,
+                        dataDefinicao: formatIncidentOpenDate(row[COL_ABERTURA]),
+                        dataAberturaTimestamp: incidentOpenTimestamp(row[COL_ABERTURA])
                     }, getIncidentEnrichment(ticketId)));
                 }
             }
@@ -1617,7 +1642,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
             descOfensor: String(row[10]).trim() || "N/A",
             solucao: String(row[11]).trim() || "N/A",
             dataDefinicao: formatDate(row[2]),
-            dataAberturaTimestamp: (row[2] instanceof Date) ? row[2].getTime() : 0,
+            dataAberturaTimestamp: incidentOpenTimestamp(row[2]),
             dataEncerramento: formatDate(row[3]),
             ttr: durRaw,
             jornada: String(row[5]).trim() || "N/A",
@@ -2474,4 +2499,107 @@ function getQuarterLabel(date) {
   if (month < 6) return "Q2";
   if (month < 9) return "Q3";
   return "Q4";
+}
+
+/**
+ * Exportação para Planilhas Google (Visão Geral): cria uma planilha nova com a lista exibida no card ou
+ * pop-up e devolve o link. Substitui o antigo download .xlsx.
+ * - Datas "dd/mm/aaaa hh:mm" viram datas reais (permitem ordenar e filtrar na planilha);
+ *   números ficam como números e todo o resto como texto literal (sem conversões automáticas nem fórmulas).
+ * - A planilha é guardada na pasta "Exportações ITSM" do Drive de quem executa o Web App e, quando o
+ *   Web App roda como o proprietário, é compartilhada como editor com quem clicou em exportar.
+ * payload: { title, headers: [..], rows: [[..], ..] }
+ */
+const EXPORT_FOLDER_NAME = 'Exportações ITSM';
+const EXPORT_DATE_RE = /^(\d{2})\/(\d{2})\/(\d{4})(?: (\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+
+function exportToGoogleSheet(payload) {
+  try {
+    const headers = (payload && payload.headers || []).map(h => String(h == null ? '' : h));
+    const rows = (payload && payload.rows) || [];
+    if (!headers.length || !rows.length) return { error: 'Não há dados para exportar.' };
+
+    const tz = Session.getScriptTimeZone();
+    const baseTitle = String(payload.title || 'Incidentes').replace(/\.xlsx$/i, '').trim() || 'Incidentes';
+    const ss = SpreadsheetApp.create(`${baseTitle} · ITSM · ${Utilities.formatDate(new Date(), tz, 'dd/MM/yyyy HH:mm')}`);
+    try { ss.setSpreadsheetTimeZone(tz); ss.setSpreadsheetLocale('pt_BR'); } catch (e) {}
+    const sheet = ss.getSheets()[0];
+    sheet.setName('Incidentes');
+
+    const width = headers.length;
+    if (sheet.getMaxColumns() < width) sheet.insertColumnsAfter(sheet.getMaxColumns(), width - sheet.getMaxColumns());
+    if (sheet.getMaxRows() < rows.length + 1) sheet.insertRowsAfter(sheet.getMaxRows(), rows.length + 1 - sheet.getMaxRows());
+    const isBlank = v => v === null || v === undefined || v === '' || v === 'N/A';
+    // Coluna de datas: todos os valores preenchidos seguem "dd/mm/aaaa[ hh:mm[:ss]]"
+    const dateCols = headers.map((_, c) => {
+      let seen = 0;
+      for (let r = 0; r < rows.length; r++) {
+        const v = rows[r][c];
+        if (isBlank(v)) continue;
+        if (typeof v !== 'string' || !EXPORT_DATE_RE.test(v.trim())) return false;
+        seen++;
+      }
+      return seen > 0;
+    });
+    const hasTime = headers.map((_, c) => dateCols[c] && rows.some(r => typeof r[c] === 'string' && /\d{2}:\d{2}/.test(r[c])));
+
+    const values = rows.map(r => headers.map((_, c) => {
+      const v = r[c];
+      if (v === null || v === undefined || v === '') return '';
+      if (typeof v === 'number') return isFinite(v) ? v : '';
+      if (typeof v === 'boolean') return v ? 'Sim' : 'Não';
+      const s = String(v);
+      if (dateCols[c]) {
+        const m = s.trim().match(EXPORT_DATE_RE);
+        if (m) return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
+      }
+      // Apóstrofo inicial: grava como texto literal (evita fórmulas e conversão de "05:30", "0012" etc.)
+      return "'" + s;
+    }));
+
+    sheet.getRange(1, 1, 1, width).setValues([headers])
+      .setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#1B472A').setVerticalAlignment('middle');
+    const body = sheet.getRange(2, 1, values.length, width);
+    body.setValues(values).setVerticalAlignment('top');
+    dateCols.forEach((isDate, c) => {
+      if (isDate) sheet.getRange(2, c + 1, values.length, 1).setNumberFormat(hasTime[c] ? 'dd/mm/yyyy hh:mm' : 'dd/mm/yyyy');
+    });
+    sheet.setFrozenRows(1);
+    sheet.getRange(1, 1, values.length + 1, width).createFilter();
+    sheet.autoResizeColumns(1, width);
+    for (let c = 1; c <= width; c++) {
+      if (sheet.getColumnWidth(c) > 380) sheet.setColumnWidth(c, 380);
+    }
+    body.setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
+    const extra = sheet.getMaxColumns() - width;
+    if (extra > 0) sheet.deleteColumns(width + 1, extra);
+
+    const url = ss.getUrl();
+    const file = DriveApp.getFileById(ss.getId());
+    try {
+      const folders = DriveApp.getFoldersByName(EXPORT_FOLDER_NAME);
+      file.moveTo(folders.hasNext() ? folders.next() : DriveApp.createFolder(EXPORT_FOLDER_NAME));
+    } catch (e) {
+      Logger.log('exportToGoogleSheet: não foi possível mover para a pasta: ' + e);
+    }
+
+    // Web App executado como o proprietário: a planilha nasce no Drive dele, então compartilha com
+    // quem está usando o dashboard (o e-mail só é informado para usuários do mesmo domínio). Sem o
+    // e-mail, libera a leitura para o domínio com o link; nunca abre para qualquer pessoa na internet.
+    let access = 'owner';
+    let viewer = '';
+    let owner = '';
+    try { viewer = Session.getActiveUser().getEmail() || ''; } catch (e) {}
+    try { owner = Session.getEffectiveUser().getEmail() || ''; } catch (e) {}
+    if (viewer && viewer.toLowerCase() !== owner.toLowerCase()) {
+      try { file.addEditor(viewer); access = 'viewer'; } catch (e) { access = 'none'; Logger.log('exportToGoogleSheet: addEditor falhou: ' + e); }
+    } else if (!viewer) {
+      try { file.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW); access = 'domain'; } catch (e) { access = 'none'; }
+    }
+
+    return { url: url, name: ss.getName(), rows: values.length, access: access };
+  } catch (e) {
+    Logger.log('exportToGoogleSheet: ' + e);
+    return { error: e.message || String(e) };
+  }
 }

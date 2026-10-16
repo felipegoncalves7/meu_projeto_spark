@@ -126,6 +126,7 @@
                     columns: [
                         { key: 'id', label: 'Incidente' },
                         { key: 'severidade', label: 'Severidade' },
+                        { key: 'dataDefinicao', label: 'Data de Abertura' },
                         { key: 'ttr', label: 'TTR' },
                         { key: 'origemDeteccao', label: 'Origem da Detecção' },
                         { key: 'service', label: 'Service (ServiceNow)' },
@@ -146,6 +147,7 @@
                     columns: [
                         { key: 'id', label: 'Incidente' },
                         { key: 'severidade', label: 'Severidade' },
+                        { key: 'dataDefinicao', label: 'Data de Abertura' },
                         { key: 'priority', label: 'Priority (ServiceNow)' },
                         { key: 'origemDeteccao', label: 'Origem da Detecção' },
                         { key: 'service', label: 'Service (ServiceNow)' },
@@ -178,8 +180,8 @@
 
         thead.innerHTML = `<tr>${opts.columns.map(c => `<th class="text-left font-bold text-slate-500 uppercase tracking-wider text-[10px] px-3 py-2 border-b border-slate-200">${c.label}</th>`).join('')}</tr>`;
 
-        const items = opts.items || [];
-        registerExport('tabular-incidents', items, opts.columns, `${opts.title || 'Incidentes'}.xlsx`);
+        const items = sortByAberturaDesc(opts.items);
+        registerExport('tabular-incidents', items, opts.columns, opts.title || 'Incidentes');
         if (!items.length) {
             tbody.innerHTML = `<tr><td colspan="${opts.columns.length}" class="text-center text-slate-300 italic py-6">Nenhum registro encontrado no período filtrado.</td></tr>`;
         } else {
@@ -1850,14 +1852,14 @@
                     return;
                 }
 
-                incidents.sort((a, b) => b.dataAberturaTimestamp - a.dataAberturaTimestamp);
+                incidents = sortByAberturaDesc(incidents);
                 const newest = incidents[0];
                 const oldest = incidents[incidents.length - 1];
                 const periodText = (oldest && newest)
                     ? `Período: ${oldest.dataDefinicao.split(' ')[0]} a ${newest.dataDefinicao.split(' ')[0]}`
                     : '';
                 subtitleEl.textContent = `${kindLabel} · Universo ${universoLabel} · ${incidents.length} incidente(s) · ${periodText}`;
-                registerExport('qualidade-drill', incidents, STANDARD_INCIDENT_COLUMNS, `${label}.xlsx`);
+                registerExport('qualidade-drill', incidents, STANDARD_INCIDENT_COLUMNS, label);
 
                 listEl.innerHTML = incidents.map(inc => buildIncidentCardHtml(inc)).join('');
             })
@@ -2051,31 +2053,108 @@
         return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    // Exportação para Excel (item 4): usa a biblioteca SheetJS (xlsx.full.min.js, já carregada no
-    // <head>) para gerar um .xlsx real a partir de uma lista de itens + colunas {key,label}.
-    // EXPORT_REGISTRY guarda o dataset mais recente de cada lista/modal exportável, atualizado
-    // sempre que a lista é (re)renderizada; os botões "Exportar Excel" leem daqui na hora do clique.
+    // Ordem padrão das listas de Incidentes nos pop-ups: Data de Abertura decrescente (mais novo primeiro).
+    // Usa o carimbo do backend e, se ele vier zerado (data gravada como texto na planilha), interpreta
+    // a Abertura exibida ("dd/mm/aaaa hh:mm" ou "aaaa-mm-dd hh:mm").
+    function incidentOpenTs(inc) {
+        if (!inc) return 0;
+        const ts = Number(inc.dataAberturaTimestamp);
+        if (ts > 0) return ts;
+        const s = String(inc.dataDefinicao || '').trim();
+        let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+        if (m) return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)).getTime() || 0;
+        m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+        if (m) return new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)).getTime() || 0;
+        return 0;
+    }
+    function sortByAberturaDesc(list) {
+        return (list || []).slice().sort((a, b) => incidentOpenTs(b) - incidentOpenTs(a));
+    }
+
+    // Exportação para Planilhas Google: o backend (exportToGoogleSheet) cria uma planilha nova com a
+    // lista exibida e devolve o link, aberto numa nova aba. EXPORT_REGISTRY guarda o dataset mais
+    // recente de cada lista/modal exportável, atualizado sempre que a lista é (re)renderizada; os
+    // botões "Planilhas Google" leem daqui na hora do clique.
     const EXPORT_REGISTRY = {};
+    let EXPORT_IN_PROGRESS = false;
     function registerExport(registryKey, items, columns, filename) {
         EXPORT_REGISTRY[registryKey] = { items: items || [], columns: columns, filename: filename };
     }
     function exportRegistered(registryKey) {
         const ctx = EXPORT_REGISTRY[registryKey];
         if (!ctx || !ctx.items.length) { alert('Não há dados para exportar.'); return; }
-        exportItemsToExcel(ctx.items, ctx.columns, ctx.filename);
+        exportItemsToGoogleSheet(ctx.items, ctx.columns, ctx.filename);
     }
-    function exportItemsToExcel(items, columns, filename) {
-        if (typeof XLSX === 'undefined') { alert('Biblioteca de exportação indisponível no momento.'); return; }
+    function exportItemsToGoogleSheet(items, columns, title) {
         if (!items || !items.length) { alert('Não há dados para exportar.'); return; }
-        const rows = items.map(item => {
-            const row = {};
-            columns.forEach(c => { row[c.label] = item[c.key] != null ? item[c.key] : ''; });
-            return row;
-        });
-        const ws = XLSX.utils.json_to_sheet(rows);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Incidentes');
-        XLSX.writeFile(wb, filename);
+        if (EXPORT_IN_PROGRESS) { showExportToast('loading', 'Já existe uma planilha sendo gerada. Aguarde um instante.'); return; }
+        if (!(window.google && google.script && google.script.run)) { alert('Exportação indisponível fora do Web App.'); return; }
+        const payload = {
+            title: String(title || 'Incidentes').replace(/\.xlsx$/i, ''),
+            headers: columns.map(c => c.label),
+            rows: items.map(item => columns.map(c => {
+                const v = item[c.key];
+                return (v === null || v === undefined) ? '' : (typeof v === 'number' || typeof v === 'boolean' ? v : String(v));
+            }))
+        };
+        // A aba é aberta já no clique (gesto do usuário), senão o navegador bloqueia o pop-up;
+        // ela recebe o link quando a planilha fica pronta.
+        let win = null;
+        try { win = window.open('', '_blank'); } catch (e) { win = null; }
+        if (win) {
+            try {
+                win.document.title = 'Gerando planilha…';
+                win.document.body.innerHTML = '<p style="font:15px Arial,sans-serif;color:#333;padding:32px">Gerando a planilha no Google Sheets…</p>';
+            } catch (e) { /* aba de outra origem: apenas aguarda o link */ }
+        }
+        EXPORT_IN_PROGRESS = true;
+        showExportToast('loading', `Gerando a planilha no Google Sheets (${items.length} linha(s))…`);
+        google.script.run
+            .withSuccessHandler(res => {
+                EXPORT_IN_PROGRESS = false;
+                if (!res || res.error || !res.url) {
+                    if (win) { try { win.close(); } catch (e) {} }
+                    showExportToast('error', 'Não foi possível gerar a planilha: ' + ((res && res.error) || 'resposta vazia.'));
+                    return;
+                }
+                let opened = false;
+                if (win && !win.closed) {
+                    try { win.location.href = res.url; opened = true; } catch (e) { opened = false; }
+                }
+                const note = res.access === 'domain' ? ' Acesso de leitura liberado para o domínio com o link.'
+                    : res.access === 'none' ? ' Se a planilha não abrir, peça acesso ao proprietário do dashboard.' : '';
+                showExportToast('ok', (opened ? 'Planilha aberta em uma nova aba.' : 'Planilha pronta.') + note, res.url, res.name);
+            })
+            .withFailureHandler(err => {
+                EXPORT_IN_PROGRESS = false;
+                if (win) { try { win.close(); } catch (e) {} }
+                showExportToast('error', 'Falha ao gerar a planilha: ' + (err && err.message ? err.message : err));
+            })
+            .exportToGoogleSheet(payload);
+    }
+    function showExportToast(kind, message, url, name) {
+        let el = document.getElementById('export-sheet-toast');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'export-sheet-toast';
+            el.setAttribute('role', 'status');
+            el.setAttribute('aria-live', 'polite');
+            el.className = 'fixed bottom-4 right-4 left-4 sm:left-auto z-[200] sm:max-w-sm bg-white border border-slate-200 shadow-xl rounded-xl p-4 text-sm text-slate-700';
+            document.body.appendChild(el);
+        }
+        clearTimeout(el._hideTimer);
+        const color = kind === 'error' ? 'text-red-600' : kind === 'ok' ? 'text-natura-green-cerrado' : 'text-slate-500';
+        const head = kind === 'error' ? 'Exportação não concluída' : kind === 'ok' ? 'Planilhas Google' : 'Exportando…';
+        el.innerHTML = `
+            <div class="flex items-start gap-3">
+                <div class="flex-1 min-w-0">
+                    <p class="font-bold ${color}">${head}</p>
+                    <p class="text-xs text-slate-500 mt-1">${escapeXml(message)}</p>
+                    ${url ? `<a href="${escapeXml(url)}" target="_blank" rel="noopener" class="inline-flex mt-2 text-xs font-bold text-natura-orange hover:underline break-all">Abrir ${escapeXml(name || 'planilha')}</a>` : ''}
+                </div>
+                <button type="button" aria-label="Fechar" class="flex-none text-slate-400 hover:text-slate-600 text-lg leading-none" onclick="this.closest('#export-sheet-toast').remove()">&times;</button>
+            </div>`;
+        if (kind !== 'loading') el._hideTimer = setTimeout(() => { if (el.parentNode) el.remove(); }, kind === 'ok' ? 20000 : 12000);
     }
 
     // Colunas padrão para as listas de Incidentes em formato "card" (Detalhes dos Incidentes,
@@ -2095,15 +2174,15 @@
         { key: 'solucao', label: 'Solução Aplicada' }
     ];
 
-    // Botão "Exportar Excel" reutilizado em todo pop-up que lista Incidentes (item 4)
+    // Botão "Exportar para Planilhas Google" reutilizado em todo pop-up que lista Incidentes
     function buildExportButtonHtml(registryKey, extraClass) {
         return `
-            <button type="button" onclick="exportRegistered('${registryKey}')"
+            <button type="button" onclick="exportRegistered('${registryKey}')" title="Exportar para Planilhas Google"
                 class="inline-flex items-center gap-1.5 text-xs font-bold text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors rounded-full px-3 py-1.5 ${extraClass || ''}">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 5h16M4 15h16M10 10v10" />
                 </svg>
-                Exportar Excel
+                <span class="hidden sm:inline">Exportar para</span> Planilhas Google
             </button>
         `;
     }
@@ -2405,7 +2484,7 @@
         const fieldName = tab === 'pais' ? 'abrangencia' : 'jornada';
         const isCountry = tab === 'pais';
 
-        const rows = (ALL_DATA.rawIncidents || [])
+        const rows = sortByAberturaDesc(ALL_DATA.rawIncidents)
             .filter(inc => inc[fieldName] && inc[fieldName] !== 'N/A')
             .map(inc => {
                 let parts = inc[fieldName].split(',').map(s => s.trim()).filter(Boolean);
@@ -2435,7 +2514,7 @@
             { key: 'ttr', label: 'TTR' },
             { key: 'offender', label: 'Ofensor' }
         ];
-        registerExport('impacto-multiplo', rows, columns, `Impacto por ${tab === 'pais' ? 'Pais' : 'Jornada'}.xlsx`);
+        registerExport('impacto-multiplo', rows, columns, `Impacto por ${tab === 'pais' ? 'País' : 'Jornada'}`);
     }
 
     function openImpactoMultiploModal() {
@@ -2551,9 +2630,10 @@
         const exportBtn = document.getElementById('btn-export-origem-drill');
         if (exportBtn) exportBtn.classList.add('hidden');
 
-        if (origemDrillIncidentsCache[key]) {
-            registerExport('origem-drill', origemDrillIncidentsCache[key], columns, `Origem - ${key}.xlsx`);
-            renderOrigemDrillIncidentsTable(origemDrillIncidentsCache[key], columns, tbody);
+        const cacheKey = key + '|' + (item.incidentIds || []).join(',');
+        if (origemDrillIncidentsCache[cacheKey]) {
+            registerExport('origem-drill', origemDrillIncidentsCache[cacheKey], columns, `Origem - ${key}`);
+            renderOrigemDrillIncidentsTable(origemDrillIncidentsCache[cacheKey], columns, tbody);
             return;
         }
 
@@ -2564,8 +2644,9 @@
                     tbody.innerHTML = `<tr><td colspan="${columns.length}" class="text-center text-red-400 italic py-6">Erro ao buscar os incidentes.</td></tr>`;
                     return;
                 }
-                origemDrillIncidentsCache[key] = incidents;
-                registerExport('origem-drill', incidents, columns, `Origem - ${key}.xlsx`);
+                incidents = sortByAberturaDesc(incidents);
+                origemDrillIncidentsCache[cacheKey] = incidents;
+                registerExport('origem-drill', incidents, columns, `Origem - ${key}`);
                 const exportBtnNow = document.getElementById('btn-export-origem-drill');
                 if (exportBtnNow) {
                     const incidentsTabActive = document.getElementById('origem-drill-tab-incidents').classList.contains('text-natura-green-cerrado');
@@ -3317,8 +3398,7 @@
     // (já carregado para o período/filtro atual), sem round-trip ao servidor
     function getMttrOutlierIncidents() {
         const incidents = ALL_DATA.rawIncidents || [];
-        return incidents.filter(inc => parseHHMMToMinutes(inc.ttr) > 1080)
-            .sort((a, b) => b.dataAberturaTimestamp - a.dataAberturaTimestamp);
+        return sortByAberturaDesc(incidents.filter(inc => parseHHMMToMinutes(inc.ttr) > 1080));
     }
 
     function updateMttrOutliersButton() {
@@ -4267,8 +4347,8 @@
             }
         }
 
-        filtered.sort((a, b) => b.dataAberturaTimestamp - a.dataAberturaTimestamp);
-        registerExport('incidents-details', filtered, STANDARD_INCIDENT_COLUMNS, `${displayTitle}.xlsx`);
+        filtered = sortByAberturaDesc(filtered);
+        registerExport('incidents-details', filtered, STANDARD_INCIDENT_COLUMNS, displayTitle);
 
         if (filtered.length === 0) {
             listEl.innerHTML = `<div class="text-sm text-slate-500 italic p-4 text-center">Nenhum incidente encontrado para este filtro.</div>`;
@@ -4446,8 +4526,8 @@
             return selectedTypes.some(t => incType.includes(t));
         });
 
-        filtered.sort((a, b) => b.dataAberturaTimestamp - a.dataAberturaTimestamp);
-        registerExport('mudanca-detalhes', filtered, STANDARD_INCIDENT_COLUMNS, 'Incidentes por Mudanca.xlsx');
+        filtered = sortByAberturaDesc(filtered);
+        registerExport('mudanca-detalhes', filtered, STANDARD_INCIDENT_COLUMNS, 'Incidentes por Mudança');
 
         if (filtered.length === 0) {
             listEl.innerHTML = `<div class="col-span-full text-sm text-slate-500 italic p-4 text-center">Nenhum incidente de mudança encontrado.</div>`;
@@ -4946,26 +5026,21 @@
             return;
         }
 
-        const exportDataList = ALL_DATA.rawIncidents.map(inc => ({
-            "Número do Incidente": inc.id,
-            "Problemas": inc.problem || "",
-            "Data Abertura": inc.dataDefinicao,
-            "Data Encerramento": inc.dataEncerramento,
-            "TTR": inc.ttr,
-            "Severidade": inc.severidade,
-            "Abrangência": inc.abrangencia,
-            "Jornada Impactada": inc.jornada,
-            "Descrição do Impacto": inc.descImpacto,
-            "Ofensor": inc.offender,
-            "Descrição Ofensor": inc.descOfensor,
-            "Tecnologia Impactada": inc.tech,
-            "Solução aplicada": inc.solucao
-        }));
-
-        const ws = XLSX.utils.json_to_sheet(exportDataList);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Incidentes");
-        XLSX.writeFile(wb, "Incidentes.xlsx");
+        exportItemsToGoogleSheet(sortByAberturaDesc(ALL_DATA.rawIncidents), [
+            { key: 'id', label: 'Número do Incidente' },
+            { key: 'problem', label: 'Problemas' },
+            { key: 'dataDefinicao', label: 'Data Abertura' },
+            { key: 'dataEncerramento', label: 'Data Encerramento' },
+            { key: 'ttr', label: 'TTR' },
+            { key: 'severidade', label: 'Severidade' },
+            { key: 'abrangencia', label: 'Abrangência' },
+            { key: 'jornada', label: 'Jornada Impactada' },
+            { key: 'descImpacto', label: 'Descrição do Impacto' },
+            { key: 'offender', label: 'Ofensor' },
+            { key: 'descOfensor', label: 'Descrição Ofensor' },
+            { key: 'tech', label: 'Tecnologia Impactada' },
+            { key: 'solucao', label: 'Solução aplicada' }
+        ], 'Incidentes');
     }
 
     function openSubjectiveDecisionsModal() {

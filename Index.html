@@ -10,7 +10,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script
         src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/css/flag-icons.min.css">
 
     <script>
@@ -336,7 +335,7 @@
                                     </span>
                                     <button onclick="exportData(event)"
                                         class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1 rounded transition-colors font-bold shadow-sm"
-                                        title="Exportar para Excel">Exportar dados</button>
+                                        title="Exportar todos os incidentes do período para Planilhas Google">Exportar para Planilhas</button>
                                     <div class="p-2 bg-natura-gray-light rounded-lg text-natura-green-cerrado"><svg
                                             xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
                                             viewBox="0 0 24 24" stroke="currentColor">
@@ -2146,12 +2145,12 @@
                             <p id="tabular-incidents-subtitle" class="text-xs text-natura-gray-light/80 mt-1"></p>
                         </div>
                         <div class="flex items-center gap-2 flex-none">
-                            <button type="button" onclick="exportRegistered('tabular-incidents')"
+                            <button type="button" onclick="exportRegistered('tabular-incidents')" title="Exportar para Planilhas Google"
                                 class="inline-flex items-center gap-1.5 text-xs font-bold text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors rounded-full px-3 py-1.5">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 5h16M4 15h16M10 10v10" />
                                 </svg>
-                                Exportar Excel
+                                <span class="hidden sm:inline">Exportar para</span> Planilhas Google
                             </button>
                             <button id="btn-close-tabular-incidents"
                                 class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
@@ -2185,12 +2184,12 @@
                                 Jornada/País x múltiplas simultaneamente</p>
                         </div>
                         <div class="flex items-center gap-2 flex-none">
-                            <button type="button" id="btn-export-impacto-multiplo" onclick="exportRegistered('impacto-multiplo')"
+                            <button type="button" id="btn-export-impacto-multiplo" onclick="exportRegistered('impacto-multiplo')" title="Exportar para Planilhas Google"
                                 class="inline-flex items-center gap-1.5 text-xs font-bold text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors rounded-full px-3 py-1.5">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 5h16M4 15h16M10 10v10" />
                                 </svg>
-                                Exportar Excel
+                                <span class="hidden sm:inline">Exportar para</span> Planilhas Google
                             </button>
                             <button id="btn-close-impacto-multiplo"
                                 class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
@@ -2229,12 +2228,12 @@
                             <p id="origem-drill-subtitle" class="text-xs text-natura-gray-light/80 mt-1"></p>
                         </div>
                         <div class="flex items-center gap-2 flex-none">
-                            <button type="button" id="btn-export-origem-drill" onclick="exportRegistered('origem-drill')"
+                            <button type="button" id="btn-export-origem-drill" onclick="exportRegistered('origem-drill')" title="Exportar para Planilhas Google"
                                 class="hidden items-center gap-1.5 text-xs font-bold text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors rounded-full px-3 py-1.5">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 5h16M4 15h16M10 10v10" />
                                 </svg>
-                                Exportar Excel
+                                <span class="hidden sm:inline">Exportar para</span> Planilhas Google
                             </button>
                             <button id="btn-close-origem-drill"
                                 class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
@@ -2338,12 +2337,12 @@
                                 Incidentes</h2>
                         </div>
                         <div class="flex items-center gap-2 flex-none">
-                            <button type="button" onclick="exportRegistered('incidents-details')"
+                            <button type="button" onclick="exportRegistered('incidents-details')" title="Exportar para Planilhas Google"
                                 class="inline-flex items-center gap-1.5 text-xs font-bold text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors rounded-full px-3 py-1.5">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 5h16M4 15h16M10 10v10" />
                                 </svg>
-                                Exportar Excel
+                                <span class="hidden sm:inline">Exportar para</span> Planilhas Google
                             </button>
                             <button onclick="closeIncidentsModal()"
                                 class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
@@ -2385,12 +2384,12 @@
                             <p id="qualidade-drill-subtitle" class="text-xs text-white/80 mt-1"></p>
                         </div>
                         <div class="flex items-center gap-2 flex-none">
-                            <button type="button" onclick="exportRegistered('qualidade-drill')"
+                            <button type="button" onclick="exportRegistered('qualidade-drill')" title="Exportar para Planilhas Google"
                                 class="inline-flex items-center gap-1.5 text-xs font-bold text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors rounded-full px-3 py-1.5">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 5h16M4 15h16M10 10v10" />
                                 </svg>
-                                Exportar Excel
+                                <span class="hidden sm:inline">Exportar para</span> Planilhas Google
                             </button>
                             <button onclick="closeQualidadeDrillModal()"
                                 class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
@@ -2428,12 +2427,12 @@
                         <h2 class="text-xl font-bold leading-none">Análise de Incidentes - Mudança</h2>
                     </div>
                     <div class="flex items-center gap-2 flex-none">
-                        <button type="button" id="btn-export-mudanca-detalhes" onclick="exportRegistered('mudanca-detalhes')"
+                        <button type="button" id="btn-export-mudanca-detalhes" onclick="exportRegistered('mudanca-detalhes')" title="Exportar para Planilhas Google"
                             class="inline-flex items-center gap-1.5 text-xs font-bold text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors rounded-full px-3 py-1.5">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm0 5h16M4 15h16M10 10v10" />
                             </svg>
-                            Exportar Excel
+                            <span class="hidden sm:inline">Exportar para</span> Planilhas Google
                         </button>
                         <button onclick="closeMudancaModal()"
                             class="text-white/70 hover:text-white transition-colors focus:outline-none p-2 hover:bg-white/10 rounded-full">
