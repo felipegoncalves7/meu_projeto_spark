@@ -712,7 +712,7 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    x: { ticks: WEEK_AXIS_TICKS },
+                    x: { ticks: weekAxisTicks(labels.length) },
                     y: {
                         beginAtZero: true,
                         title: { display: true, text: 'Resolvidos' },
@@ -728,7 +728,7 @@
                 },
                 plugins: {
                     tooltip: {
-                        callbacks: { title: (items) => items.length ? weekLongLabel(labels[items[0].dataIndex], CURRENT_FILTERS.year) : '' }
+                        callbacks: { title: (items) => items.length ? weekTooltipTitle(labels[items[0].dataIndex], CURRENT_FILTERS.year) : '' }
                     },
                     datalabels: {
                         color: '#FFFFFF',
@@ -3506,11 +3506,28 @@
             ? `${pad(range.start.getDate())}–${dm(range.end)}`
             : `${dm(range.start)}–${dm(range.end)}`;
     }
-    // Rótulo do eixo X em duas linhas: ["W42", "12–18/10"]
+    // Rótulo do eixo X: só a semana em andamento ganha a 2ª linha com o intervalo (["W42", "12–18/10"]);
+    // as demais ficam só com "W41". O intervalo de qualquer semana aparece no pop-up ao clicar na barra.
     function weekAxisLabel(label, year) {
         const text = String(label).charAt(0).toUpperCase() + String(label).slice(1);
         const range = getIsoWeekRange(label, year);
-        return range ? [text, formatWeekRange(range, false)] : text;
+        return range && range.inProgress ? [text, formatWeekRange(range, false)] : text;
+    }
+    // Eixo X semanal: com muitas semanas o Chart.js pula rótulos e podia esconder a semana atual. Aqui o
+    // espaçamento é contado a partir da última semana, que sempre aparece (mesma densidade de antes).
+    function weekAxisTicks(count) {
+        const step = Math.max(1, Math.ceil(count / 21));
+        return {
+            autoSkip: false,
+            callback: function (value, index) {
+                return (count - 1 - index) % step === 0 ? this.getLabelForValue(value) : '';
+            }
+        };
+    }
+    // Título do tooltip: intervalo completo só para a semana em andamento
+    function weekTooltipTitle(label, year) {
+        const range = getIsoWeekRange(label, year);
+        return range && range.inProgress ? weekLongLabel(label, year) : String(label).charAt(0).toUpperCase() + String(label).slice(1);
     }
     // Título do tooltip / pop-up: "W42 · 12/10 a 18/10/2026 (semana em andamento)"
     function weekLongLabel(label, year) {
@@ -3519,7 +3536,6 @@
         if (!range) return text;
         return `${text} · ${formatWeekRange(range, true)}${range.inProgress ? ' (semana em andamento)' : ''}`;
     }
-    const WEEK_AXIS_TICKS = { autoSkip: true, maxRotation: 0, font: { size: 10 } };
 
     function getSortedPeriodLabels(dataObj, group) {
         const monthsOrder = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
@@ -3699,8 +3715,8 @@
         }
 
         const isWeekly = group === 'weekly';
-        if (isWeekly) scales.x.ticks = WEEK_AXIS_TICKS;
         const axisLabels = isWeekly ? labels.map(l => weekAxisLabel(l, CURRENT_FILTERS.year)) : displayLabels;
+        if (isWeekly) scales.x.ticks = weekAxisTicks(labels.length);
 
         if (window[chartKey]) window[chartKey].destroy();
         window[chartKey] = new Chart(canvas.getContext('2d'), {
@@ -3716,7 +3732,7 @@
                     tooltip: {
                         mode: 'index', intersect: false,
                         callbacks: {
-                            title: (items) => items.length ? (isWeekly ? weekLongLabel(labels[items[0].dataIndex], CURRENT_FILTERS.year) : displayLabels[items[0].dataIndex]) : '',
+                            title: (items) => items.length ? (isWeekly ? weekTooltipTitle(labels[items[0].dataIndex], CURRENT_FILTERS.year) : displayLabels[items[0].dataIndex]) : '',
                             // Item 4: MTTR no tooltip em HH:mm, igual ao resto do site (o dataset guarda horas decimais só para o eixo)
                             label: (ctx) => ctx.dataset.label === 'MTTR (h)'
                                 ? `MTTR: ${formatDecimalHoursToHHMM(Number(ctx.raw))}`
@@ -3811,7 +3827,7 @@
                     }
                 },
                 scales: {
-                    x: isWeekly ? { ticks: WEEK_AXIS_TICKS } : {},
+                    x: isWeekly ? { ticks: weekAxisTicks(labels.length) } : {},
                     'y-count': {
                         position: 'left',
                         beginAtZero: true,
@@ -3833,7 +3849,7 @@
                     },
                     tooltip: {
                         callbacks: {
-                            title: (items) => items.length ? (isWeekly ? weekLongLabel(labels[items[0].dataIndex], CURRENT_FILTERS.year) : displayLabels[items[0].dataIndex]) : '',
+                            title: (items) => items.length ? (isWeekly ? weekTooltipTitle(labels[items[0].dataIndex], CURRENT_FILTERS.year) : displayLabels[items[0].dataIndex]) : '',
                             label: function (context) {
                                 const label = context.dataset.label || '';
                                 const value = context.parsed.y;
@@ -4777,7 +4793,7 @@
                     },
                     tooltip: {
                         callbacks: {
-                            title: (items) => items.length ? (isWeekly ? weekLongLabel(labels[items[0].dataIndex], CURRENT_FILTERS.year) : displayLabels[items[0].dataIndex]) : '',
+                            title: (items) => items.length ? (isWeekly ? weekTooltipTitle(labels[items[0].dataIndex], CURRENT_FILTERS.year) : displayLabels[items[0].dataIndex]) : '',
                             label: function (context) {
                                 let label = context.dataset.label || '';
                                 if (label) {
@@ -4798,7 +4814,7 @@
                     }
                 },
                 scales: {
-                    x: isWeekly ? { ticks: WEEK_AXIS_TICKS } : {},
+                    x: isWeekly ? { ticks: weekAxisTicks(labels.length) } : {},
                     y: { beginAtZero: true, position: 'left', title: { display: true, text: 'Volume' } },
                     y1: {
                         beginAtZero: true,
