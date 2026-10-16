@@ -2506,8 +2506,9 @@ function getQuarterLabel(date) {
  * pop-up e devolve o link. Substitui o antigo download .xlsx.
  * - Datas "dd/mm/aaaa hh:mm" viram datas reais (permitem ordenar e filtrar na planilha);
  *   números ficam como números e todo o resto como texto literal (sem conversões automáticas nem fórmulas).
- * - A planilha é guardada na pasta "Exportações ITSM" do Drive de quem executa o Web App e, quando o
- *   Web App roda como o proprietário, é compartilhada como editor com quem clicou em exportar.
+ * - Quando o Web App roda como o proprietário, a planilha é compartilhada como editor com quem clicou
+ *   em exportar (só exige a permissão de Planilhas). Se o projeto também tiver a permissão do Drive,
+ *   ela é guardada na pasta "Exportações ITSM".
  * payload: { title, headers: [..], rows: [[..], ..] }
  */
 const EXPORT_FOLDER_NAME = 'Exportações ITSM';
@@ -2575,26 +2576,29 @@ function exportToGoogleSheet(payload) {
     if (extra > 0) sheet.deleteColumns(width + 1, extra);
 
     const url = ss.getUrl();
-    const file = DriveApp.getFileById(ss.getId());
-    try {
-      const folders = DriveApp.getFoldersByName(EXPORT_FOLDER_NAME);
-      file.moveTo(folders.hasNext() ? folders.next() : DriveApp.createFolder(EXPORT_FOLDER_NAME));
-    } catch (e) {
-      Logger.log('exportToGoogleSheet: não foi possível mover para a pasta: ' + e);
-    }
 
     // Web App executado como o proprietário: a planilha nasce no Drive dele, então compartilha com
-    // quem está usando o dashboard (o e-mail só é informado para usuários do mesmo domínio). Sem o
-    // e-mail, libera a leitura para o domínio com o link; nunca abre para qualquer pessoa na internet.
+    // quem está usando o dashboard (o e-mail só é informado para usuários do mesmo domínio).
+    // O compartilhamento usa só a permissão de Planilhas; os passos de Drive (pasta e link do domínio)
+    // são opcionais e ignorados quando o projeto não tem a permissão do Google Drive.
     let access = 'owner';
     let viewer = '';
     let owner = '';
     try { viewer = Session.getActiveUser().getEmail() || ''; } catch (e) {}
     try { owner = Session.getEffectiveUser().getEmail() || ''; } catch (e) {}
     if (viewer && viewer.toLowerCase() !== owner.toLowerCase()) {
-      try { file.addEditor(viewer); access = 'viewer'; } catch (e) { access = 'none'; Logger.log('exportToGoogleSheet: addEditor falhou: ' + e); }
-    } else if (!viewer) {
-      try { file.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW); access = 'domain'; } catch (e) { access = 'none'; }
+      try { ss.addEditor(viewer); access = 'viewer'; } catch (e) { access = 'none'; Logger.log('exportToGoogleSheet: addEditor falhou: ' + e); }
+    }
+
+    try {
+      const file = DriveApp.getFileById(ss.getId());
+      const folders = DriveApp.getFoldersByName(EXPORT_FOLDER_NAME);
+      file.moveTo(folders.hasNext() ? folders.next() : DriveApp.createFolder(EXPORT_FOLDER_NAME));
+      // Sem o e-mail de quem exportou: libera a leitura para o domínio com o link (nunca para a internet)
+      if (!viewer) { file.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW); access = 'domain'; }
+    } catch (e) {
+      if (!viewer) access = 'none';
+      Logger.log('exportToGoogleSheet: etapa opcional do Drive ignorada: ' + e);
     }
 
     return { url: url, name: ss.getName(), rows: values.length, access: access };
