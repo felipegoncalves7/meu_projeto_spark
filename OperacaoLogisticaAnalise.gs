@@ -413,7 +413,7 @@ function getOLAnaliseData(year) {
             obs: M ? M.obs : '',
             sn: S ? { priority: S.priority, group: S.group, service: S.service, offering: S.offering, category: S.category, subcategory: S.subcategory, resolutionCode: S.resolutionCode, causedByChange: S.causedByChange, opened: S.opened, resolved: S.resolved } : null
           };
-          if (M && M.tImp) I.tImp.push(M.tImp);
+          if (M && M.tImp) { I.tImp.push(M.tImp); I.tImpMI = M.tImp; }
           if (M && M.dOf) I.dOf = M.dOf;
           if (M && M.sol) I.sol = M.sol;
           if (M && M.titulo) I.tit = M.titulo;
@@ -441,6 +441,13 @@ function getOLAnaliseData(year) {
       Object.keys(incidents).forEach(id => {
         const I = incidents[id];
         if (!I.ofe) I.ofe = I.ofeRows[0] || 'N/A';
+        // WMS: a MajorIncidentes não tem localidade; se as linhas de impacto trazem o WMS por localidade (ex.: WMS Classic
+        // em Cabreúva/Guarne), vale o das linhas.
+        if (I.tImpMI && OL_WMS_RE.test(olFold(I.tImpMI))) {
+          const rowWms = I.tImp.filter(t => t !== I.tImpMI && OL_WMS_RE.test(olFold(t)));
+          if (rowWms.length && !(raw[y].rows || []).some(r => r.inc === id && r.tImp === I.tImpMI)) I.tImp = I.tImp.filter(t => t !== I.tImpMI);
+        }
+        delete I.tImpMI;
         if (!I.tImp.length) I.tImp.push('N/A');
         I.chgInfo = I.sm && changes[I.sm] ? changes[I.sm] : null;
         const L = olxClassifyLayer(I, overrides);

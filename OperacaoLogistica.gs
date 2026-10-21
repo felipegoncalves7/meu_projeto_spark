@@ -132,6 +132,16 @@ const OL_CARD_ISO = ['gt', 'sv', 'hn', 'ni', 'pa', 'cr', 'do', 'card'];
 // Países em que o fluxo de Separação tem CDs nomeados no catálogo; nos demais, a linha sem Localidade vira card do país.
 const OL_SEP_COUNTRIES_WITH_CD = ['br', 'ar', 'cl', 'co', 'ec', 'mx', 'pe'];
 
+// WMS por localidade: Cabreúva e Guarne operam o WMS Classic. Nessas localidades, a Tecnologia impactada
+// "WMS", "WMS Active" ou "WMS Classic" é exibida como WMS Classic; nas demais, vale o que está na base.
+const OL_WMS_CLASSIC_LOCALITIES = ['cabreuva', 'guarne'];
+const OL_WMS_RE = /^wms(\s*[-–:]?\s*(active|ativo|classic|classico))?$/;
+function olWmsByLocality(tech, localidade) {
+  if (!OL_WMS_RE.test(olFold(tech))) return tech;
+  const loc = olFold(localidade);
+  return OL_WMS_CLASSIC_LOCALITIES.some(k => loc.indexOf(k) !== -1) ? 'WMS Classic' : tech;
+}
+
 const OL_MONTHS_PT = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 
 function olIsDate(v) { return Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime()); }
@@ -400,7 +410,7 @@ function olReadImpactos(ss, year, callerMap) {
       dOf: txt(r[OL_COL_DESC_OFENSOR], 600),
       sol: txt(r[OL_COL_SOLUCAO], 400),
       prb: txt(r[OL_COL_PROBLEM]),
-      tImp: txt(r[OL_COL_TECH_IMPACTADA]) || 'N/A',
+      tImp: txt(r[OL_COL_TECH_IMPACTADA]) ? olWmsByLocality(txt(r[OL_COL_TECH_IMPACTADA]), r[OL_COL_LOCALIDADE]) : 'N/A',
       ofe: txt(r[OL_COL_OFENSOR]) || 'N/A',
       flow: flow,
       ent: ent.key,
