@@ -132,14 +132,17 @@ const OL_CARD_ISO = ['gt', 'sv', 'hn', 'ni', 'pa', 'cr', 'do', 'card'];
 // Países em que o fluxo de Separação tem CDs nomeados no catálogo; nos demais, a linha sem Localidade vira card do país.
 const OL_SEP_COUNTRIES_WITH_CD = ['br', 'ar', 'cl', 'co', 'ec', 'mx', 'pe'];
 
-// WMS por localidade: Cabreúva e Guarne operam o WMS Classic. Nessas localidades, a Tecnologia impactada
-// "WMS", "WMS Active" ou "WMS Classic" é exibida como WMS Classic; nas demais, vale o que está na base.
+// WMS/WMOS por localidade: Cabreúva e Guarne operam o Classic; as demais localidades, o Active. Vale por linha de
+// impacto, então um incidente que impactou Cabreúva, Guarne e Celaya mostra Classic nas duas primeiras e Active em
+// Celaya, mesmo que a base registre "WMOS Classic" para todas. Linhas sem Localidade mantêm o valor da base.
 const OL_WMS_CLASSIC_LOCALITIES = ['cabreuva', 'guarne'];
-const OL_WMS_RE = /^wms(\s*[-–:]?\s*(active|ativo|classic|classico))?$/;
+const OL_WMS_RE = /^(wms|wmos)(\s*[-–:]?\s*(active|ativo|classic|classico))?$/;
 function olWmsByLocality(tech, localidade) {
-  if (!OL_WMS_RE.test(olFold(tech))) return tech;
+  const m = olFold(tech).match(OL_WMS_RE);
   const loc = olFold(localidade);
-  return OL_WMS_CLASSIC_LOCALITIES.some(k => loc.indexOf(k) !== -1) ? 'WMS Classic' : tech;
+  if (!m || !loc) return tech;
+  const base = m[1] === 'wmos' ? 'WMOS' : 'WMS';
+  return base + (OL_WMS_CLASSIC_LOCALITIES.some(k => loc.indexOf(k) !== -1) ? ' Classic' : ' Active');
 }
 
 const OL_MONTHS_PT = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
