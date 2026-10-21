@@ -223,10 +223,20 @@
     for (var i = n - 1; i >= 0; i--) { var mm = m - i, yy = y; while (mm < 1) { mm += 12; yy--; } out.push({ y: yy, m: mm }); }
     return out;
   }
+  // Os períodos respeitam a aba Status_Apuracao (mesma regra da Disponibilidade na Visão O&L): vão até o último mês
+  // Apurado ou Parcial. Meses com apuração não iniciada ficam fora, mesmo que já tenham incidentes registrados.
+  // O corte no dia de hoje só vale quando o último mês considerado é o mês corrente.
   function refPoint() {
-    var t = new Date(D.today), y = D.year;
-    if (y === t.getFullYear()) return { y: y, m: t.getMonth() + 1, cut: endOfDay(D.today) };
-    return { y: y, m: 12, cut: null };
+    var t = new Date(D.today), y = D.year, st = (D.current && D.current.statuses) || [];
+    var maxM = y === t.getFullYear() ? t.getMonth() + 1 : (y < t.getFullYear() ? 12 : 0);
+    var last = 0, closed = 0;
+    for (var m = 1; m <= maxM; m++) {
+      if (st[m - 1] === 'APURADO' || st[m - 1] === 'PARCIAL') last = m;
+      if (st[m - 1] === 'APURADO') closed = m;
+    }
+    if (!last) return { y: y - 1, m: 12, closed: 12, cut: null, partial: false, none: true };
+    var isNow = y === t.getFullYear() && last === t.getMonth() + 1;
+    return { y: y, m: last, closed: closed, cut: isNow ? endOfDay(D.today) : null, partial: st[last - 1] === 'PARCIAL', none: false };
   }
   function rangeTxt(months) {
     if (!months.length) return '—';
@@ -240,7 +250,10 @@
     months.forEach(function (x) { set[x.y + '-' + x.m] = true; });
     var w = { key: key, label: label, group: group, months: months, cut: cut, set: set };
     var t = cut ? new Date(cut) : null;
-    w.range = rangeTxt(months) + (t && months.some(function (x) { return x.y === t.getFullYear() && x.m === t.getMonth() + 1; }) ? ' (até ' + pad2(t.getDate()) + '/' + pad2(t.getMonth() + 1) + ')' : '');
+    var partial = months.filter(function (x) { var yd = ydOf(x.y); return yd && yd.statuses && yd.statuses[x.m - 1] === 'PARCIAL'; });
+    w.range = rangeTxt(months) + (t && months.some(function (x) { return x.y === t.getFullYear() && x.m === t.getMonth() + 1; }) ? ' (até ' + pad2(t.getDate()) + '/' + pad2(t.getMonth() + 1) + ')' : '') +
+      (partial.length && key !== 'yoy' && key !== 'pop' ? ' · ' + partial.map(function (x) { return MABBR[x.m - 1]; }).join(', ') + ' parcial' : '');
+    w.partial = partial;
     return w;
   }
   function periodDefs() {
@@ -248,7 +261,7 @@
     var inCut = function (months) { return months.some(function (x) { return x.y === y && x.m === m; }) ? rp.cut : null; };
     var l6 = monthsBack(y, m, 6);
     out.push(mkWin('l6', 'Últimos 6 meses', 'Janela móvel', l6, inCut(l6)));
-    if (rp.cut && m > 1) { var l6f = monthsBack(y, m - 1, 6); out.push(mkWin('l6f', 'Últimos 6 meses fechados', 'Janela móvel', l6f, null)); }
+    if (rp.partial && rp.closed > 0) { var l6f = monthsBack(y, rp.closed, 6); out.push(mkWin('l6f', 'Últimos 6 meses apurados', 'Janela móvel', l6f, null)); }
     var l3 = monthsBack(y, m, 3);
     out.push(mkWin('l3', 'Últimos 3 meses', 'Janela móvel', l3, inCut(l3)));
     var ytd = monthsBack(y, m, m);
@@ -469,6 +482,11 @@
     var h = '';
     if (M.cov.none) h += notice('info', 'info', 'Sem base para o comparativo (' + esc(M.L.prev) + '): as abas desse período não foram carregadas. As variações ficam "sem base".');
     else if (M.cov.partial) h += notice('info', 'info', 'O comparativo (' + esc(M.L.prev) + ') tem meses sem base carregada (' + esc(M.cov.missing.map(function (x) { return MABBR[x.m - 1] + '/' + x.y; }).join(', ')) + '): a comparação fica subestimada nesses meses.');
+    var rp = refPoint(), yd = D.current, st = yd && yd.statuses ? yd.statuses : [];
+    var tNow = new Date(D.today), started = rp.y === tNow.getFullYear() ? tNow.getMonth() + 1 : 12;
+    var next = rp.none ? null : (rp.m < started && st[rp.m] === 'NAO_INICIADO' ? MONTHS[rp.m] : null);
+    h += notice('info', 'clock', 'Períodos limitados aos meses com apuração iniciada na aba Status_Apuracao' + (D.statusSource === 'FALLBACK' ? ' (aba não encontrada: considerados os meses até o atual)' : '') +
+      ': até <b>' + MONTHS[rp.m - 1] + '/' + rp.y + '</b>' + (rp.partial ? ' (apuração parcial)' : '') + '.' + (next ? ' ' + next + ' ainda não teve a apuração iniciada e fica fora, mesmo com incidentes registrados.' : ''));
     if (state.layer !== 'all') h += notice('out', 'server', 'Filtro de camada ativo: só incidentes de <b>' + LAYER_LABEL[state.layer] + '</b>. A seção Aplicação x Infraestrutura sempre mostra as duas camadas.');
     return h;
   }
@@ -907,14 +925,14 @@
       return '<tr class="clickable" data-action="open-key" data-k="' + esc(kind + '|' + k + '|') + '"><td class="n">' + (i + 1) + '</td><td class="nm">' + esc(k) + '<div class="desc">' + esc(uniq([].concat.apply([], l.map(flowNames))).join(', ')) + '</div></td>' +
         '<td class="n">' + l.length + '</td><td class="n">' + (mp ? np : '—') + '</td><td class="n">' + deltaHtml(mp ? deltaCount(l.length, np, 'lower') : nobase()) + '</td>' +
         '<td class="n">' + s.sev0 + ' · ' + s.sev1 + '</td><td class="n">' + fmtHM(s.mttr) + '</td><td class="n ' + olaCls(s.ola) + '">' + fmtPct(s.ola, 0) + '</td>' +
-        '<td class="n">' + fmtPct(s.pEu, 0) + '</td><td class="n">' + fmtPct(s.pInfra, 0) + '</td><td class="n">' + fmtPct(s.pPrb, 0) + '</td><td class="n">' + fmtDay(last) + '</td></tr>';
+        '<td class="n">' + fmtPct(s.pEu, 0) + '</td><td class="n">' + fmtPct(s.pInfra, 0) + '</td><td class="n">' + fmtDay(last) + '</td></tr>';
     }).join('');
     keys.forEach(function (k) { acc += m[k].length; });
     var seg = '<div class="seg" id="ox-rank">' + RANK_TABS.map(function (t) { return '<button type="button" data-v="' + t[0] + '"' + (kind === t[0] ? ' class="is-active"' : '') + '>' + t[1] + '</button>'; }).join('') + '</div>';
-    var tbl = keys.length ? '<div class="ox-tbl-wrap"><table class="ox-tbl"><thead><tr><th class="n">#</th><th>' + esc(RANK_TABS.find(function (t) { return t[0] === kind; })[1]) + '</th><th class="n">' + esc(M.L.curShort) + '</th><th class="n">' + esc(M.L.prevShort) + '</th><th class="n">Variação</th><th class="n">Sev 0 · 1</th><th class="n">MTTR</th><th class="n">OLA</th><th class="n">% End-users</th><th class="n">% Infra</th><th class="n">% c/ Problem</th><th class="n">Último</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    var tbl = keys.length ? '<div class="ox-tbl-wrap"><table class="ox-tbl"><thead><tr><th class="n">#</th><th>' + esc(RANK_TABS.find(function (t) { return t[0] === kind; })[1]) + '</th><th class="n">' + esc(M.L.curShort) + '</th><th class="n">' + esc(M.L.prevShort) + '</th><th class="n">Variação</th><th class="n">Sev 0 · 1</th><th class="n">MTTR</th><th class="n">OLA</th><th class="n">% End-users</th><th class="n">% Infra</th><th class="n">Último</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       (keys.length > 20 ? '<div class="ox-note">Mostrando os 20 primeiros de ' + keys.length + '.</div>' : '') : '<div class="empty">Sem dados no período.</div>';
     $('sec-tecnologias').innerHTML = sectionHead('monitor', 'Concentração', 'Tecnologias, ofensores e grupos',
-      'Pareto do período: quais itens concentram os incidentes, com MTTR, OLA, detecção por End-users, camada e cobertura de Problem.', seg) +
+      'Pareto do período: quais itens concentram os incidentes, com MTTR, OLA, detecção por End-users e camada.', seg) +
       '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('chart') + 'Pareto — top 10</div></div><div class="ox-chart sm"><canvas id="ox-ch-pareto"></canvas></div></div>' +
       '<div style="margin-top:14px">' + tbl + '</div>';
     drawPareto(keys.slice(0, 10).map(function (k) { return { k: k, n: m[k].length }; }), total);
