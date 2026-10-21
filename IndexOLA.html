@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>O&amp;L · Análise Tático-Estratégica</title>
+  <!-- Bandeiras (flag-icons) e gráficos (Chart.js + datalabels) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/css/flag-icons.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+  <?!= include('dashboardOL.css'); ?>
+  <?!= include('dashboardOLA.css'); ?>
+</head>
+<body data-base-url="<?= baseUrl ?>">
+
+<header class="ol-head" role="banner">
+  <div class="ol-head-inner">
+    <div class="brand">
+      <img class="brand-logo" src="<?!= include('LogoData').trim() ?>" alt="Natura">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <div class="brand-title">
+        <span class="eyebrow">Visão O&amp;L · Sub-visão</span>
+        <span class="title">Análise Tático-Estratégica</span>
+        <span class="stamp" id="ox-stamp" aria-live="polite"></span>
+      </div>
+    </div>
+
+    <div class="head-controls" role="group" aria-label="Filtros">
+      <label class="field"><span class="eyebrow">Período</span>
+        <select id="ox-period" disabled aria-label="Período da análise"></select></label>
+      <div class="field">
+        <span class="eyebrow">Comparar com</span>
+        <div class="seg on-dark" id="ox-cmp" role="group" aria-label="Comparativo">
+          <button type="button" data-v="yoy" class="is-active" data-tip="Mesmos meses do ano anterior, cortados no mesmo dia quando o período chega até hoje.">Ano anterior</button>
+          <button type="button" data-v="pop" data-tip="Os meses imediatamente anteriores, com a mesma quantidade de meses (ex.: últimos 6 meses vs os 6 meses antes deles).">Período anterior</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="eyebrow">Camada</span>
+        <div class="seg on-dark" id="ox-layer" role="group" aria-label="Camada">
+          <button type="button" data-v="all" class="is-active">Todas</button>
+          <button type="button" data-v="app">Aplicação</button>
+          <button type="button" data-v="infra">Infraestrutura</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="eyebrow">CARD</span>
+        <div class="seg on-dark" id="ox-card" role="group" aria-label="Países CARD">
+          <button type="button" data-v="exc" class="is-active" data-tip="Mesma regra da Visão O&amp;L: incidentes que impactaram países CARD ficam fora dos fluxos e localidades, mas contam no total de O&amp;L.">Excluir</button>
+          <button type="button" data-v="inc" data-tip="Inclui nos fluxos e localidades os incidentes que impactaram países CARD.">Incluir</button>
+        </div>
+      </div>
+      <a id="ox-ol-link" class="btn btn-ghost-dark" data-nav="ol" href="#" target="_blank" rel="noopener" title="Voltar para a Visão O&amp;L">&larr; Visão O&amp;L</a>
+      <a id="ox-portal-link" class="btn btn-ghost-dark" data-nav="portal" href="#" target="_blank" rel="noopener" title="Voltar ao Portal de Indicadores ITSM">Portal</a>
+    </div>
+  </div>
+
+  <nav class="ol-nav" id="ox-nav" aria-label="Seções">
+    <a href="#sec-agenda" data-sec="sec-agenda" data-icon="flag">Agenda</a>
+    <a href="#sec-panorama" data-sec="sec-panorama" data-icon="spark">Panorama</a>
+    <a href="#sec-camadas" data-sec="sec-camadas" data-icon="server">Aplicação x Infra</a>
+    <a href="#sec-fluxos" data-sec="sec-fluxos" data-icon="truck">Fluxos &amp; Localidades</a>
+    <a href="#sec-deteccao" data-sec="sec-deteccao" data-icon="radar">Detecção</a>
+    <a href="#sec-tecnologias" data-sec="sec-tecnologias" data-icon="monitor">Tecnologias &amp; Ofensores</a>
+    <a href="#sec-reincidencia" data-sec="sec-reincidencia" data-icon="repeat">Reincidência</a>
+    <a href="#sec-problemas" data-sec="sec-problemas" data-icon="search">Problemas &amp; RCA</a>
+    <a href="#sec-mudancas" data-sec="sec-mudancas" data-icon="shuffle">Mudanças</a>
+    <a href="#sec-disp" data-sec="sec-disp" data-icon="gauge">Disponibilidade</a>
+    <a href="#sec-acoes" data-sec="sec-acoes" data-icon="target">Próximos passos</a>
+    <a href="#sec-base" data-sec="sec-base" data-icon="list">Base de incidentes</a>
+  </nav>
+</header>
+
+<main class="ol-main" id="ox-app" aria-live="polite">
+  <div id="ox-error" hidden></div>
+  <section id="sec-agenda" class="ol-section"></section>
+  <section id="sec-panorama" class="ol-section"></section>
+  <section id="sec-camadas" class="ol-section"></section>
+  <section id="sec-fluxos" class="ol-section"></section>
+  <section id="sec-deteccao" class="ol-section"></section>
+  <section id="sec-tecnologias" class="ol-section"></section>
+  <section id="sec-reincidencia" class="ol-section"></section>
+  <section id="sec-problemas" class="ol-section"></section>
+  <section id="sec-mudancas" class="ol-section"></section>
+  <section id="sec-disp" class="ol-section"></section>
+  <section id="sec-acoes" class="ol-section"></section>
+  <section id="sec-base" class="ol-section"></section>
+  <div class="foot legend" id="ox-foot"></div>
+</main>
+
+<div id="ox-loading" class="loading" role="status">
+  <div class="spinner" aria-hidden="true"></div>
+  <div class="legend">Carregando a análise de O&amp;L (incidentes, problemas, mudanças e disponibilidade)…</div>
+</div>
+<div id="ox-tooltip" class="tooltip" role="tooltip" hidden></div>
+<div id="ox-modal-root"></div>
+
+<?!= include('Navigation'); ?>
+<?!= include('dashboardOLA.js'); ?>
+</body>
+</html>

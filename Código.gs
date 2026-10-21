@@ -653,11 +653,13 @@ function buildIncidentSeverityMap(ss) {
  *   (sem parâmetro) -> Portal (hub com as Visões disponíveis)
  *   ?view=geral     -> Visão Geral (Gestão de Incidentes e Problemas ITSM)
  *   ?view=ol        -> Visão O&L (Operação & Logística)
+ *   ?view=ol-analise -> Sub-visão O&L · Análise Tático-Estratégica (incidentes, problemas, mudanças e disponibilidade)
  * Cada página recebe baseUrl (URL do Web App) para navegar entre as Visões.
  */
 const VIEW_ROUTES = {
   geral: { file: 'Index', title: 'Gestão de Incidentes e Problemas ITSM' },
-  ol: { file: 'IndexOL', title: 'Visão O&L — Operação & Logística' }
+  ol: { file: 'IndexOL', title: 'Visão O&L — Operação & Logística' },
+  'ol-analise': { file: 'IndexOLA', title: 'O&L · Análise Tático-Estratégica' }
 };
 
 function olRouteFor(view) {

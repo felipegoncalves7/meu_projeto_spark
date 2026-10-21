@@ -1,0 +1,1504 @@
+<script>
+/* ==========================================================================
+   Sub-visão O&L · Análise Tático-Estratégica (frontend)
+   Dados: getOLAnaliseData(ano) em OperacaoLogisticaAnalise.gs. Unidade de análise = Incidente de O&L
+   (Stream O&L / Planejamento Logístico) com origem Tecnologia. Período, comparativo, camada e CARD
+   são aplicados aqui, em memória.
+   ========================================================================== */
+(function () {
+  'use strict';
+
+  /* --------------------------------------------------------------- constantes */
+  var MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  var MABBR = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  var COUNTRY_NAMES = {
+    br: 'Brasil', ar: 'Argentina', cl: 'Chile', co: 'Colômbia', ec: 'Equador', mx: 'México', pe: 'Peru',
+    gt: 'Guatemala', sv: 'El Salvador', hn: 'Honduras', ni: 'Nicarágua', cr: 'Costa Rica', pa: 'Panamá',
+    do: 'República Dominicana', uy: 'Uruguai', my: 'Malásia', card: 'CARD'
+  };
+  var COUNTRY_ORDER = ['br', 'ar', 'cl', 'co', 'ec', 'mx', 'pe', 'gt', 'sv', 'hn', 'ni', 'cr', 'pa', 'do', 'uy', 'my'];
+  var KIND_LABEL = { cd: 'Centro de Distribuição', hub: 'HUB', pea: 'PEA', planta: 'Planta', ecoparque: 'Ecoparque', sistema: 'Sistema / Aplicação' };
+  var ORIGENS = [
+    { key: 'eu', src: 'End-users', label: 'End-users' },
+    { key: 'mon', src: 'Monitoração', label: 'Monitoração' },
+    { key: 'exp', src: 'Experiências', label: 'Experiências' },
+    { key: 'na', src: 'N/A', label: 'Sem Caller' }
+  ];
+  var LAYER_LABEL = { app: 'Aplicação', infra: 'Infraestrutura' };
+  var PRB_STATUS = {
+    rca: { label: 'Em RCA', order: 0 }, fix: { label: 'Em implementação', order: 1 }, resolved: { label: 'Resolvido', order: 2 },
+    risk: { label: 'Risco aceito', order: 3 }, other: { label: 'Outro status', order: 4 }, nd: { label: 'Sem status', order: 5 }
+  };
+  var STATUS = {
+    atencao: { key: 'atencao', label: 'Atenção', symbol: '!' },
+    minimo: { key: 'minimo', label: 'Mínimo', symbol: '≥' },
+    meta: { key: 'meta', label: 'Meta', symbol: '✓' },
+    desafio: { key: 'desafio', label: 'Desafio', symbol: '★' },
+    none: { key: 'none', label: 'Sem referência', symbol: '–' },
+    nodata: { key: 'none', label: 'Sem dado', symbol: '–' }
+  };
+
+  /* ------------------------------------------------------------------ ícones */
+  var ICONS = {
+    spark: '<path d="M12 3.5l1.8 5.2 5.2 1.8-5.2 1.8L12 17.5l-1.8-5.2L5 10.5l5.2-1.8z"/><path class="dots" d="M18.5 17v4M16.5 19h4"/>',
+    alert: '<path d="M12 4l9 15.5H3z"/><path d="M12 10v4.5"/><circle class="fill" cx="12" cy="17" r="1"/>',
+    box: '<path d="M12 3.5l8 4v9l-8 4-8-4v-9z"/><path d="M4 7.5l8 4 8-4M12 11.5v9"/>',
+    factory: '<path d="M3.5 20V10.5l6 3v-3l6 3V5.5h4V20z"/><path class="dots" d="M7 17h10"/>',
+    headset: '<path d="M4.5 14v-2a7.5 7.5 0 0 1 15 0v2"/><rect x="3.5" y="13.5" width="3.5" height="5.5" rx="1.2"/><rect x="17" y="13.5" width="3.5" height="5.5" rx="1.2"/><path d="M19 19c0 1.6-2 2.2-5 2.2"/>',
+    calendar: '<rect x="4" y="5.5" width="16" height="14.5" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/><path class="dots" d="M8 14.5h8"/>',
+    gauge: '<path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4-5"/><path class="dots" d="M6.5 11.5l1 .8M12 7.5v1.2M17.5 11.5l-1 .8"/><circle class="fill" cx="12" cy="16" r="1.3"/>',
+    truck: '<path d="M3 6.5h11v9H3zM14 9.5h3.6l3 3.2v2.8H14"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/><path class="dots" d="M5 10h6"/>',
+    warehouse: '<path d="M3.5 20V9l8.5-5 8.5 5v11"/><path d="M7 20v-7h10v7"/><path class="dots" d="M7 16.5h10"/>',
+    hub: '<circle cx="12" cy="12" r="2.6"/><circle cx="5" cy="6" r="1.8"/><circle cx="19" cy="6" r="1.8"/><circle cx="5" cy="18" r="1.8"/><circle cx="19" cy="18" r="1.8"/><path d="M6.5 7.2l3.5 3M17.5 7.2l-3.5 3M6.5 16.8l3.5-3M17.5 16.8l-3.5-3"/>',
+    pea: '<path d="M4 9.5h12v9H4z"/><path d="M16 12h2.8l1.7 2.3v4.2H16"/><path d="M7.5 9.5V6.5h5v3"/><path class="dots" d="M6.5 14h7"/>',
+    leaf: '<path d="M5 19c0-8 5-13 14-14 0 9-5 14-13 14z"/><path class="dots" d="M5 19l8-8"/>',
+    monitor: '<rect x="3.5" y="4.5" width="17" height="11.5" rx="1.5"/><path d="M9 20h6M12 16v4"/><path class="dots" d="M7 10h10"/>',
+    users: '<circle cx="9" cy="8.5" r="3"/><path d="M3.5 19c.5-3.2 2.7-5 5.5-5s5 1.8 5.5 5"/><circle cx="17" cy="9.5" r="2.3"/><path class="dots" d="M16 14.2c2.4.2 4 1.8 4.5 4.8"/>',
+    phone: '<path d="M5 4.5h4l1.5 4-2.2 1.5a11 11 0 0 0 5.7 5.7l1.5-2.2 4 1.5v4c0 .8-.7 1.5-1.5 1.5A16 16 0 0 1 3.5 6c0-.8.7-1.5 1.5-1.5z"/>',
+    layers: '<path d="M12 4l8.5 4.5L12 13 3.5 8.5z"/><path d="M3.5 12.5L12 17l8.5-4.5"/><path class="dots" d="M3.5 16.5L12 21l8.5-4.5"/>',
+    clock: '<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>',
+    target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.5"/><circle class="fill" cx="12" cy="12" r="1.4"/>',
+    check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    pin: '<path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.2"/>',
+    chevron: '<path d="M9 6l6 6-6 6"/>',
+    close: '<path d="M6 6l12 12M18 6L6 18"/>',
+    list: '<path d="M8 7h12M8 12h12M8 17h12"/><path class="dots" d="M4 7h.1M4 12h.1M4 17h.1"/>',
+    chart: '<path d="M4 20h16"/><path d="M7 16v-5M12 16V7M17 16v-8"/>',
+    info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><circle class="fill" cx="12" cy="8" r="1"/>',
+    flag: '<path d="M5.5 21V4"/><path d="M5.5 4.5h11l-2.5 4 2.5 4h-11"/><path class="dots" d="M8.5 8.5h3"/>',
+    server: '<rect x="4" y="4" width="16" height="6.5" rx="1.2"/><rect x="4" y="13.5" width="16" height="6.5" rx="1.2"/><circle class="fill" cx="7.5" cy="7.2" r="1"/><circle class="fill" cx="7.5" cy="16.8" r="1"/><path class="dots" d="M11 7.2h6M11 16.8h6"/>',
+    radar: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 12l5.5-5.5"/><circle class="fill" cx="15.5" cy="14.5" r="1.1"/>',
+    repeat: '<path d="M5 9.5A6.5 6.5 0 0 1 17.5 7l1.5 1.5"/><path d="M19 4.5v4h-4"/><path d="M19 14.5A6.5 6.5 0 0 1 6.5 17L5 15.5"/><path d="M5 19.5v-4h4"/>',
+    search: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/><path class="dots" d="M8 10.5h5"/>',
+    shuffle: '<path d="M4 7h3.5c4 0 5 10 9 10H20"/><path d="M4 17h3.5c1.5 0 2.5-1.4 3.4-3.2M13.5 10.2c.9-1.8 1.9-3.2 3.4-3.2H20"/><path d="M17.5 4.5L20 7l-2.5 2.5M17.5 14.5L20 17l-2.5 2.5"/>',
+    wrench: '<path d="M14.5 4.5a4.5 4.5 0 0 0-4.3 5.8L4.5 16a2.1 2.1 0 0 0 3 3l5.7-5.7a4.5 4.5 0 0 0 5.8-4.3l-2.6 2.6-2.8-.6-.6-2.8z"/>',
+    download: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>',
+    sheet: '<rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 9.5h16M4 14.5h16M10 9.5v10.5"/>',
+    dotgrid: '<circle class="fill" cx="7" cy="7" r="1.3"/><circle class="fill" cx="12" cy="7" r="1.3"/><circle class="fill" cx="17" cy="7" r="1.3"/><circle class="fill" cx="7" cy="12" r="1.3"/><circle class="fill" cx="12" cy="12" r="1.3"/><circle class="fill" cx="17" cy="12" r="1.3"/><circle class="fill" cx="7" cy="17" r="1.3"/><circle class="fill" cx="12" cy="17" r="1.3"/><circle class="fill" cx="17" cy="17" r="1.3"/>'
+  };
+  function icon(name) { return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + (ICONS[name] || ICONS.dotgrid) + '</svg>'; }
+  function tile(name, size) { return '<span class="ico-tile' + (size ? ' ' + size : '') + '" aria-hidden="true">' + icon(name) + '</span>'; }
+  function entIcon(kind, name) {
+    if (kind === 'sistema') {
+      var n = fold(name);
+      if (/\bura\b/.test(n)) return 'phone';
+      if (/\bcrm\b/.test(n)) return 'users';
+      if (/\bo9\b|apo/.test(n)) return 'layers';
+      return 'monitor';
+    }
+    return { cd: 'warehouse', hub: 'hub', pea: 'pea', planta: 'factory', ecoparque: 'leaf' }[kind] || 'pin';
+  }
+
+  /* --------------------------------------------------------------- utilitários */
+  function isNum(v) { return typeof v === 'number' && isFinite(v); }
+  function r2(v) { return Math.round(v * 100) / 100; }
+  function esc(s) {
+    return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function fold(s) { return String(s === null || s === undefined ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+  function fmtNum(v, d) { return isNum(v) ? v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—'; }
+  function fmtPct(v, d) { return isNum(v) ? fmtNum(v, d === undefined ? 1 : d) + '%' : '—'; }
+  function fmtInt(v) { return isNum(v) ? Math.round(v).toLocaleString('pt-BR') : '—'; }
+  function fmtSigned(v, d) { if (!isNum(v)) return '—'; var r = Number(v.toFixed(d)); return (r > 0 ? '+' : r < 0 ? '−' : '') + fmtNum(Math.abs(r), d); }
+  function fmtHM(min) {
+    if (!isNum(min)) return '—';
+    var m = Math.round(Math.abs(min)), h = Math.floor(m / 60), mm = m % 60;
+    return (h < 10 ? '0' : '') + h + ':' + (mm < 10 ? '0' : '') + mm;
+  }
+  function fmtDur(min) {
+    if (!isNum(min)) return '—';
+    var m = Math.round(min);
+    if (m < 60) return m + 'min';
+    var h = Math.floor(m / 60), mm = m % 60;
+    return h.toLocaleString('pt-BR') + 'h' + (mm ? (mm < 10 ? '0' : '') + mm : '');
+  }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function fmtDate(ms) { if (!isNum(ms)) return '—'; var d = new Date(ms); return pad2(d.getDate()) + '/' + pad2(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+  function fmtDay(ms) { if (!isNum(ms)) return '—'; var d = new Date(ms); return pad2(d.getDate()) + '/' + pad2(d.getMonth() + 1) + '/' + d.getFullYear(); }
+  function plural(n, s, p) { return n === 1 ? s : p; }
+  function pct(n, d) { return d > 0 ? n / d * 100 : null; }
+  function uniq(a) { return a.filter(function (v, i) { return a.indexOf(v) === i; }); }
+  function $(id) { return document.getElementById(id); }
+  function sum(a) { return a.reduce(function (s, v) { return s + (isNum(v) ? v : 0); }, 0); }
+  function avg(a) { var b = a.filter(isNum); return b.length ? sum(b) / b.length : null; }
+  function flag(iso, lg) {
+    if (!iso || iso === 'nd') return '';
+    var c = String(iso).toLowerCase(), nm = COUNTRY_NAMES[c] || c.toUpperCase();
+    if (c === 'card') return '<span class="tag">CARD</span>';
+    return '<span class="fi fi-' + esc(c) + (lg ? ' lg' : '') + '" role="img" aria-label="' + esc(nm) + '" title="' + esc(nm) + '"></span>';
+  }
+  function origemKey(o) { var f = fold(o); return f === 'end-users' ? 'eu' : f === 'monitoracao' ? 'mon' : f === 'experiencias' ? 'exp' : 'na'; }
+
+  /* ------------------------------------------------------------------ deltas */
+  function nobase(txt) { return { cls: 'nobase', arrow: '', txt: txt || 'sem base', d: null }; }
+  function clsFor(d, dir) { return d === 0 ? 'flat' : ((d < 0) === (dir === 'lower') ? 'good' : 'bad'); }
+  function arrowFor(d) { return d === 0 ? '=' : (d < 0 ? '▼' : '▲'); }
+  function deltaCount(cur, prev, dir) {
+    if (!isNum(cur) || !isNum(prev)) return nobase();
+    var d = cur - prev, p = prev > 0 ? d / prev * 100 : null;
+    return { cls: clsFor(d, dir || 'lower'), arrow: arrowFor(d), d: d, txt: d === 0 ? 'estável' : fmtSigned(d, 0) + (isNum(p) ? ' (' + fmtSigned(p, 0) + '%)' : '') };
+  }
+  function deltaMin(cur, prev) {
+    if (!isNum(cur) || !isNum(prev)) return nobase();
+    var d = Math.round(cur) - Math.round(prev);
+    return { cls: clsFor(d, 'lower'), arrow: arrowFor(d), d: d, txt: d === 0 ? 'estável' : (d > 0 ? '+' : '−') + fmtHM(d) };
+  }
+  function deltaPP(cur, prev, dec, dir) {
+    if (!isNum(cur) || !isNum(prev)) return nobase();
+    var f = Math.pow(10, dec), d = (Math.round(cur * f) - Math.round(prev * f)) / f;
+    return { cls: clsFor(d, dir || 'higher'), arrow: arrowFor(d), d: d, txt: fmtSigned(d, dec) + ' p.p.' };
+  }
+  function deltaHtml(dl, vs) {
+    return '<span class="delta ' + dl.cls + '">' + (dl.arrow ? '<span class="arrow" aria-hidden="true">' + dl.arrow + '</span>' : '') + esc(dl.txt) +
+      (vs && dl.cls !== 'nobase' ? ' <span class="vs">vs ' + esc(vs) + '</span>' : '') + '</span>';
+  }
+
+  /* ---------------------------------------------------- status (disponibilidade) */
+  function hasRefs(r) { return !!r && isNum(r.min) && isNum(r.meta) && isNum(r.des) && r.min <= r.meta && r.meta <= r.des; }
+  function statusOf(v, refs) {
+    if (!isNum(v)) return STATUS.nodata;
+    if (!hasRefs(refs)) return STATUS.none;
+    if (r2(v) < r2(refs.min)) return STATUS.atencao;
+    if (r2(v) < r2(refs.meta)) return STATUS.minimo;
+    if (r2(v) < r2(refs.des)) return STATUS.meta;
+    return STATUS.desafio;
+  }
+  function chip(st, sm) { return '<span class="chip is-' + st.key + (sm ? ' sm' : '') + '"><span class="sym" aria-hidden="true">' + st.symbol + '</span>' + esc(st.label) + '</span>'; }
+
+  /* ------------------------------------------------------------------ estado */
+  var D = null, M = null, ALL = [], BYID = {}, charts = {}, CACHE = {};
+  var state = {
+    year: null, periodKey: 'l6', cmp: 'yoy', layer: 'all', card: 'exc', rank: 'tec', modal: null,
+    base: { flow: '', layer: '', sev: '', origem: '', prb: '', q: '' }
+  };
+  var BASE_URL = (document.body && document.body.getAttribute('data-base-url')) || '';
+  var T = {};
+
+  /* ---------------------------------------------------------- preparação */
+  function ydOf(y) { if (!D) return null; if (D.current && D.current.year === y) return D.current; if (D.previous && D.previous.year === y) return D.previous; return null; }
+  function prepare() {
+    ALL = []; BYID = {};
+    T = D.config.targets;
+    [D.current, D.previous].forEach(function (yd) {
+      if (!yd || !yd.incidents) return;
+      var rowsBy = {};
+      (yd.rows || []).forEach(function (r) { (rowsBy[r.inc] = rowsBy[r.inc] || []).push(r); });
+      Object.keys(yd.incidents).forEach(function (id) {
+        var I = yd.incidents[id];
+        I.rows = rowsBy[id] || [];
+        if (!isNum(I.ab) && isNum(I.abMI)) I.ab = I.abMI;
+        if (!isNum(I.m) && isNum(I.ab)) I.m = new Date(I.ab).getMonth() + 1;
+        var md = null;
+        I.rows.forEach(function (r) { if (isNum(r.dur)) md = Math.max(md || 0, r.dur); });
+        I.ttrU = isNum(I.ttr) ? I.ttr : md;
+        I.sevN = I.sev === 0 || I.sev === 1 ? I.sev : null;
+        I.isChange = fold(I.ofe) === 'mudanca';
+        I.ok = origemKey(I.origem);
+        var tgt = I.sevN === 0 ? T.olaSev0 : (I.sevN === 1 ? T.olaSev1 : null);
+        I.olaOk = isNum(I.ttrU) && tgt ? I.ttrU <= tgt : null;
+        I.outlier = isNum(I.ttrU) && ((I.sevN === 0 && I.ttrU >= T.outlierSev0) || (I.sevN === 1 && I.ttrU >= T.outlierSev1));
+        I.flows = uniq(I.rows.map(function (r) { return r.flow; }).filter(function (f) { return f && f !== 'outros'; }));
+        I.ents = uniq(I.rows.filter(function (r) { return !r.unm && r.flow !== 'outros'; }).map(function (r) { return r.entName; }));
+        I.mks = uniq(I.rows.map(function (r) { return r.mk; }).filter(Boolean));
+        I.card = I.rows.some(function (r) { return r.card; });
+        I.imps = uniq(I.rows.map(function (r) { return r.imp; }).filter(Boolean));
+        I.prbObjs = (I.prbs || []).map(function (p) { return D.problems[p]; }).filter(Boolean);
+        I.chgObj = I.sm && D.changes[I.sm] ? D.changes[I.sm] : null;
+        I.tImpMain = (I.tImp || []).filter(function (t) { return t && t !== 'N/A'; })[0] || 'N/A';
+        ALL.push(I);
+        BYID[id] = I;
+      });
+    });
+    ALL.sort(function (a, b) { return (b.ab || 0) - (a.ab || 0); });
+  }
+
+  /* ------------------------------------------------------------- períodos */
+  function endOfDay(ms) { var d = new Date(ms); d.setHours(23, 59, 59, 999); return d.getTime(); }
+  function shiftYear(ms, n) { var d = new Date(ms); d.setFullYear(d.getFullYear() + n); return d.getTime(); }
+  function monthsBack(y, m, n) {
+    var out = [];
+    for (var i = n - 1; i >= 0; i--) { var mm = m - i, yy = y; while (mm < 1) { mm += 12; yy--; } out.push({ y: yy, m: mm }); }
+    return out;
+  }
+  function refPoint() {
+    var t = new Date(D.today), y = D.year;
+    if (y === t.getFullYear()) return { y: y, m: t.getMonth() + 1, cut: endOfDay(D.today) };
+    return { y: y, m: 12, cut: null };
+  }
+  function rangeTxt(months) {
+    if (!months.length) return '—';
+    var a = months[0], b = months[months.length - 1];
+    if (months.length === 1) return MABBR[a.m - 1] + '/' + a.y;
+    if (a.y === b.y) return MABBR[a.m - 1] + '–' + MABBR[b.m - 1] + '/' + b.y;
+    return MABBR[a.m - 1] + '/' + a.y + '–' + MABBR[b.m - 1] + '/' + b.y;
+  }
+  function mkWin(key, label, group, months, cut) {
+    var set = {};
+    months.forEach(function (x) { set[x.y + '-' + x.m] = true; });
+    var w = { key: key, label: label, group: group, months: months, cut: cut, set: set };
+    var t = cut ? new Date(cut) : null;
+    w.range = rangeTxt(months) + (t && months.some(function (x) { return x.y === t.getFullYear() && x.m === t.getMonth() + 1; }) ? ' (até ' + pad2(t.getDate()) + '/' + pad2(t.getMonth() + 1) + ')' : '');
+    return w;
+  }
+  function periodDefs() {
+    var rp = refPoint(), y = rp.y, m = rp.m, out = [];
+    var inCut = function (months) { return months.some(function (x) { return x.y === y && x.m === m; }) ? rp.cut : null; };
+    var l6 = monthsBack(y, m, 6);
+    out.push(mkWin('l6', 'Últimos 6 meses', 'Janela móvel', l6, inCut(l6)));
+    if (rp.cut && m > 1) { var l6f = monthsBack(y, m - 1, 6); out.push(mkWin('l6f', 'Últimos 6 meses fechados', 'Janela móvel', l6f, null)); }
+    var l3 = monthsBack(y, m, 3);
+    out.push(mkWin('l3', 'Últimos 3 meses', 'Janela móvel', l3, inCut(l3)));
+    var ytd = monthsBack(y, m, m);
+    out.push(mkWin('ytd', 'Acumulado do ano (YTD)', 'Ano', ytd, inCut(ytd)));
+    var s1 = monthsBack(y, Math.min(6, m), Math.min(6, m));
+    out.push(mkWin('s1', '1º semestre', 'Semestres', s1, inCut(s1)));
+    if (m >= 7) { var s2 = monthsBack(y, m, m - 6); out.push(mkWin('s2', '2º semestre', 'Semestres', s2, inCut(s2))); }
+    for (var q = 1; q <= 4; q++) {
+      var qs = (q - 1) * 3 + 1;
+      if (qs > m) break;
+      var qe = Math.min(q * 3, m), qm = monthsBack(y, qe, qe - qs + 1);
+      out.push(mkWin('q' + q, q + 'º trimestre', 'Trimestres', qm, inCut(qm)));
+    }
+    return out;
+  }
+  function getWin(key) { var list = periodDefs(); return list.find(function (w) { return w.key === key; }) || list[0]; }
+  function cmpWin(w, mode) {
+    if (mode === 'pop') {
+      var f = w.months[0], n = w.months.length, pm = f.m - 1, py = f.y;
+      if (pm < 1) { pm = 12; py--; }
+      return mkWin('pop', 'Período anterior', '', monthsBack(py, pm, n), null);
+    }
+    return mkWin('yoy', 'Mesmo período do ano anterior', '', w.months.map(function (x) { return { y: x.y - 1, m: x.m }; }), w.cut ? endOfDay(shiftYear(w.cut, -1)) : null);
+  }
+  function winCovered(w) {
+    // meses da janela que têm base carregada (abas de Impactos do ano)
+    var miss = w.months.filter(function (x) { var yd = ydOf(x.y); return !yd || !yd.impactsFound; });
+    return { ok: miss.length === 0, partial: miss.length > 0 && miss.length < w.months.length, none: miss.length === w.months.length, missing: miss };
+  }
+
+  /* ------------------------------------------------------------- seleção */
+  function inWin(I, w) { return !!w.set[I.year + '-' + I.m] && (!w.cut || !isNum(I.ab) || I.ab <= w.cut); }
+  function passLayer(I, layer) { layer = layer || state.layer; return layer === 'all' || I.layer === layer; }
+  function select(w, layer) { return ALL.filter(function (I) { return inWin(I, w) && passLayer(I, layer); }); }
+  function rowOk(r) { return !r.unm && r.flow !== 'outros' && (state.card === 'inc' || !r.card); }
+  function flowRows(I, key) { return I.rows.filter(function (r) { return r.flow === key && rowOk(r); }); }
+  function inFlow(list, key) { return list.filter(function (I) { return flowRows(I, key).length > 0; }); }
+  function inEntity(list, flowKey, entKey) { return list.filter(function (I) { return I.rows.some(function (r) { return r.flow === flowKey && r.ent === entKey && rowOk(r); }); }); }
+
+  /* --------------------------------------------------------- agregação */
+  function stats(list) {
+    var s = { n: list.length, sev0: 0, sev1: 0, ttrN: 0, ttrSum: 0, n0: 0, t0: 0, n1: 0, t1: 0, ok0: 0, ok1: 0, out0: 0, out1: 0, so0: 0, so0n: 0, so1: 0, so1n: 0, outTtr: 0,
+      org: { eu: 0, mon: 0, exp: 0, na: 0 }, orgT: { eu: [0, 0], mon: [0, 0], exp: [0, 0], na: [0, 0] }, lay: { app: 0, infra: 0 }, layT: { app: [0, 0], infra: [0, 0] },
+      chg: 0, withPrb: 0, list: list };
+    list.forEach(function (I) {
+      if (I.sevN === 0) s.sev0++; else if (I.sevN === 1) s.sev1++;
+      s.org[I.ok]++; s.lay[I.layer]++;
+      if (I.isChange) s.chg++;
+      if (I.prbs && I.prbs.length) s.withPrb++;
+      if (isNum(I.ttrU)) {
+        s.ttrN++; s.ttrSum += I.ttrU;
+        s.orgT[I.ok][0] += I.ttrU; s.orgT[I.ok][1]++;
+        s.layT[I.layer][0] += I.ttrU; s.layT[I.layer][1]++;
+        if (I.outlier) s.outTtr += I.ttrU;
+        if (I.sevN === 0) { s.n0++; s.t0 += I.ttrU; if (I.olaOk) s.ok0++; if (I.outlier) s.out0++; else { s.so0 += I.ttrU; s.so0n++; } }
+        else if (I.sevN === 1) { s.n1++; s.t1 += I.ttrU; if (I.olaOk) s.ok1++; if (I.outlier) s.out1++; else { s.so1 += I.ttrU; s.so1n++; } }
+      }
+    });
+    s.mttr = s.ttrN ? s.ttrSum / s.ttrN : null;
+    s.mttr0 = s.n0 ? s.t0 / s.n0 : null; s.mttr1 = s.n1 ? s.t1 / s.n1 : null;
+    s.mttrSO0 = s.so0n ? s.so0 / s.so0n : null; s.mttrSO1 = s.so1n ? s.so1 / s.so1n : null;
+    s.ola0 = pct(s.ok0, s.n0); s.ola1 = pct(s.ok1, s.n1); s.ola = pct(s.ok0 + s.ok1, s.n0 + s.n1);
+    s.pMon = pct(s.org.mon, s.n); s.pEu = pct(s.org.eu, s.n); s.pExp = pct(s.org.exp, s.n);
+    s.pInfra = pct(s.lay.infra, s.n); s.pApp = pct(s.lay.app, s.n); s.pChg = pct(s.chg, s.n); s.pPrb = pct(s.withPrb, s.n);
+    s.mttrOrg = {}; Object.keys(s.orgT).forEach(function (k) { s.mttrOrg[k] = s.orgT[k][1] ? s.orgT[k][0] / s.orgT[k][1] : null; });
+    s.mttrLay = { app: s.layT.app[1] ? s.layT.app[0] / s.layT.app[1] : null, infra: s.layT.infra[1] ? s.layT.infra[0] / s.layT.infra[1] : null };
+    s.outShare = s.ttrSum > 0 ? s.outTtr / s.ttrSum * 100 : null;
+    return s;
+  }
+  // Contagem de incidentes por chave (uma chave pode ter vários valores por incidente)
+  function countBy(list, keysOf) {
+    var m = {};
+    list.forEach(function (I) {
+      uniq(keysOf(I) || []).forEach(function (k) {
+        if (!k || k === 'N/A') return;
+        (m[k] = m[k] || []).push(I);
+      });
+    });
+    return m;
+  }
+  var KEYS = {
+    tec: function (I) { return (I.tImp || []).filter(function (t) { return t && t !== 'N/A'; }); },
+    ofe: function (I) { return [I.ofe]; },
+    ent: function (I) { return I.rows.filter(rowOk).map(function (r) { return r.entName; }); },
+    grp: function (I) { return [I.sn && I.sn.group]; },
+    svc: function (I) { return [I.sn && I.sn.service]; }
+  };
+
+  /* --------------------------------------------------- disponibilidade */
+  function dispFlowNode(y, key) { var yd = ydOf(y), d = yd && yd.disponibilidade; return d && d.found && d.flows ? (d.flows[key] || null) : null; }
+  function dispOlNode(y) { var yd = ydOf(y), d = yd && yd.disponibilidade; return d && d.found ? d.ol : null; }
+  function findDesc(node, names) {
+    if (!node) return null;
+    var targets = names.map(fold).filter(Boolean), hit = null;
+    (function walk(n) {
+      if (hit) return;
+      (n.children || []).forEach(function (c) {
+        if (hit) return;
+        var f = fold(c.name);
+        if (targets.some(function (t) { return f === t || (t.length > 5 && (f.indexOf(t) !== -1 || t.indexOf(f) !== -1 && f.length > 5)); })) hit = c;
+        else walk(c);
+      });
+    })(node);
+    return hit;
+  }
+  // nodeFor(y) -> nó da árvore de Disponibilidade daquele ano. Média dos meses APURADOS da janela.
+  function dispWindow(nodeFor, w) {
+    var vals = [], cells = [], refs = null;
+    w.months.forEach(function (x) {
+      var yd = ydOf(x.y), node = nodeFor(x.y), st = yd && yd.statuses ? yd.statuses[x.m - 1] : 'NAO_INICIADO';
+      var v = node && node.months ? node.months[x.m - 1] : null;
+      if (node && hasRefs(node) && (!refs || x.y === D.year)) refs = { min: node.min, meta: node.meta, des: node.des };
+      cells.push({ y: x.y, m: x.m, v: isNum(v) ? v : null, st: st, refs: node && hasRefs(node) ? { min: node.min, meta: node.meta, des: node.des } : null });
+      if (isNum(v) && st === 'APURADO') vals.push(v);
+    });
+    var cv = vals.length ? sum(vals) / vals.length : null;
+    return { cv: cv, n: vals.length, cells: cells, refs: refs, status: statusOf(cv, refs) };
+  }
+
+  /* --------------------------------------------------------------- problemas */
+  function prbStatus(p) {
+    var g = p.gprob || {}, s = fold(g.status || (p.sn && p.sn.state) || '');
+    if (/^(sim|s|yes)$/.test(fold(g.riscoAceito)) || /risk|risco/.test(s)) return 'risk';
+    if (/resolv|closed|fechad|encerr|conclu|cancel/.test(s)) return 'resolved';
+    if (/fix|implement/.test(s)) return 'fix';
+    if (/root|rca|new|novo|assess|analis|open|abert|investig/.test(s)) return 'rca';
+    return s ? 'other' : 'nd';
+  }
+  function prbOpened(p) { return (p.gprob && p.gprob.opened) || (p.sn && p.sn.opened) || null; }
+  function prbAging(p) {
+    var o = prbOpened(p);
+    if (!isNum(o)) return null;
+    var st = prbStatus(p), end = st === 'resolved' && p.gprob && isNum(p.gprob.closed) ? p.gprob.closed : D.today;
+    return Math.max(0, Math.floor((end - o) / 86400000));
+  }
+  function prbCausa(p) {
+    var c = '', pr = '', q = '', qp = '';
+    (p.incidents || []).forEach(function (id) { var I = BYID[id]; if (I && I.rca) { c = c || I.rca.causa; pr = pr || I.rca.processo; q = q || I.rca.qRca; qp = qp || I.rca.qPlano; } });
+    (p.tasks || []).forEach(function (t) { if (t.type === 'RCA') { c = c || t.iaCausa || t.causa; pr = pr || t.iaProc || t.processo; } });
+    return { causa: c, processo: pr, qRca: q, qPlano: qp };
+  }
+  function problemsOf(list) {
+    var seen = {}, out = [];
+    list.forEach(function (I) { (I.prbObjs || []).forEach(function (p) { if (!seen[p.id]) { seen[p.id] = true; out.push(p); } }); });
+    return out;
+  }
+  function incCausa(I) {
+    if (I.rca && (I.rca.causa || I.rca.processo)) return { causa: I.rca.causa, processo: I.rca.processo };
+    for (var i = 0; i < (I.prbObjs || []).length; i++) { var c = prbCausa(I.prbObjs[i]); if (c.causa || c.processo) return c; }
+    return { causa: '', processo: '' };
+  }
+
+  /* ------------------------------------------------------------- modelo */
+  function computeModel() {
+    var w = getWin(state.periodKey), cw = cmpWin(w, state.cmp);
+    var cov = winCovered(cw);
+    var cur = select(w), prevAvail = !cov.none;
+    var prev = prevAvail ? select(cw) : null;
+    var L = {
+      cur: w.range, prev: cw.range, curShort: rangeTxt(w.months), prevShort: rangeTxt(cw.months),
+      cmpName: state.cmp === 'yoy' ? 'mesmo período do ano anterior' : 'período anterior'
+    };
+    M = { w: w, cw: cw, cov: cov, cur: cur, prev: prev, sCur: stats(cur), sPrev: prev ? stats(prev) : null, L: L };
+    M.flows = D.config.flows.map(function (cfg) {
+      var fc = inFlow(cur, cfg.key), fp = prev ? inFlow(prev, cfg.key) : null;
+      return { cfg: cfg, cur: fc, prev: fp, s: stats(fc), sp: fp ? stats(fp) : null, disp: dispWindow(function (y) { return dispFlowNode(y, cfg.key); }, w), dispP: dispWindow(function (y) { return dispFlowNode(y, cfg.key); }, cw) };
+    });
+    M.olDisp = dispWindow(dispOlNode, w);
+    M.olDispP = dispWindow(dispOlNode, cw);
+    M.problems = problemsOf(cur);
+    M.ops = buildOpportunities();
+  }
+
+  /* ------------------------------------------------------------ helpers de UI */
+  function sectionHead(ic, eyebrow, title, sub, actions) {
+    return '<div class="sec-head">' + tile(ic, 'lg') + '<div class="titles"><div class="eyebrow">' + eyebrow + '</div><h2>' + title + '</h2>' +
+      (sub ? '<div class="sub">' + sub + '</div>' : '') + '</div>' + (actions ? '<div class="sec-actions">' + actions + '</div>' : '') + '</div>';
+  }
+  function vsTxt() { return M.L.prevShort; }
+  function stackHtml(parts, lg) {
+    var tot = sum(parts.map(function (p) { return p.v; }));
+    if (!tot) return '<div class="ox-stack' + (lg ? ' lg' : '') + '"></div>';
+    return '<div class="ox-stack' + (lg ? ' lg' : '') + '" role="img" aria-label="' + esc(parts.map(function (p) { return p.label + ' ' + p.v; }).join(', ')) + '">' +
+      parts.map(function (p) { return p.v ? '<span class="' + p.cls + '" style="width:' + (p.v / tot * 100).toFixed(2) + '%" data-tip="' + esc(p.label + ': ' + p.v + ' (' + fmtPct(p.v / tot * 100, 0) + ')') + '"></span>' : ''; }).join('') + '</div>';
+  }
+  function origemParts(s) { return ORIGENS.map(function (o) { return { cls: o.key, label: o.label, v: s.org[o.key] }; }); }
+  function layerParts(s) { return [{ cls: 'app', label: 'Aplicação', v: s.lay.app }, { cls: 'infra', label: 'Infraestrutura', v: s.lay.infra }]; }
+  function stackLegend(parts, showZero) {
+    var tot = sum(parts.map(function (p) { return p.v; }));
+    return '<div class="ox-stack-legend">' + parts.filter(function (p) { return showZero || p.v; }).map(function (p) {
+      return '<span><i class="ox-dot ' + p.cls + '"></i>' + esc(p.label) + ' <b>' + fmtPct(pct(p.v, tot), 0) + '</b></span>';
+    }).join('') + '</div>';
+  }
+  function layerTag(l) { return '<span class="ox-layer ' + l + '">' + icon(l === 'infra' ? 'server' : 'monitor').replace('class="ico"', 'class="ico" style="width:12px;height:12px"') + LAYER_LABEL[l] + '</span>'; }
+  function targetCls(v, tgt) { return isNum(v) && isNum(tgt) ? (v <= tgt ? 'good' : 'bad') : ''; }
+  function olaCls(v) { return isNum(v) ? (v >= 80 ? 'good' : 'bad') : ''; }
+  function barsHtml(items, max, o) {
+    o = o || {};
+    if (!items.length) return '<div class="empty">' + (o.empty || 'Sem dados no período.') + '</div>';
+    max = max || Math.max.apply(null, items.map(function (x) { return x.v; })) || 1;
+    return '<ul class="ox-bars">' + items.map(function (x) {
+      return '<li' + (x.action ? ' class="clickable" data-action="' + x.action + '" data-k="' + esc(x.k || x.label) + '"' + (x.extra || '') : '') + '><span class="nm" title="' + esc(x.label) + '">' + esc(x.label) + (x.sub ? '<span class="legend">' + x.sub + '</span>' : '') + '</span>' +
+        '<span class="br' + (o.cls ? ' ' + o.cls : '') + '"><span style="width:' + (x.v / max * 100).toFixed(1) + '%"></span></span><span class="ct">' + (o.fmt ? o.fmt(x.v) : x.v) + '</span></li>';
+    }).join('') + '</ul>';
+  }
+  function notice(kind, ic, html) { return '<div class="notice' + (kind ? ' is-' + kind : '') + '">' + icon(ic) + '<div>' + html + '</div></div>'; }
+  function scopeNotices() {
+    var h = '';
+    if (M.cov.none) h += notice('info', 'info', 'Sem base para o comparativo (' + esc(M.L.prev) + '): as abas desse período não foram carregadas. As variações ficam "sem base".');
+    else if (M.cov.partial) h += notice('info', 'info', 'O comparativo (' + esc(M.L.prev) + ') tem meses sem base carregada (' + esc(M.cov.missing.map(function (x) { return MABBR[x.m - 1] + '/' + x.y; }).join(', ')) + '): a comparação fica subestimada nesses meses.');
+    if (state.layer !== 'all') h += notice('out', 'server', 'Filtro de camada ativo: só incidentes de <b>' + LAYER_LABEL[state.layer] + '</b>. A seção Aplicação x Infraestrutura sempre mostra as duas camadas.');
+    return h;
+  }
+
+  /* ================================================================ RENDER */
+  function renderAll() {
+    destroyCharts();
+    computeModel();
+    renderStamp();
+    renderAgenda();
+    renderPanorama();
+    renderCamadas();
+    renderFluxos();
+    renderDeteccao();
+    renderTecnologias();
+    renderReincidencia();
+    renderProblemas();
+    renderMudancas();
+    renderDisp();
+    renderAcoes();
+    renderBase();
+    renderFoot();
+  }
+  function renderStamp() {
+    $('ox-stamp').textContent = 'Base atualizada em ' + (D.lastUpdated || 'N/A') + ' · ' + M.L.cur + ' vs ' + M.L.prev;
+  }
+
+  /* ---------------------------------------------------------------- Agenda */
+  function renderAgenda() {
+    var s = M.sCur, yd = D.current, rec = yd && yd.reconcile;
+    var steps = [
+      ['sec-panorama', 'Panorama do período', 'Volume, MTTR e OLA de resolução por Severidade, detecção e tendência mês a mês.'],
+      ['sec-camadas', 'Aplicação x Infraestrutura', 'Foco na camada de aplicação e desdobramento da infraestrutura que impacta as aplicações.'],
+      ['sec-fluxos', 'Fluxos e localidades', 'Separação, Faturamento e Transporte por CD; Manufatura por planta; Atendimento e Planejamento por sistema.'],
+      ['sec-deteccao', 'Detecção, tecnologias e reincidência', 'Quem detecta, quais tecnologias concentram incidentes e o que se repete.'],
+      ['sec-problemas', 'Problemas, RCA e Mudanças', 'Causa raiz, processo de origem, planos de ação e incidentes causados por mudança.'],
+      ['sec-disp', 'Disponibilidade', 'Resultado mês a mês por fluxo e incidentes que mais consumiram disponibilidade.'],
+      ['sec-acoes', 'Oportunidades e próximos passos', 'Ações sugeridas a partir dos dados, para capturar com responsável e prazo.']
+    ];
+    var scope = [
+      '<span class="tag">' + icon('calendar').replace('class="ico"', 'class="ico" style="width:13px;height:13px"') + esc(M.w.label) + ': ' + esc(M.L.cur) + '</span>',
+      '<span class="tag">Comparativo: ' + esc(M.L.prev) + '</span>',
+      '<span class="tag">Camada: ' + (state.layer === 'all' ? 'Aplicação + Infraestrutura' : LAYER_LABEL[state.layer]) + '</span>',
+      '<span class="tag">CARD: ' + (state.card === 'exc' ? 'fora dos fluxos' : 'incluído') + '</span>'
+    ].join('');
+    var left = '<div><div class="eyebrow">Objetivo da agenda</div><h3>Visão tático-estratégica dos incidentes nas frentes de O&amp;L</h3>' +
+      '<p>Foco central na <b>tecnologia a nível de aplicação</b>, com o desdobramento do volume de <b>incidentes de infraestrutura</b> que impactam diretamente as aplicações usadas pelas frentes de O&amp;L.</p>' +
+      '<p>Panorama dos <b>últimos seis meses</b> para extrair insights, identificar oportunidades e sair alinhados sobre os próximos passos: captura de ações de melhoria e ajustes de processos.</p>' +
+      '<div class="eyebrow" style="margin-top:14px">Escopo desta leitura</div><div class="ox-scope">' + scope + '</div>' +
+      '<div class="ox-note">Base: incidentes de O&amp;L (Stream O&amp;L e Planejamento Logístico da aba Major_Incidents_Impactos) com origem Tecnologia. ' +
+      '<b>' + s.n + ' ' + plural(s.n, 'incidente', 'incidentes') + '</b> no período' + (rec ? ' · ' + rec.incidentsTec + ' de origem Tecnologia em ' + D.year + ' (de ' + rec.incidentsAll + ' incidentes de O&amp;L na aba)' : '') + '. MTTR e OLA pelo TTR oficial da MajorIncidentes.</div></div>';
+    var right = '<div><div class="eyebrow">Roteiro sugerido</div><ol class="ox-steps">' + steps.map(function (st) {
+      return '<li><div><a href="#' + st[0] + '">' + esc(st[1]) + '</a><span class="legend">' + esc(st[2]) + '</span></div></li>';
+    }).join('') + '</ol></div>';
+    $('sec-agenda').innerHTML = sectionHead('flag', 'Visão O&amp;L · Análise tático-estratégica', 'Agenda O&amp;L — ' + esc(M.L.cur),
+      'Sub-visão para a agenda com a liderança de O&amp;L: incidentes, disponibilidade, problemas e mudanças, por fluxo e localidade.') +
+      scopeNotices() + '<div class="ox-agenda">' + left + right + '</div>';
+  }
+
+  /* -------------------------------------------------------------- Panorama */
+  function kpiCard(o) {
+    return '<div class="ox-kpi' + (o.alert ? ' is-alert' : '') + '"><div class="kh"><span class="eyebrow">' + o.title + (o.tip ? ' <span class="info-i" data-tip="' + esc(o.tip) + '">i</span>' : '') + '</span>' + tile(o.icon, 'sm') + '</div>' +
+      '<div class="kv">' + o.value + '</div>' + (o.delta || '') + (o.split ? '<div class="ks">' + o.split + '</div>' : '') + (o.foot ? '<div class="legend">' + o.foot + '</div>' : '') + '</div>';
+  }
+  function splitCell(label, v, cls, dl) { return '<div><div class="legend">' + label + '</div><div class="v ' + (cls || '') + '">' + v + '</div>' + (dl || '') + '</div>'; }
+  function renderPanorama() {
+    var c = M.sCur, p = M.sPrev, P = p || {}, vs = vsTxt();
+    var nMonths = M.w.months.length;
+    var dl = function (fn, a, b, x, y) { return p ? deltaHtml(fn(a, b, x, y)) : deltaHtml(nobase()); };
+    var problems = M.problems, openActs = 0, overdue = 0;
+    problems.forEach(function (pp) { (pp.tasks || []).forEach(function (t) { if (t.type === 'IMP' && !t.closed) { openActs++; if (isNum(t.due) && t.due < D.today) overdue++; } }); });
+    var resolved = problems.filter(function (pp) { return prbStatus(pp) === 'resolved'; }).length;
+    var cards = [
+      kpiCard({ title: 'Incidentes', icon: 'alert', value: fmtInt(c.n), delta: deltaHtml(p ? deltaCount(c.n, P.n, 'lower') : nobase(), vs),
+        split: splitCell('<span class="sev-dot s0"></span>Sev 0', c.sev0, '', dl(deltaCount, c.sev0, P.sev0, 'lower')) + splitCell('<span class="sev-dot s1"></span>Sev 1', c.sev1, '', dl(deltaCount, c.sev1, P.sev1, 'lower')),
+        foot: 'Média de ' + fmtNum(c.n / nMonths, 1) + ' por mês' + (p ? ' (comparativo: ' + fmtNum(P.n / nMonths, 1) + ')' : '') }),
+      kpiCard({ title: 'MTTR', icon: 'clock', value: fmtHM(c.mttr), delta: deltaHtml(p ? deltaMin(c.mttr, P.mttr) : nobase(), vs),
+        tip: 'Tempo médio de restauração pelo TTR oficial (MajorIncidentes). Metas: Sev 0 ≤ ' + fmtHM(T.mttrSev0) + ' e Sev 1 ≤ ' + fmtHM(T.mttrSev1) + '.',
+        split: splitCell('Sev 0 · meta ' + fmtHM(T.mttrSev0), fmtHM(c.mttr0), targetCls(c.mttr0, T.mttrSev0), dl(deltaMin, c.mttr0, P.mttr0)) + splitCell('Sev 1 · meta ' + fmtHM(T.mttrSev1), fmtHM(c.mttr1), targetCls(c.mttr1, T.mttrSev1), dl(deltaMin, c.mttr1, P.mttr1)),
+        alert: (isNum(c.mttr0) && c.mttr0 > T.mttrSev0) || (isNum(c.mttr1) && c.mttr1 > T.mttrSev1) }),
+      kpiCard({ title: 'MTTR sem outliers', icon: 'target', value: (c.out0 + c.out1) + '<small>' + plural(c.out0 + c.out1, 'outlier', 'outliers') + '</small>',
+        tip: 'Desconsidera incidentes com TTR ≥ ' + fmtHM(T.outlierSev0) + ' (Sev 0) e ≥ ' + fmtHM(T.outlierSev1) + ' (Sev 1). Metas: Sev 0 ≤ ' + fmtHM(T.mttrSemOutliersSev0) + ' e Sev 1 ≤ ' + fmtHM(T.mttrSemOutliersSev1) + '.',
+        split: splitCell('Sev 0 · meta ' + fmtHM(T.mttrSemOutliersSev0), fmtHM(c.mttrSO0), targetCls(c.mttrSO0, T.mttrSemOutliersSev0), dl(deltaMin, c.mttrSO0, P.mttrSO0)) + splitCell('Sev 1 · meta ' + fmtHM(T.mttrSemOutliersSev1), fmtHM(c.mttrSO1), targetCls(c.mttrSO1, T.mttrSemOutliersSev1), dl(deltaMin, c.mttrSO1, P.mttrSO1)),
+        foot: isNum(c.outShare) ? 'Outliers somam ' + fmtPct(c.outShare, 0) + ' das horas de TTR do período' : '' }),
+      kpiCard({ title: 'OLA de resolução', icon: 'check', value: fmtPct(c.ola), delta: deltaHtml(p ? deltaPP(c.ola, P.ola, 1, 'higher') : nobase(), vs),
+        tip: 'Incidentes resolvidos dentro do OLA: Sev 0 ≤ ' + fmtHM(T.olaSev0) + ' e Sev 1 ≤ ' + fmtHM(T.olaSev1) + ' (TTR oficial).',
+        split: splitCell('Sev 0 · ≤ ' + fmtHM(T.olaSev0), fmtPct(c.ola0), olaCls(c.ola0), dl(deltaPP, c.ola0, P.ola0, 1, 'higher')) + splitCell('Sev 1 · ≤ ' + fmtHM(T.olaSev1), fmtPct(c.ola1), olaCls(c.ola1), dl(deltaPP, c.ola1, P.ola1, 1, 'higher')),
+        alert: isNum(c.ola) && c.ola < 80 }),
+      kpiCard({ title: 'Detectados pela Monitoração', icon: 'radar', value: fmtPct(c.pMon, 0), delta: deltaHtml(p ? deltaPP(c.pMon, P.pMon, 1, 'higher') : nobase(), vs),
+        tip: 'Origem da Detecção pelo Caller do ServiceNow: Monitoração (integrações), Experiências e End-users (pessoas).',
+        split: splitCell('End-users', fmtPct(c.pEu, 0), isNum(c.pEu) && c.pEu >= 40 ? 'bad' : '', dl(deltaPP, c.pEu, P.pEu, 1, 'lower')) + splitCell('Experiências', fmtPct(c.pExp, 0), '', dl(deltaPP, c.pExp, P.pExp, 1, 'higher')),
+        alert: isNum(c.pEu) && c.pEu >= 40 }),
+      kpiCard({ title: 'Infraestrutura', icon: 'server', value: fmtPct(c.pInfra, 0) + '<small>' + c.lay.infra + ' ' + plural(c.lay.infra, 'incidente', 'incidentes') + '</small>', delta: deltaHtml(p ? deltaCount(c.lay.infra, P.lay.infra, 'lower') : nobase(), vs),
+        tip: 'Camada do incidente (Aplicação x Infraestrutura) pelo Ofensor, Category/Grupo do ServiceNow e Tecnologia impactada. Ver regras na seção Aplicação x Infra.',
+        split: splitCell('MTTR Aplicação', fmtHM(c.mttrLay.app)) + splitCell('MTTR Infra', fmtHM(c.mttrLay.infra)) }),
+      kpiCard({ title: 'Causados por Mudança', icon: 'shuffle', value: fmtInt(c.chg) + '<small>' + fmtPct(c.pChg, 0) + '</small>', delta: deltaHtml(p ? deltaCount(c.chg, P.chg, 'lower') : nobase(), vs),
+        split: splitCell('Deploy', c.list.filter(function (I) { return I.isChange && I.typeSm === 'DEPLOY'; }).length) + splitCell('Tradicional', c.list.filter(function (I) { return I.isChange && I.typeSm && I.typeSm !== 'DEPLOY'; }).length) }),
+      kpiCard({ title: 'Problemas', icon: 'search', value: fmtPct(c.pPrb, 0) + '<small>com Problem</small>', delta: deltaHtml(p ? deltaPP(c.pPrb, P.pPrb, 1, 'higher') : nobase(), vs),
+        split: splitCell('Problemas resolvidos', resolved + ' de ' + problems.length) + splitCell('Ações vencidas', overdue + (openActs ? ' de ' + openActs : ''), overdue ? 'bad' : ''),
+        alert: overdue > 0 })
+    ].join('');
+
+    var od = M.olDisp, odp = M.olDispP;
+    var dispBanner = '<div class="notice is-info" style="align-items:center">' + icon('gauge') + '<div style="display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center"><b>Disponibilidade O&amp;L</b>' +
+      (isNum(od.cv) ? '<span class="num" style="font-size:18px;font-weight:700">' + fmtPct(od.cv, 2) + '</span>' + chip(od.status, true) +
+        (hasRefs(od.refs) ? '<span class="legend">Meta ' + fmtPct(od.refs.meta, 2) + ' · Mínimo ' + fmtPct(od.refs.min, 2) + '</span>' : '') +
+        deltaHtml(deltaPP(od.cv, odp.cv, 2, 'higher'), vsTxt()) + '<span class="legend">média simples de ' + od.n + ' ' + plural(od.n, 'mês apurado', 'meses apurados') + ' do período</span>'
+        : '<span class="legend">sem meses apurados no período</span>') +
+      '<a href="#sec-disp" class="legend" style="font-weight:700">ver por fluxo →</a></div></div>';
+
+    var ins = buildInsights();
+    var insHtml = '<div class="insights"><div class="eyebrow">' + icon('spark').replace('class="ico"', 'class="ico" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px"') + 'Leitura executiva</div><ul>' + ins.map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ul></div>';
+
+    var charts2 = '<div class="ox-split" style="margin-top:14px"><div class="panel"><div class="panel-head"><div class="sub-title">' + icon('chart') + 'Incidentes por mês e camada</div></div><div class="ox-chart"><canvas id="ox-ch-trend"></canvas></div>' +
+      '<div class="legend" style="margin-top:6px">Barras = ' + esc(M.L.curShort) + ' por camada · linha = ' + esc(M.L.prevShort) + ' (mesma posição do mês). Clique numa barra para ver os incidentes do mês.</div></div>' +
+      '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('clock') + 'MTTR mensal por Severidade (h)</div></div><div class="ox-chart"><canvas id="ox-ch-mttr"></canvas></div>' +
+      '<div class="legend" style="margin-top:6px">Linhas pontilhadas = metas de MTTR (Sev 0 ' + fmtHM(T.mttrSev0) + ' · Sev 1 ' + fmtHM(T.mttrSev1) + ').</div></div></div>';
+
+    $('sec-panorama').innerHTML = sectionHead('spark', 'Panorama · ' + esc(M.L.cur), 'O que aconteceu em O&amp;L no período',
+      'Comparativo com o ' + esc(M.L.cmpName) + ' (' + esc(M.L.prev) + '). Clique nos cards de fluxo, localidade e nos rankings para ver os incidentes.',
+      '<button type="button" class="btn btn-accent" data-action="open-all">' + icon('list') + 'Ver incidentes (' + c.n + ')</button>') +
+      dispBanner + '<div class="ox-kpis" style="margin-top:12px">' + cards + '</div>' + insHtml + charts2;
+    drawTrend();
+    drawMttr();
+  }
+
+  function monthSeries(w, fn) { return w.months.map(function (x) { var mw = mkWin('m', '', '', [x], w.cut); return fn(select(mw), x); }); }
+  function drawTrend() {
+    var cv = $('ox-ch-trend');
+    if (!cv || !window.Chart) return;
+    var labels = M.w.months.map(function (x) { return MABBR[x.m - 1] + '/' + String(x.y).slice(2); });
+    var app = monthSeries(M.w, function (l) { return l.filter(function (I) { return I.layer === 'app'; }).length; });
+    var inf = monthSeries(M.w, function (l) { return l.filter(function (I) { return I.layer === 'infra'; }).length; });
+    var prv = M.prev ? monthSeries(M.cw, function (l) { return l.length; }) : null;
+    var ds = [];
+    if (state.layer !== 'infra') ds.push({ type: 'bar', label: 'Aplicação', data: app, backgroundColor: '#466E85', stack: 's', borderRadius: 2, maxBarThickness: 38, order: 2 });
+    if (state.layer !== 'app') ds.push({ type: 'bar', label: 'Infraestrutura', data: inf, backgroundColor: '#FE772C', stack: 's', borderRadius: 2, maxBarThickness: 38, order: 2 });
+    if (prv) ds.push({ type: 'line', label: M.L.prevShort, data: prv, borderColor: '#8E9A84', backgroundColor: '#8E9A84', borderWidth: 2, pointRadius: 3, tension: 0.25, order: 1, datalabels: { display: false } });
+    charts.trend = new Chart(cv, {
+      type: 'bar', data: { labels: labels, datasets: ds },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        onClick: function (e, els) { if (!els.length) return; var x = M.w.months[els[0].index]; openModal({ title: 'Incidentes de ' + MONTHS[x.m - 1] + '/' + x.y, eyebrow: 'Panorama', icon: 'calendar', list: select(mkWin('m', '', '', [x], M.w.cut)) }); },
+        plugins: {
+          legend: { position: 'top', align: 'end', labels: { boxWidth: 10, boxHeight: 10, font: { size: 11 } } },
+          datalabels: { display: function (ctx) { return ctx.dataset.type !== 'line' && ctx.dataset.data[ctx.dataIndex] > 0; }, color: '#fff', font: { size: 10, weight: '700' } },
+          tooltip: { mode: 'index', intersect: false }
+        },
+        scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, grace: '10%', ticks: { precision: 0 }, grid: { color: 'rgba(51,61,32,.08)' } } }
+      }
+    });
+  }
+  function drawMttr() {
+    var cv = $('ox-ch-mttr');
+    if (!cv || !window.Chart) return;
+    var labels = M.w.months.map(function (x) { return MABBR[x.m - 1] + '/' + String(x.y).slice(2); });
+    var h = function (v) { return isNum(v) ? Math.round(v / 6) / 10 : null; };
+    var s0 = monthSeries(M.w, function (l) { return h(stats(l).mttr0); }), s1 = monthSeries(M.w, function (l) { return h(stats(l).mttr1); });
+    charts.mttr = new Chart(cv, {
+      type: 'line',
+      data: { labels: labels, datasets: [
+        { label: 'Sev 0', data: s0, borderColor: '#691B34', backgroundColor: '#691B34', borderWidth: 2, pointRadius: 3.5, spanGaps: true, tension: 0.2 },
+        { label: 'Sev 1', data: s1, borderColor: '#FF6D00', backgroundColor: '#FF6D00', borderWidth: 2, pointRadius: 3.5, spanGaps: true, tension: 0.2 },
+        { label: 'Meta Sev 0', data: labels.map(function () { return T.mttrSev0 / 60; }), borderColor: 'rgba(105,27,52,.55)', borderDash: [3, 4], borderWidth: 1.5, pointRadius: 0 },
+        { label: 'Meta Sev 1', data: labels.map(function () { return T.mttrSev1 / 60; }), borderColor: 'rgba(255,109,0,.6)', borderDash: [3, 4], borderWidth: 1.5, pointRadius: 0 }
+      ] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', align: 'end', labels: { boxWidth: 10, boxHeight: 10, font: { size: 11 } } },
+          tooltip: { callbacks: { label: function (ctx) { var v = ctx.parsed.y; return ctx.dataset.label + ': ' + (isNum(v) ? fmtHM(v * 60) : '—'); } } },
+          datalabels: { display: function (ctx) { return ctx.datasetIndex < 2 && isNum(ctx.dataset.data[ctx.dataIndex]); }, align: function (ctx) { return ctx.datasetIndex === 0 ? 'bottom' : 'top'; }, offset: 2, font: { size: 9.5, weight: '700' }, color: function (ctx) { return ctx.datasetIndex === 0 ? '#691B34' : '#9A3F0B'; }, formatter: function (v) { return fmtHM(v * 60); } }
+        },
+        scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grace: '15%', grid: { color: 'rgba(51,61,32,.08)' }, ticks: { callback: function (v) { return v + 'h'; } } } }
+      }
+    });
+  }
+
+  /* -------------------------------------------------------- Leitura executiva */
+  function topOf(list, keyFn, n) {
+    var m = countBy(list, keyFn);
+    return Object.keys(m).map(function (k) { return { k: k, list: m[k], n: m[k].length }; }).sort(function (a, b) { return b.n - a.n || a.k.localeCompare(b.k); }).slice(0, n || 5);
+  }
+  function buildInsights() {
+    var c = M.sCur, p = M.sPrev, out = [], vs = M.L.prevShort;
+    if (!c.n) return ['Nenhum incidente de O&amp;L de origem Tecnologia em ' + esc(M.L.cur) + '.'];
+    var dl = p ? deltaCount(c.n, p.n, 'lower') : null;
+    out.push('<b>' + c.n + ' ' + plural(c.n, 'incidente', 'incidentes') + '</b> em ' + esc(M.L.cur) + ' (' + c.sev0 + ' Sev 0 · ' + c.sev1 + ' Sev 1)' +
+      (dl && dl.cls !== 'nobase' ? ', ' + (dl.d === 0 ? 'estável' : (dl.d < 0 ? 'redução de ' : 'aumento de ') + fmtInt(Math.abs(dl.d)) + (p.n ? ' (' + fmtSigned(dl.d / p.n * 100, 0) + '%)' : '')) + ' vs ' + esc(vs) + ' (' + p.n + ')' : '') + '.');
+    // concentração por fluxo
+    var fl = M.flows.filter(function (f) { return f.s.n; }).sort(function (a, b) { return b.s.n - a.s.n; });
+    if (fl.length) out.push('<b>' + esc(fl[0].cfg.short) + '</b> concentra ' + fl[0].s.n + ' ' + plural(fl[0].s.n, 'incidente', 'incidentes') + ' (' + fmtPct(pct(fl[0].s.n, c.n), 0) + ' do total)' + (fl[1] ? '; em seguida ' + esc(fl[1].cfg.short) + ' (' + fl[1].s.n + ')' : '') + '.');
+    // hotspot de localidade
+    var ents = topOf(c.list, KEYS.ent, 3);
+    if (ents.length && ents[0].n >= 2) out.push('Localidade/sistema mais impactado: <b>' + esc(ents[0].k) + '</b> com ' + ents[0].n + ' incidentes' + (ents[1] ? ', depois ' + esc(ents[1].k) + ' (' + ents[1].n + ')' : '') + '.');
+    // pareto de tecnologias
+    var tec = topOf(c.list, KEYS.tec, 50);
+    if (tec.length >= 3) {
+      var t3 = {}; tec.slice(0, 3).forEach(function (t) { t.list.forEach(function (I) { t3[I.id] = true; }); });
+      out.push('Top 3 tecnologias impactadas (<b>' + esc(tec.slice(0, 3).map(function (t) { return t.k; }).join(', ')) + '</b>) respondem por ' + fmtPct(pct(Object.keys(t3).length, c.n), 0) + ' dos incidentes.');
+    }
+    // camada
+    if (c.lay.infra) out.push('<b>Infraestrutura</b>: ' + c.lay.infra + ' ' + plural(c.lay.infra, 'incidente', 'incidentes') + ' (' + fmtPct(c.pInfra, 0) + ') impactaram as aplicações de O&amp;L, com MTTR ' + fmtHM(c.mttrLay.infra) + ' vs ' + fmtHM(c.mttrLay.app) + ' em Aplicação' + (p ? ' (' + p.lay.infra + ' no comparativo)' : '') + '.');
+    else out.push('Nenhum incidente classificado como Infraestrutura no período: todos os ' + c.n + ' são de camada de Aplicação.');
+    // MTTR
+    var m1 = isNum(c.mttr1) && c.mttr1 > T.mttrSev1, m0 = isNum(c.mttr0) && c.mttr0 > T.mttrSev0;
+    if (m0 || m1) out.push('MTTR acima da meta em ' + [m0 ? 'Sev 0 (' + fmtHM(c.mttr0) + ' vs ' + fmtHM(T.mttrSev0) + ')' : '', m1 ? 'Sev 1 (' + fmtHM(c.mttr1) + ' vs ' + fmtHM(T.mttrSev1) + ')' : ''].filter(Boolean).join(' e ') +
+      (c.out0 + c.out1 ? '; ' + (c.out0 + c.out1) + ' ' + plural(c.out0 + c.out1, 'outlier concentra', 'outliers concentram') + ' ' + fmtPct(c.outShare, 0) + ' das horas de TTR' : '') + '.');
+    else if (isNum(c.mttr)) out.push('MTTR dentro das metas de Severidade (Sev 0 ' + fmtHM(c.mttr0) + ' · Sev 1 ' + fmtHM(c.mttr1) + ').');
+    // OLA
+    if (isNum(c.ola)) out.push('OLA de resolução em <b>' + fmtPct(c.ola) + '</b> (Sev 0 ' + fmtPct(c.ola0) + ' · Sev 1 ' + fmtPct(c.ola1) + ')' + (p && isNum(p.ola) ? ', ' + fmtSigned(c.ola - p.ola, 1) + ' p.p. vs ' + esc(vs) : '') + '.');
+    // detecção
+    if (isNum(c.pEu)) out.push('<b>' + fmtPct(c.pEu, 0) + '</b> dos incidentes foram reportados por End-users e ' + fmtPct(c.pMon, 0) + ' detectados pela Monitoração' + (isNum(c.mttrOrg.eu) && isNum(c.mttrOrg.mon) ? ' (MTTR ' + fmtHM(c.mttrOrg.eu) + ' x ' + fmtHM(c.mttrOrg.mon) + ')' : '') + '.');
+    // mudança
+    if (c.chg) out.push('<b>' + c.chg + '</b> ' + plural(c.chg, 'incidente causado', 'incidentes causados') + ' por Mudança (' + fmtPct(c.pChg, 0) + ')' + (p ? ', vs ' + p.chg + ' no comparativo' : '') + '.');
+    // problemas
+    var probs = M.problems, open = probs.filter(function (pp) { var s = prbStatus(pp); return s === 'rca' || s === 'fix'; }).length;
+    out.push(fmtPct(c.pPrb, 0) + ' dos incidentes têm Problem associado; ' + probs.length + ' ' + plural(probs.length, 'Problema', 'Problemas') + ' no período, ' + open + ' ainda em RCA ou implementação.');
+    // reincidência
+    var rec = tec.filter(function (t) { return t.n >= 2; });
+    if (rec.length) out.push(rec.length + ' ' + plural(rec.length, 'tecnologia teve', 'tecnologias tiveram') + ' 2 ou mais incidentes no período; a mais recorrente foi <b>' + esc(rec[0].k) + '</b> (' + rec[0].n + ').');
+    // disponibilidade
+    var bad = M.flows.filter(function (f) { return f.disp && f.disp.status && f.disp.status.key === 'atencao'; });
+    if (bad.length) out.push('Disponibilidade abaixo do Mínimo no período em: <b>' + esc(bad.map(function (f) { return f.cfg.short; }).join(', ')) + '</b>.');
+    return out;
+  }
+
+  /* ------------------------------------------------- Aplicação x Infraestrutura */
+  function layerPanel(layer, list, prevList) {
+    var s = stats(list), sp = prevList ? stats(prevList) : null;
+    var tops = topOf(list, KEYS.ofe, 5), tecs = topOf(list, KEYS.tec, 5), locs = topOf(list, KEYS.ent, 5);
+    var max = function (a) { return a.length ? a[0].n : 1; };
+    return '<div class="panel"><div class="panel-head"><div class="sub-title">' + layerTag(layer) + '</div><button type="button" class="btn" data-action="open-layer" data-layer="' + layer + '">' + icon('list') + 'Ver (' + s.n + ')</button></div>' +
+      '<div class="ox-strip c4">' +
+      '<div><div class="legend">Incidentes</div><div class="v">' + s.n + ' <small>' + fmtPct(pct(s.n, M.sAll.n), 0) + '</small></div>' + deltaHtml(sp ? deltaCount(s.n, sp.n, 'lower') : nobase(), vsTxt()) + '</div>' +
+      '<div><div class="legend">Sev 0 · Sev 1</div><div class="v">' + s.sev0 + ' · ' + s.sev1 + '</div></div>' +
+      '<div><div class="legend">MTTR</div><div class="v">' + fmtHM(s.mttr) + '</div>' + deltaHtml(sp ? deltaMin(s.mttr, sp.mttr) : nobase()) + '</div>' +
+      '<div><div class="legend">OLA de resolução</div><div class="v ' + olaCls(s.ola) + '">' + fmtPct(s.ola) + '</div></div></div>' +
+      '<div style="margin-top:10px"><div class="legend" style="margin-bottom:4px">Origem da Detecção</div>' + stackHtml(origemParts(s)) + stackLegend(origemParts(s)) + '</div>' +
+      '<div class="grid cols-3" style="margin-top:12px;gap:16px"><div><div class="eyebrow" style="margin-bottom:4px">Ofensores</div>' + barsHtml(tops.map(function (t) { return { label: t.k, v: t.n, action: 'open-key', k: 'ofe|' + t.k + '|' + layer }; }), max(tops), { cls: layer === 'infra' ? 'infra' : '' }) + '</div>' +
+      '<div><div class="eyebrow" style="margin-bottom:4px">Tecnologias impactadas</div>' + barsHtml(tecs.map(function (t) { return { label: t.k, v: t.n, action: 'open-key', k: 'tec|' + t.k + '|' + layer }; }), max(tecs), { cls: layer === 'infra' ? 'infra' : '' }) + '</div>' +
+      '<div><div class="eyebrow" style="margin-bottom:4px">Localidades / sistemas</div>' + barsHtml(locs.map(function (t) { return { label: t.k, v: t.n, action: 'open-key', k: 'ent|' + t.k + '|' + layer }; }), max(locs), { cls: layer === 'infra' ? 'infra' : '' }) + '</div></div></div>';
+  }
+  function renderCamadas() {
+    var all = select(M.w, 'all'), allP = M.prev ? select(M.cw, 'all') : null;
+    M.sAll = stats(all);
+    var app = all.filter(function (I) { return I.layer === 'app'; }), inf = all.filter(function (I) { return I.layer === 'infra'; });
+    var appP = allP ? allP.filter(function (I) { return I.layer === 'app'; }) : null, infP = allP ? allP.filter(function (I) { return I.layer === 'infra'; }) : null;
+    // Infra -> aplicações impactadas -> fluxos
+    var infraMatrix = '';
+    if (inf.length) {
+      var rows = inf.slice().sort(function (a, b) { return (b.ab || 0) - (a.ab || 0); });
+      infraMatrix = '<div class="panel" style="margin-top:14px"><div class="panel-head"><div class="sub-title">' + icon('server') + 'Infraestrutura impactando as aplicações de O&amp;L</div></div>' +
+        '<div class="ox-tbl-wrap"><table class="ox-tbl"><thead><tr><th>Incidente</th><th>Abertura</th><th>Sev</th><th>Ofensor (infra)</th><th>Aplicação / tecnologia impactada</th><th>Fluxo · localidade</th><th class="n">TTR</th><th>Por que é infra</th></tr></thead><tbody>' +
+        rows.map(function (I) {
+          return '<tr class="clickable" data-action="open-inc" data-id="' + esc(I.id) + '"><td class="nm">' + esc(I.id) + '</td><td class="n">' + fmtDay(I.ab) + '</td><td><span class="sev-dot s' + (I.sevN === 0 ? 0 : 1) + '"></span>' + (isNum(I.sevN) ? 'Sev ' + I.sevN : '—') + '</td>' +
+            '<td>' + esc(I.ofe) + '</td><td>' + esc((I.tImp || []).join(', ')) + '</td><td>' + esc(flowNames(I).join(', ')) + (I.ents.length ? '<div class="desc">' + esc(I.ents.join(', ')) + '</div>' : '') + '</td>' +
+            '<td class="n">' + fmtHM(I.ttrU) + '</td><td><div class="desc">' + esc(I.layerWhy) + '</div></td></tr>';
+        }).join('') + '</tbody></table></div></div>';
+    }
+    // tabela de classificação
+    var byOfe = {};
+    all.forEach(function (I) { var k = I.ofe || 'N/A'; var e = byOfe[k] = byOfe[k] || { ofe: k, app: 0, infra: 0, why: {}, src: {} }; e[I.layer]++; e.why[I.layerWhy] = true; e.src[I.layerSrc] = true; });
+    var cls = Object.keys(byOfe).map(function (k) { return byOfe[k]; }).sort(function (a, b) { return (b.app + b.infra) - (a.app + a.infra); });
+    var ov = D.layerOverrides || {};
+    var clsHtml = '<details class="ox-details"><summary>Como a camada é definida (Aplicação x Infraestrutura) · ' + cls.length + ' ofensores</summary>' +
+      '<div class="legend" style="margin-bottom:8px">Ordem dos sinais: (1) aba <b>' + esc(ov.sheet || 'OL_Camada') + '</b> (opcional; colunas Tipo = Incidente/Ofensor/Tecnologia/Grupo, Valor, Camada) — ' + (ov.found ? ov.rows + ' regra(s) lida(s)' : 'não encontrada') +
+      '; (2) Ofensor; (3) Category/Subcategory do ServiceNow; (4) Tecnologia impactada; (5) Grupo responsável; (6) termos fortes na Descrição do Ofensor (ex.: queda de energia, link, switch); (7) padrão = Aplicação. Para corrigir uma classificação, cadastre a linha na aba ' + esc(ov.sheet || 'OL_Camada') + '.</div>' +
+      '<div class="ox-tbl-wrap"><table class="ox-tbl"><thead><tr><th>Ofensor</th><th class="n">Aplicação</th><th class="n">Infra</th><th>Critério aplicado</th></tr></thead><tbody>' +
+      cls.map(function (e) { return '<tr><td class="nm">' + esc(e.ofe) + '</td><td class="n">' + e.app + '</td><td class="n">' + e.infra + '</td><td><div class="desc">' + esc(Object.keys(e.why).slice(0, 3).join(' · ')) + '</div></td></tr>'; }).join('') +
+      '</tbody></table></div></details>';
+    var s = M.sAll;
+    var head = '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('layers') + 'Divisão por camada · ' + esc(M.L.cur) + '</div></div>' +
+      stackHtml(layerParts(s), true) + stackLegend(layerParts(s), true) +
+      '<div class="legend" style="margin-top:8px">' + s.lay.app + ' de Aplicação e ' + s.lay.infra + ' de Infraestrutura' + (allP ? ' · comparativo (' + esc(M.L.prevShort) + '): ' + stats(allP).lay.app + ' e ' + stats(allP).lay.infra : '') + '. MTTR Aplicação ' + fmtHM(s.mttrLay.app) + ' · Infra ' + fmtHM(s.mttrLay.infra) + '.</div></div>';
+    $('sec-camadas').innerHTML = sectionHead('server', 'Tecnologia · camada', 'Aplicação x Infraestrutura',
+      'Foco na camada de aplicação e desdobramento dos incidentes de infraestrutura que impactaram as aplicações de O&amp;L. Esta seção ignora o filtro de camada.') +
+      head + '<div class="grid" style="margin-top:14px">' + layerPanel('app', app, appP) + layerPanel('infra', inf, infP) + '</div>' + infraMatrix + clsHtml;
+  }
+  function flowNames(I) { return I.flows.map(function (k) { var f = D.config.flows.find(function (x) { return x.key === k; }); return f ? f.short : k; }); }
+
+  /* --------------------------------------------------------------- Fluxos */
+  function renderFluxos() {
+    var vs = vsTxt();
+    var rows = M.flows.map(function (f) {
+      var s = f.s, sp = f.sp;
+      return '<tr class="clickable" data-action="goto" data-target="sec-flow-' + f.cfg.key + '"><td class="nm">' + esc(f.cfg.short) + '</td>' +
+        '<td class="n">' + s.n + '</td><td class="n">' + deltaHtml(sp ? deltaCount(s.n, sp.n, 'lower') : nobase()) + '</td>' +
+        '<td class="n">' + s.sev0 + ' · ' + s.sev1 + '</td>' +
+        '<td class="n ' + targetCls(s.mttr0, T.mttrSev0) + '">' + fmtHM(s.mttr0) + '</td><td class="n ' + targetCls(s.mttr1, T.mttrSev1) + '">' + fmtHM(s.mttr1) + '</td>' +
+        '<td class="n ' + olaCls(s.ola0) + '">' + fmtPct(s.ola0, 0) + '</td><td class="n ' + olaCls(s.ola1) + '">' + fmtPct(s.ola1, 0) + '</td>' +
+        '<td class="n">' + fmtPct(s.pMon, 0) + '</td><td class="n">' + fmtPct(s.pEu, 0) + '</td><td class="n">' + fmtPct(s.pInfra, 0) + '</td><td class="n">' + s.chg + '</td>' +
+        '<td class="n">' + (isNum(f.disp.cv) ? fmtPct(f.disp.cv, 2) + ' ' + chip(f.disp.status, true) : '<span class="muted">—</span>') + '</td></tr>';
+    }).join('');
+    var table = '<div class="ox-tbl-wrap"><table class="ox-tbl"><thead><tr><th>Fluxo</th><th class="n">Incid.</th><th class="n">vs ' + esc(vs) + '</th><th class="n">Sev 0 · 1</th><th class="n">MTTR S0</th><th class="n">MTTR S1</th><th class="n">OLA S0</th><th class="n">OLA S1</th><th class="n">% Monit.</th><th class="n">% End-users</th><th class="n">% Infra</th><th class="n">Mudança</th><th class="n">Disponib.</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="ox-note">Um incidente pode impactar mais de um fluxo (a soma dos fluxos pode passar do total). MTTR em vermelho = acima da meta (Sev 0 ' + fmtHM(T.mttrSev0) + ' · Sev 1 ' + fmtHM(T.mttrSev1) + '); OLA em vermelho = abaixo de 80%. Disponibilidade = média simples dos meses apurados do período.</div>';
+    var blocks = M.flows.map(flowBlock).join('');
+    $('sec-fluxos').innerHTML = sectionHead('truck', 'Fluxos de O&amp;L', 'Fluxos e localidades',
+      'Para cada fluxo: volumetria, MTTR e OLA de resolução por Severidade, Origem da Detecção, camada, tecnologias, ofensores, causa raiz e os cards de cada CD, planta ou sistema.') + table + blocks;
+  }
+  function flowEntities(f) {
+    var cfg = f.cfg, cat = (D.config.catalog[cfg.key] || []), ents = {}, order = [];
+    var add = function (key, name, kind, country, extra) { if (!ents[key]) { ents[key] = Object.assign({ key: key, name: name, kind: kind, country: country || '' }, extra || {}); order.push(key); } return ents[key]; };
+    var yrs = uniq(M.w.months.map(function (x) { return x.y; }));
+    cat.forEach(function (c) {
+      if (c.years && !c.years.some(function (y) { return yrs.indexOf(y) !== -1; })) return;
+      if (c.inactiveAfterYear && yrs.every(function (y) { return y > c.inactiveAfterYear; })) return;
+      add((c.kind === 'sistema' ? 'sys:' : 'loc:') + fold(c.name), c.name, c.kind, c.country, { catalog: c });
+    });
+    var catBy = {};
+    cat.forEach(function (c) { catBy[(c.kind === 'sistema' ? 'sys:' : 'loc:') + fold(c.name)] = c; });
+    f.cur.forEach(function (I) { flowRows(I, cfg.key).forEach(function (r) { add(r.ent, r.entName, r.entKind, r.entCc, { unnamed: r.entUnnamed, catalog: catBy[r.ent] }); }); });
+    (f.prev || []).forEach(function (I) {
+      flowRows(I, cfg.key).forEach(function (r) {
+        var c = catBy[r.ent];
+        if (c && ((c.years && !c.years.some(function (y) { return yrs.indexOf(y) !== -1; })) || c.successor)) return;
+        add(r.ent, r.entName, r.entKind, r.entCc, { unnamed: r.entUnnamed, catalog: c });
+      });
+    });
+    return order.map(function (k) {
+      var e = ents[k];
+      e.cur = inEntity(f.cur, cfg.key, k);
+      var pk = k;
+      if (e.catalog && e.catalog.predecessor) pk = 'sys:' + fold(e.catalog.predecessor);
+      e.prev = f.prev ? inEntity(f.prev, cfg.key, pk) : null;
+      e.s = stats(e.cur); e.sp = e.prev ? stats(e.prev) : null;
+      var names = [e.name].concat((e.catalog && e.catalog.aliases) || []);
+      e.disp = dispWindow(function (y) { return findDesc(dispFlowNode(y, cfg.key), names); }, M.w);
+      return e;
+    }).filter(function (e) { return !(e.key === 'sys:outros' && !e.s.n); });
+  }
+  function entCard(f, e, withFlag) {
+    var s = e.s, sp = e.sp, has = s.n > 0;
+    var tags = '';
+    if (e.catalog && e.catalog.inactiveNote) tags += '<span class="tag is-inactive">' + esc(e.catalog.inactiveNote) + '</span>';
+    if (e.catalog && e.catalog.predecessor) tags += '<span class="tag is-new" data-tip="Comparativo usa o ' + esc(e.catalog.predecessor) + ' (sistema do fluxo antes do ' + esc(e.name) + ').">Sucede o ' + esc(e.catalog.predecessor) + '</span>';
+    if (e.unnamed) tags += '<span class="tag">CD não nomeado</span>';
+    var topO = topOf(e.cur, KEYS.ofe, 1)[0], topT = topOf(e.cur, KEYS.tec, 1)[0];
+    var sev = function (label, cls, n, mttr, mt, ola) {
+      return '<div><div class="hd"><span class="sev-dot ' + cls + '"></span>' + label + ' <span class="muted" style="margin-left:auto">' + n + '</span></div>' +
+        '<div class="ln"><span>MTTR</span><b class="' + (n ? targetCls(mttr, mt) : '') + '">' + fmtHM(mttr) + '</b></div><div class="ln"><span>OLA</span><b class="' + (n ? olaCls(ola) : '') + '">' + fmtPct(ola, 0) + '</b></div></div>';
+    };
+    var disp = isNum(e.disp.cv) ? '<div class="row"><span class="k">Disponibilidade</span><span class="v">' + fmtPct(e.disp.cv, 2) + ' ' + chip(e.disp.status, true) + '</span></div>' : '';
+    return '<div role="button" tabindex="0" class="ox-card' + (s.n >= 3 ? ' is-hot' : '') + '" data-action="open-ent" data-flow="' + f.cfg.key + '" data-ent="' + esc(e.key) + '" aria-label="Ver incidentes de ' + esc(e.name) + '">' +
+      '<div class="ch">' + tile(entIcon(e.kind, e.name), 'sm') + '<div style="min-width:0"><div class="nm">' + esc(e.name) + '</div><div class="kd">' + (withFlag && e.country ? flag(e.country) + ' ' + esc(COUNTRY_NAMES[e.country] || e.country.toUpperCase()) + ' · ' : '') + esc(KIND_LABEL[e.kind] || 'Localidade') + tags + '</div></div></div>' +
+      '<div class="cm"><div class="cnt">' + s.n + '<small>' + plural(s.n, 'incidente', 'incidentes') + '</small></div>' + deltaHtml(sp ? deltaCount(s.n, sp.n, 'lower') : nobase()) + '</div>' +
+      (has ? '<div class="ox-sev">' + sev('Sev 0', 's0', s.sev0, s.mttr0, T.mttrSev0, s.ola0) + sev('Sev 1', 's1', s.sev1, s.mttr1, T.mttrSev1, s.ola1) + '</div>' +
+        '<div><div class="legend" style="margin-bottom:3px">Origem da Detecção</div>' + stackHtml(origemParts(s)) + stackLegend(origemParts(s)) + '</div>' +
+        '<div class="row"><span class="k">Camada</span><span class="v">' + (s.lay.app ? s.lay.app + ' Aplicação' : '') + (s.lay.app && s.lay.infra ? ' · ' : '') + (s.lay.infra ? s.lay.infra + ' Infra' : '') + '</span></div>' +
+        (topO ? '<div class="row"><span class="k">Principal ofensor</span><span class="v" title="' + esc(topO.k) + '">' + esc(topO.k) + ' (' + topO.n + ')</span></div>' : '') +
+        (topT ? '<div class="row"><span class="k">Tecnologia</span><span class="v" title="' + esc(topT.k) + '">' + esc(topT.k) + ' (' + topT.n + ')</span></div>' : '')
+        : '<div class="ox-zero" style="margin:0">' + icon('check') + 'Sem incidentes no período</div>') +
+      disp + '<div class="more">Ver incidentes ' + icon('chevron') + '</div></div>';
+  }
+  function flowBlock(f) {
+    var s = f.s, sp = f.sp, vs = vsTxt(), cfg = f.cfg;
+    var ents = flowEntities(f);
+    var strip = '<div class="ox-strip">' +
+      '<div><div class="legend">Incidentes</div><div class="v">' + s.n + '</div>' + deltaHtml(sp ? deltaCount(s.n, sp.n, 'lower') : nobase(), vs) + '</div>' +
+      '<div><div class="legend">Sev 0 · MTTR · OLA</div><div class="v">' + s.sev0 + ' <small>· <span class="' + targetCls(s.mttr0, T.mttrSev0) + '">' + fmtHM(s.mttr0) + '</span> · ' + fmtPct(s.ola0, 0) + '</small></div>' + deltaHtml(sp ? deltaMin(s.mttr0, sp.mttr0) : nobase()) + '</div>' +
+      '<div><div class="legend">Sev 1 · MTTR · OLA</div><div class="v">' + s.sev1 + ' <small>· <span class="' + targetCls(s.mttr1, T.mttrSev1) + '">' + fmtHM(s.mttr1) + '</span> · ' + fmtPct(s.ola1, 0) + '</small></div>' + deltaHtml(sp ? deltaMin(s.mttr1, sp.mttr1) : nobase()) + '</div>' +
+      '<div><div class="legend">MTTR s/ outliers (S0 · S1)</div><div class="v">' + fmtHM(s.mttrSO0) + ' <small>·</small> ' + fmtHM(s.mttrSO1) + '</div><div class="legend">' + (s.out0 + s.out1) + ' ' + plural(s.out0 + s.out1, 'outlier', 'outliers') + '</div></div>' +
+      '<div><div class="legend">Origem da Detecção</div><div style="margin-top:6px">' + stackHtml(origemParts(s)) + '</div><div class="legend" style="margin-top:4px">Monit. ' + fmtPct(s.pMon, 0) + ' · End-users ' + fmtPct(s.pEu, 0) + '</div></div>' +
+      '<div><div class="legend">Disponibilidade</div><div class="v">' + (isNum(f.disp.cv) ? fmtPct(f.disp.cv, 2) : '<small>sem dado</small>') + '</div>' + (isNum(f.disp.cv) ? chip(f.disp.status, true) + ' ' + deltaHtml(deltaPP(f.disp.cv, f.dispP.cv, 2, 'higher')) : '') + '</div></div>';
+
+    var cardsHtml = '';
+    var withInc = ents.filter(function (e) { return e.s.n > 0; }), zero = ents.filter(function (e) { return !e.s.n; });
+    if (cfg.entityType === 'sistema') {
+      cardsHtml = '<div class="ox-cards" style="margin-top:14px">' + ents.sort(function (a, b) { return b.s.n - a.s.n; }).map(function (e) { return entCard(f, e); }).join('') + '</div>';
+    } else {
+      var groups = {};
+      withInc.forEach(function (e) { var k = e.country || 'nd'; (groups[k] = groups[k] || []).push(e); });
+      var keys = Object.keys(groups).sort(function (a, b) {
+        var na = uniqIncs(groups[a]), nb = uniqIncs(groups[b]);
+        if (nb !== na) return nb - na;
+        return (COUNTRY_ORDER.indexOf(a) === -1 ? 99 : COUNTRY_ORDER.indexOf(a)) - (COUNTRY_ORDER.indexOf(b) === -1 ? 99 : COUNTRY_ORDER.indexOf(b));
+      });
+      var big = keys.filter(function (k) { return groups[k].length >= 3; }), small = keys.filter(function (k) { return groups[k].length < 3; });
+      if (big.length === 0 && small.length) { big = [small[0]]; small = small.slice(1); }
+      var cname = function (k) { return COUNTRY_NAMES[k] || (k === 'nd' ? 'País não informado' : k.toUpperCase()); };
+      cardsHtml = big.map(function (k) {
+        var list = groups[k].sort(function (a, b) { return b.s.n - a.s.n || a.name.localeCompare(b.name); });
+        var n = uniqIncs(list);
+        return '<div class="ox-cgroup"><div class="ox-cgroup-head">' + (k !== 'nd' ? flag(k, true) : icon('pin')) + '<span class="nm">' + esc(cname(k)) + '</span><span class="legend">' + n + ' ' + plural(n, 'incidente', 'incidentes') + ' · ' + list.length + ' ' + plural(list.length, 'localidade', 'localidades') + ' com incidente</span></div>' +
+          '<div class="ox-cards">' + list.map(function (e) { return entCard(f, e); }).join('') + '</div></div>';
+      }).join('');
+      if (small.length) {
+        var sl = [].concat.apply([], small.map(function (k) { return groups[k]; })).sort(function (a, b) { return b.s.n - a.s.n || a.name.localeCompare(b.name); });
+        cardsHtml += '<div class="ox-cgroup"><div class="ox-cgroup-head">' + icon('pin') + '<span class="nm">' + (big.length ? 'Demais países' : 'Países') + '</span><span class="legend">' +
+          small.map(function (k) { return flag(k) + ' ' + esc(cname(k)) + ' (' + uniqIncs(groups[k]) + ')'; }).join(' · ') + '</span></div>' +
+          '<div class="ox-cards">' + sl.map(function (e) { return entCard(f, e, true); }).join('') + '</div></div>';
+      }
+      if (!cardsHtml) cardsHtml = '<div class="empty" style="margin-top:12px">Nenhuma localidade com incidente no período.</div>';
+      if (zero.length) cardsHtml += '<div class="ox-zero">' + icon('check') + '<span><b>Sem incidentes no período:</b> ' + esc(zero.map(function (e) { return e.name; }).join(', ')) + '.</span></div>';
+    }
+    var tecs = topOf(f.cur, KEYS.tec, 6), ofes = topOf(f.cur, KEYS.ofe, 6);
+    var causas = {}, procs = {};
+    problemsOf(f.cur).forEach(function (p) { var c = prbCausa(p); if (c.causa) causas[c.causa] = (causas[c.causa] || 0) + 1; if (c.processo) procs[c.processo] = (procs[c.processo] || 0) + 1; });
+    f.cur.filter(function (I) { return !(I.prbObjs || []).length && I.rca; }).forEach(function (I) { if (I.rca.causa) causas[I.rca.causa] = (causas[I.rca.causa] || 0) + 1; if (I.rca.processo) procs[I.rca.processo] = (procs[I.rca.processo] || 0) + 1; });
+    var toItems = function (m) { return Object.keys(m).map(function (k) { return { label: k, v: m[k] }; }).sort(function (a, b) { return b.v - a.v; }).slice(0, 6); };
+    var mx = function (a) { return a.length ? a[0].n || a[0].v : 1; };
+    var panels = '<div class="grid cols-3" style="margin-top:14px">' +
+      '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('monitor') + 'Tecnologias impactadas</div></div>' + barsHtml(tecs.map(function (t) { return { label: t.k, v: t.n, sub: 'MTTR ' + fmtHM(stats(t.list).mttr) + ' · ' + t.list.filter(function (I) { return I.layer === 'infra'; }).length + ' infra', action: 'open-key', k: 'tec|' + t.k + '|' + cfg.key }; }), mx(tecs)) + '</div>' +
+      '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('alert') + 'Ofensores</div></div>' + barsHtml(ofes.map(function (t) { return { label: t.k, v: t.n, sub: 'MTTR ' + fmtHM(stats(t.list).mttr), action: 'open-key', k: 'ofe|' + t.k + '|' + cfg.key }; }), mx(ofes)) + '</div>' +
+      '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('search') + 'Causa raiz e processo de origem</div></div>' +
+      '<div class="eyebrow" style="margin-bottom:4px">Causa do Problema</div>' + barsHtml(toItems(causas), null, { empty: 'Sem RCA classificado.' }) +
+      '<div class="eyebrow" style="margin:10px 0 4px">Processo de origem</div>' + barsHtml(toItems(procs), null, { empty: 'Sem processo de origem classificado.' }) +
+      '<div class="ox-note">Por Problema (IA da Manual_Info / PTASK_RCA). ' + problemsOf(f.cur).length + ' Problema(s) ligados aos incidentes do fluxo.</div></div></div>';
+    return '<div class="ox-flow" id="sec-flow-' + cfg.key + '"><div class="ox-flow-head">' + tile(cfg.icon) + '<div><div class="eyebrow">Fluxo</div><h3>' + esc(cfg.label) + '</h3></div><span class="sp"></span>' +
+      '<button type="button" class="btn" data-action="open-flow" data-flow="' + cfg.key + '">' + icon('list') + 'Ver incidentes do fluxo (' + s.n + ')</button></div>' +
+      strip + cardsHtml + panels + '</div>';
+  }
+  function uniqIncs(ents) { var m = {}; ents.forEach(function (e) { e.cur.forEach(function (I) { m[I.id] = true; }); }); return Object.keys(m).length; }
+
+  /* ------------------------------------------------------------ Detecção */
+  function renderDeteccao() {
+    var c = M.sCur, p = M.sPrev;
+    var rowsO = ORIGENS.map(function (o) {
+      var l = c.list.filter(function (I) { return I.ok === o.key; }), s = stats(l), lp = M.prev ? M.prev.filter(function (I) { return I.ok === o.key; }) : null;
+      return '<tr class="clickable" data-action="open-origem" data-k="' + o.key + '"><td class="nm"><i class="ox-dot ' + o.key + '"></i> ' + esc(o.label) + '</td><td class="n">' + s.n + '</td><td class="n">' + fmtPct(pct(s.n, c.n), 0) + '</td><td class="n">' + (lp ? fmtPct(pct(lp.length, M.prev.length), 0) : '—') + '</td>' +
+        '<td class="n">' + fmtHM(s.mttr) + '</td><td class="n ' + olaCls(s.ola) + '">' + fmtPct(s.ola, 0) + '</td><td class="n">' + s.sev0 + ' · ' + s.sev1 + '</td></tr>';
+    }).join('');
+    var tbl = '<div class="ox-tbl-wrap"><table class="ox-tbl"><thead><tr><th>Origem</th><th class="n">Incid.</th><th class="n">% período</th><th class="n">% ' + esc(vsTxt()) + '</th><th class="n">MTTR</th><th class="n">OLA</th><th class="n">Sev 0 · 1</th></tr></thead><tbody>' + rowsO + '</tbody></table></div>';
+    var byFlow = M.flows.map(function (f) { return '<div style="margin:8px 0"><div style="display:flex;justify-content:space-between;gap:8px"><b>' + esc(f.cfg.short) + '</b><span class="legend">' + f.s.n + ' incid.</span></div>' + stackHtml(origemParts(f.s), true) + stackLegend(origemParts(f.s)) + '</div>'; }).join('');
+    var all = select(M.w, 'all');
+    var byLayer = ['app', 'infra'].map(function (l) { var s = stats(all.filter(function (I) { return I.layer === l; })); return '<div style="margin:8px 0"><div style="display:flex;justify-content:space-between;gap:8px">' + layerTag(l) + '<span class="legend">' + s.n + ' incid.</span></div>' + stackHtml(origemParts(s), true) + stackLegend(origemParts(s)) + '</div>'; }).join('');
+    var euTec = topOf(c.list.filter(function (I) { return I.ok === 'eu'; }), KEYS.tec, 8);
+    var euEnt = topOf(c.list.filter(function (I) { return I.ok === 'eu'; }), KEYS.ent, 8);
+    $('sec-deteccao').innerHTML = sectionHead('radar', 'Origem da Detecção', 'Quem detecta os incidentes de O&amp;L',
+      'Caller do ServiceNow: Monitoração (integrações), Experiências e End-users. Quanto mais pela Monitoração, menor a dependência do usuário para acionar o atendimento.') +
+      '<div class="grid cols-2"><div class="panel"><div class="panel-head"><div class="sub-title">' + icon('radar') + 'Distribuição e efeito no MTTR</div></div>' +
+      '<div class="legend" style="margin-bottom:4px">' + esc(M.L.curShort) + '</div>' + stackHtml(origemParts(c), true) + stackLegend(origemParts(c), true) +
+      (p ? '<div class="legend" style="margin:10px 0 4px">' + esc(M.L.prevShort) + '</div>' + stackHtml(origemParts(p), true) + stackLegend(origemParts(p), true) : '') + '<div style="margin-top:12px">' + tbl + '</div></div>' +
+      '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('truck') + 'Por fluxo</div></div>' + byFlow + '<div class="eyebrow" style="margin-top:12px">Por camada</div>' + byLayer + '</div></div>' +
+      '<div class="grid cols-2" style="margin-top:14px"><div class="panel"><div class="panel-head"><div class="sub-title">' + icon('users') + 'Tecnologias reportadas por End-users</div></div>' +
+      barsHtml(euTec.map(function (t) { return { label: t.k, v: t.n, sub: 'de ' + topCount(c.list, 'tec', t.k) + ' incidentes da tecnologia', action: 'open-key', k: 'tec|' + t.k + '|eu' }; }), null, { cls: 'eu', empty: 'Nenhum incidente reportado por End-users.' }) +
+      '<div class="ox-note">Candidatas a reforço de monitoração: o usuário percebeu a falha antes do alerta.</div></div>' +
+      '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('pin') + 'Localidades / sistemas com reporte por End-users</div></div>' +
+      barsHtml(euEnt.map(function (t) { return { label: t.k, v: t.n, action: 'open-key', k: 'ent|' + t.k + '|eu' }; }), null, { cls: 'eu', empty: 'Nenhum incidente reportado por End-users.' }) + '</div></div>';
+  }
+  function topCount(list, kind, k) { return list.filter(function (I) { return KEYS[kind](I).indexOf(k) !== -1; }).length; }
+
+  /* -------------------------------------------------- Tecnologias & Ofensores */
+  var RANK_TABS = [['tec', 'Tecnologia impactada'], ['ofe', 'Ofensor'], ['ent', 'Localidade / sistema'], ['grp', 'Grupo resolvedor'], ['svc', 'Service (ServiceNow)']];
+  function renderTecnologias() {
+    var c = M.cur, p = M.prev, kind = state.rank;
+    var m = countBy(c, KEYS[kind]), mp = p ? countBy(p, KEYS[kind]) : null;
+    var keys = Object.keys(m).sort(function (a, b) { return m[b].length - m[a].length || a.localeCompare(b); });
+    var total = c.length, acc = 0;
+    var rows = keys.slice(0, 20).map(function (k, i) {
+      var l = m[k], s = stats(l), np = mp ? (mp[k] || []).length : null;
+      var last = Math.max.apply(null, l.map(function (I) { return I.ab || 0; }));
+      return '<tr class="clickable" data-action="open-key" data-k="' + esc(kind + '|' + k + '|') + '"><td class="n">' + (i + 1) + '</td><td class="nm">' + esc(k) + '<div class="desc">' + esc(uniq([].concat.apply([], l.map(flowNames))).join(', ')) + '</div></td>' +
+        '<td class="n">' + l.length + '</td><td class="n">' + (mp ? np : '—') + '</td><td class="n">' + deltaHtml(mp ? deltaCount(l.length, np, 'lower') : nobase()) + '</td>' +
+        '<td class="n">' + s.sev0 + ' · ' + s.sev1 + '</td><td class="n">' + fmtHM(s.mttr) + '</td><td class="n ' + olaCls(s.ola) + '">' + fmtPct(s.ola, 0) + '</td>' +
+        '<td class="n">' + fmtPct(s.pEu, 0) + '</td><td class="n">' + fmtPct(s.pInfra, 0) + '</td><td class="n">' + fmtPct(s.pPrb, 0) + '</td><td class="n">' + fmtDay(last) + '</td></tr>';
+    }).join('');
+    keys.forEach(function (k) { acc += m[k].length; });
+    var seg = '<div class="seg" id="ox-rank">' + RANK_TABS.map(function (t) { return '<button type="button" data-v="' + t[0] + '"' + (kind === t[0] ? ' class="is-active"' : '') + '>' + t[1] + '</button>'; }).join('') + '</div>';
+    var tbl = keys.length ? '<div class="ox-tbl-wrap"><table class="ox-tbl"><thead><tr><th class="n">#</th><th>' + esc(RANK_TABS.find(function (t) { return t[0] === kind; })[1]) + '</th><th class="n">' + esc(M.L.curShort) + '</th><th class="n">' + esc(M.L.prevShort) + '</th><th class="n">Variação</th><th class="n">Sev 0 · 1</th><th class="n">MTTR</th><th class="n">OLA</th><th class="n">% End-users</th><th class="n">% Infra</th><th class="n">% c/ Problem</th><th class="n">Último</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      (keys.length > 20 ? '<div class="ox-note">Mostrando os 20 primeiros de ' + keys.length + '.</div>' : '') : '<div class="empty">Sem dados no período.</div>';
+    $('sec-tecnologias').innerHTML = sectionHead('monitor', 'Concentração', 'Tecnologias, ofensores e grupos',
+      'Pareto do período: quais itens concentram os incidentes, com MTTR, OLA, detecção por End-users, camada e cobertura de Problem.', seg) +
+      '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('chart') + 'Pareto — top 10</div></div><div class="ox-chart sm"><canvas id="ox-ch-pareto"></canvas></div></div>' +
+      '<div style="margin-top:14px">' + tbl + '</div>';
+    drawPareto(keys.slice(0, 10).map(function (k) { return { k: k, n: m[k].length }; }), total);
+  }
+  function drawPareto(items, total) {
+    var cv = $('ox-ch-pareto');
+    if (!cv || !window.Chart || !items.length) return;
+    var cum = 0, cumIds = {};
+    var kind = state.rank, m = countBy(M.cur, KEYS[kind]);
+    var cumPct = items.map(function (it) { m[it.k].forEach(function (I) { cumIds[I.id] = true; }); cum = Object.keys(cumIds).length; return total ? Math.round(cum / total * 1000) / 10 : 0; });
+    charts.pareto = new Chart(cv, {
+      type: 'bar',
+      data: { labels: items.map(function (i) { return i.k.length > 22 ? i.k.slice(0, 21) + '…' : i.k; }), datasets: [
+        { type: 'bar', label: 'Incidentes', data: items.map(function (i) { return i.n; }), backgroundColor: '#333D20', borderRadius: 2, maxBarThickness: 34, yAxisID: 'y', order: 2 },
+        { type: 'line', label: '% acumulado de incidentes', data: cumPct, borderColor: '#FF6D00', backgroundColor: '#FF6D00', pointRadius: 3, borderWidth: 2, yAxisID: 'y2', order: 1, datalabels: { display: true, align: 'top', color: '#9A3F0B', font: { size: 9.5, weight: '700' }, formatter: function (v) { return fmtNum(v, 0) + '%'; } } }
+      ] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        onClick: function (e, els) { if (!els.length) return; var it = items[els[0].index]; openKey(state.rank + '|' + it.k + '|'); },
+        plugins: { legend: { position: 'top', align: 'end', labels: { boxWidth: 10, boxHeight: 10, font: { size: 11 } } }, datalabels: { display: function (ctx) { return ctx.dataset.type === 'bar'; }, anchor: 'end', align: 'end', offset: -2, color: '#333D20', font: { size: 10, weight: '700' } }, tooltip: { mode: 'index', intersect: false } },
+        scales: { x: { grid: { display: false }, ticks: { font: { size: 10 } } }, y: { beginAtZero: true, grace: '12%', ticks: { precision: 0 }, grid: { color: 'rgba(51,61,32,.08)' } }, y2: { position: 'right', min: 0, max: 110, grid: { display: false }, ticks: { callback: function (v) { return v <= 100 ? v + '%' : ''; } } } }
+      }
+    });
+  }
+
+  /* ------------------------------------------------------------ Reincidência */
+  function clusters(list, keyFn, min) {
+    var m = countBy(list, keyFn);
+    return Object.keys(m).filter(function (k) { return m[k].length >= (min || 2); }).map(function (k) {
+      var l = m[k].slice().sort(function (a, b) { return (a.ab || 0) - (b.ab || 0); });
+      var first = l[0].ab, last = l[l.length - 1].ab;
+      var noPrb = l.filter(function (I) { return !(I.prbs || []).length; }).length;
+      return { k: k, list: l, n: l.length, first: first, last: last, gap: l.length > 1 && isNum(first) && isNum(last) ? (last - first) / 86400000 / (l.length - 1) : null, noPrb: noPrb, s: stats(l) };
+    }).sort(function (a, b) { return b.n - a.n || (b.last || 0) - (a.last || 0); });
+  }
+  function renderReincidencia() {
+    var c = M.cur;
+    var byTec = clusters(c, KEYS.tec, 2);
+    var byPair = clusters(c, function (I) { return I.rows.filter(rowOk).map(function (r) { return (I.tImp || []).filter(function (t) { return t !== 'N/A'; }).map(function (t) { return t + ' @ ' + r.entName; }); }).reduce(function (a, b) { return a.concat(b); }, []); }, 2);
+    var inRec = {}; byTec.forEach(function (cl) { cl.list.forEach(function (I) { inRec[I.id] = true; }); });
+    var nRec = Object.keys(inRec).length;
+    var tbl = function (cls, label, showEnts) {
+      if (!cls.length) return '<div class="empty">Nenhuma ' + label + ' com 2 ou mais incidentes no período.</div>';
+      return '<div class="ox-tbl-wrap"><table class="ox-tbl"><thead><tr><th>' + esc(label.charAt(0).toUpperCase() + label.slice(1)) + '</th><th class="n">Incid.</th><th class="n">Intervalo médio</th><th class="n">Primeiro · último</th><th class="n">MTTR</th><th>Ofensores</th><th class="n">Sem Problem</th></tr></thead><tbody>' +
+        cls.slice(0, 12).map(function (cl) {
+          return '<tr class="clickable" data-action="open-ids" data-ids="' + esc(cl.list.map(function (I) { return I.id; }).join(',')) + '" data-title="' + esc(cl.k) + '"><td class="nm">' + esc(cl.k) + (showEnts ? '<div class="desc">' + esc(uniq([].concat.apply([], cl.list.map(function (I) { return I.ents; }))).slice(0, 4).join(', ')) + '</div>' : '') + '</td>' +
+            '<td class="n">' + cl.n + '</td><td class="n">' + (isNum(cl.gap) ? fmtNum(cl.gap, 0) + ' dias' : '—') + '</td><td class="n">' + fmtDay(cl.first) + ' · ' + fmtDay(cl.last) + '</td><td class="n">' + fmtHM(cl.s.mttr) + '</td>' +
+            '<td><div class="desc">' + esc(uniq(cl.list.map(function (I) { return I.ofe; })).slice(0, 3).join(', ')) + '</div></td><td class="n ' + (cl.noPrb ? 'bad' : 'good') + '">' + cl.noPrb + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+    };
+    $('sec-reincidencia').innerHTML = sectionHead('repeat', 'Recorrência', 'O que se repete no período',
+      'Tecnologias e combinações tecnologia + localidade com 2 ou mais incidentes. Recorrência sem Problem associado indica oportunidade de abrir ou acelerar a análise de causa raiz.') +
+      '<div class="ox-kpis c3">' +
+      kpiCard({ title: 'Incidentes em tecnologias recorrentes', icon: 'repeat', value: fmtInt(nRec) + '<small>' + fmtPct(pct(nRec, c.length), 0) + '</small>' }) +
+      kpiCard({ title: 'Tecnologias recorrentes', icon: 'monitor', value: fmtInt(byTec.length) }) +
+      kpiCard({ title: 'Recorrências sem Problem', icon: 'search', value: fmtInt(byTec.filter(function (cl) { return cl.noPrb; }).length), alert: byTec.some(function (cl) { return cl.noPrb >= 2; }), foot: 'tecnologias com incidente recorrente sem Problem associado' }) + '</div>' +
+      '<div class="panel" style="margin-top:14px"><div class="panel-head"><div class="sub-title">' + icon('monitor') + 'Por tecnologia impactada</div></div>' + tbl(byTec, 'tecnologia', true) + '</div>' +
+      '<div class="panel" style="margin-top:14px"><div class="panel-head"><div class="sub-title">' + icon('pin') + 'Mesma tecnologia na mesma localidade</div></div>' + tbl(byPair, 'combinação', false) + '</div>';
+  }
+
+  /* ---------------------------------------------------------- Problemas & RCA */
+  function renderProblemas() {
+    var c = M.cur, probs = M.problems;
+    var st = {}; Object.keys(PRB_STATUS).forEach(function (k) { st[k] = 0; });
+    probs.forEach(function (p) { st[prbStatus(p)]++; });
+    var openAging = avg(probs.filter(function (p) { var s = prbStatus(p); return s === 'rca' || s === 'fix'; }).map(prbAging));
+    var resAging = avg(probs.filter(function (p) { return prbStatus(p) === 'resolved'; }).map(prbAging));
+    var qFilled = 0, qBoa = 0, pFilled = 0, pBoa = 0, causas = {}, procs = {};
+    probs.forEach(function (p) {
+      var cc = prbCausa(p);
+      if (cc.qRca) { qFilled++; if (/^boa/.test(fold(cc.qRca))) qBoa++; }
+      if (cc.qPlano) { pFilled++; if (/^boa/.test(fold(cc.qPlano))) pBoa++; }
+      if (cc.causa) (causas[cc.causa] = causas[cc.causa] || []).push(p);
+      if (cc.processo) (procs[cc.processo] = procs[cc.processo] || []).push(p);
+    });
+    var tasks = [];
+    probs.forEach(function (p) { (p.tasks || []).forEach(function (t) { if (t.type === 'IMP') tasks.push({ t: t, p: p }); }); });
+    var openT = tasks.filter(function (x) { return !x.t.closed; }), overdue = openT.filter(function (x) { return isNum(x.t.due) && x.t.due < D.today; });
+    openT.sort(function (a, b) { return (a.t.due || 9e15) - (b.t.due || 9e15); });
+    var noPrb = c.filter(function (I) { return !(I.prbs || []).length; }).sort(function (a, b) { return (a.sevN === 0 ? 0 : 1) - (b.sevN === 0 ? 0 : 1) || (b.ttrU || 0) - (a.ttrU || 0); });
+    var items = function (m) { return Object.keys(m).map(function (k) { return { label: k, v: m[k].length, action: 'open-ids', extra: ' data-ids="' + esc(uniq([].concat.apply([], m[k].map(function (p) { return p.incidents; }))).join(',')) + '" data-title="' + esc(k) + '"' }; }).sort(function (a, b) { return b.v - a.v; }).slice(0, 8); };
+    var parts = Object.keys(PRB_STATUS).filter(function (k) { return st[k]; }).map(function (k, i) { return { cls: ['exp', 'app', 'mon', 'na', 'na', 'na'][PRB_STATUS[k].order], label: PRB_STATUS[k].label, v: st[k] }; });
+    var kpis = '<div class="ox-kpis">' +
+      kpiCard({ title: 'Incidentes com Problem', icon: 'search', value: fmtPct(M.sCur.pPrb, 0), delta: deltaHtml(M.sPrev ? deltaPP(M.sCur.pPrb, M.sPrev.pPrb, 1, 'higher') : nobase(), vsTxt()), foot: M.sCur.withPrb + ' de ' + M.sCur.n + ' incidentes · ' + noPrb.length + ' sem Problem' }) +
+      kpiCard({ title: 'Problemas no período', icon: 'layers', value: fmtInt(probs.length), split: splitCell('Em RCA', st.rca, st.rca ? 'bad' : '') + splitCell('Em implementação', st.fix), foot: st.resolved + ' resolvidos' + (st.risk ? ' · ' + st.risk + ' com risco aceito' : '') }) +
+      kpiCard({ title: 'Aging dos Problemas', icon: 'clock', value: (isNum(openAging) ? fmtNum(openAging, 0) : '—') + '<small>dias em aberto</small>', split: splitCell('Resolvidos (média)', isNum(resAging) ? fmtNum(resAging, 0) + ' dias' : '—') + splitCell('Qualidade do RCA', qFilled ? fmtPct(pct(qBoa, qFilled), 0) + ' boa' : '—'), alert: isNum(openAging) && openAging > 30 }) +
+      kpiCard({ title: 'Planos de ação (PTASK)', icon: 'wrench', value: fmtInt(openT.length) + '<small>abertos</small>', split: splitCell('Vencidos', overdue.length, overdue.length ? 'bad' : 'good') + splitCell('Concluídos', tasks.length - openT.length), foot: pFilled ? 'Qualidade do plano de ação: ' + fmtPct(pct(pBoa, pFilled), 0) + ' boa' : '', alert: overdue.length > 0 }) + '</div>';
+    var actTbl = openT.length ? '<div class="ox-tbl-wrap"><table class="ox-tbl"><thead><tr><th>Tarefa</th><th>Problema</th><th>Ação / plano</th><th>Grupo</th><th class="n">Prazo</th><th>Estado</th><th>Incidente(s)</th></tr></thead><tbody>' +
+      openT.slice(0, 25).map(function (x) {
+        var od = isNum(x.t.due) && x.t.due < D.today;
+        return '<tr><td class="nm">' + esc(x.t.num) + '</td><td>' + esc(x.p.id) + '<div class="desc">' + esc(PRB_STATUS[prbStatus(x.p)].label) + '</div></td><td>' + esc(x.t.desc) + (x.t.plano ? '<div class="desc">' + esc(x.t.plano) + '</div>' : '') + '</td><td>' + esc(x.t.group) + '</td>' +
+          '<td class="n ' + (od ? 'bad' : '') + '">' + fmtDay(x.t.due) + (od ? '<div class="desc">vencida há ' + Math.floor((D.today - x.t.due) / 86400000) + ' d</div>' : '') + '</td><td>' + esc(x.t.state) + '</td><td><div class="desc">' + esc(x.p.incidents.join(', ')) + '</div></td></tr>';
+      }).join('') + '</tbody></table></div>' + (openT.length > 25 ? '<div class="ox-note">Mostrando 25 de ' + openT.length + ' ações abertas (vencidas primeiro).</div>' : '') : '<div class="empty">Nenhum plano de ação (PTASK_IMP) aberto para os Problemas do período.</div>';
+    var probTbl = probs.length ? '<div class="ox-tbl-wrap"><table class="ox-tbl"><thead><tr><th>Problema</th><th>Status</th><th class="n">Aging</th><th>Área / grupo</th><th>Causa raiz (IA)</th><th>Processo de origem (IA)</th><th>Incidente(s)</th></tr></thead><tbody>' +
+      probs.slice().sort(function (a, b) { return PRB_STATUS[prbStatus(a)].order - PRB_STATUS[prbStatus(b)].order || (prbAging(b) || 0) - (prbAging(a) || 0); }).slice(0, 15).map(function (p) {
+        var cc = prbCausa(p), s = prbStatus(p), ag = prbAging(p);
+        return '<tr class="clickable" data-action="open-ids" data-ids="' + esc(p.incidents.join(',')) + '" data-title="' + esc(p.id) + '"><td class="nm">' + esc(p.id) + (p.sn && p.sn.statement ? '<div class="desc">' + esc(p.sn.statement) + '</div>' : '') + '</td><td>' + esc(PRB_STATUS[s].label) + '</td>' +
+          '<td class="n ' + ((s === 'rca' || s === 'fix') && ag > 30 ? 'bad' : '') + '">' + (isNum(ag) ? ag + ' d' : '—') + '</td><td>' + esc((p.gprob && p.gprob.area) || (p.sn && p.sn.group) || '—') + '</td><td>' + esc(cc.causa || '—') + '</td><td>' + esc(cc.processo || '—') + '</td><td><div class="desc">' + esc(p.incidents.join(', ')) + '</div></td></tr>';
+      }).join('') + '</tbody></table></div>' + (probs.length > 15 ? '<div class="ox-note">Mostrando 15 de ' + probs.length + ' Problemas (em RCA e com maior aging primeiro).</div>' : '') : '<div class="empty">Nenhum Problema associado aos incidentes do período.</div>';
+    var noPrbTbl = noPrb.length ? '<ul class="ox-bars">' + noPrb.slice(0, 10).map(function (I) {
+      return '<li class="clickable" data-action="open-inc" data-id="' + esc(I.id) + '"><span class="nm">' + esc(I.id) + ' · ' + esc(I.tImpMain) + '<span class="legend">' + (isNum(I.sevN) ? 'Sev ' + I.sevN : '') + ' · ' + fmtDay(I.ab) + ' · ' + esc(flowNames(I).join(', ')) + ' · ' + esc(I.ofe) + '</span></span><span class="br"><span style="width:' + Math.min(100, (I.ttrU || 0) / (T.outlierSev1 || 1080) * 100).toFixed(0) + '%"></span></span><span class="ct">' + fmtHM(I.ttrU) + '</span></li>';
+    }).join('') + '</ul>' + (noPrb.length > 10 ? '<div class="ox-note">Mostrando 10 de ' + noPrb.length + ' (Sev 0 e maior TTR primeiro).</div>' : '') : '<div class="empty">Todos os incidentes do período têm Problem associado.</div>';
+    $('sec-problemas').innerHTML = sectionHead('search', 'Gestão de Problemas', 'Problemas, causa raiz e planos de ação',
+      'Problemas ligados aos incidentes do período (MajorProblems, Problem_ServiceNow, Manual_Info e PTASK). Causa do Problema e Processo de Origem conforme a classificação da IA usada na Visão Geral.') +
+      kpis + '<div style="margin-top:12px">' + (parts.length ? stackHtml(parts, true) + stackLegend(parts, true) : '') + '</div>' +
+      '<div class="grid cols-2" style="margin-top:14px"><div class="panel"><div class="panel-head"><div class="sub-title">' + icon('search') + 'Causa do Problema</div></div>' + barsHtml(items(causas), null, { empty: 'Sem causa raiz classificada.' }) + '</div>' +
+      '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('layers') + 'Processo de origem</div></div>' + barsHtml(items(procs), null, { empty: 'Sem processo de origem classificado.' }) + '</div></div>' +
+      '<div class="panel" style="margin-top:14px"><div class="panel-head"><div class="sub-title">' + icon('wrench') + 'Planos de ação abertos (PTASK_IMP)</div></div>' + actTbl + '</div>' +
+      '<div class="panel" style="margin-top:14px"><div class="panel-head"><div class="sub-title">' + icon('list') + 'Problemas do período</div></div>' + probTbl + '</div>' +
+      '<div class="panel" style="margin-top:14px"><div class="panel-head"><div class="sub-title">' + icon('alert') + 'Incidentes sem Problem associado</div></div>' + noPrbTbl + '</div>';
+  }
+
+  /* --------------------------------------------------------------- Mudanças */
+  function renderMudancas() {
+    var c = M.cur.filter(function (I) { return I.isChange; }), p = M.prev ? M.prev.filter(function (I) { return I.isChange; }) : null;
+    var s = stats(c), sp = p ? stats(p) : null;
+    var typeOf = function (I) { var t = I.typeSm || ''; return t === 'DEPLOY' ? 'Deploy' : t === 'NORMAL' ? 'Normal' : t === 'URGENTE' ? 'Urgente' : (t === 'EMERGENCIAL' || t === 'EMERGENCIA') ? 'Emergencial' : 'Não informado'; };
+    var types = {}; c.forEach(function (I) { var t = typeOf(I); (types[t] = types[t] || []).push(I); });
+    var mttd = c.map(function (I) { return I.chgObj && isNum(I.chgObj.end) && isNum(I.ab) ? (I.ab - I.chgObj.end) / 3600000 : null; }).filter(isNum);
+    var grp = {}, svc = {};
+    c.forEach(function (I) { var g = (I.chgObj && I.chgObj.group) || 'Sem SM identificada'; (grp[g] = grp[g] || []).push(I); var sv = (I.chgObj && I.chgObj.service) || (I.sn && I.sn.service) || 'N/A'; (svc[sv] = svc[sv] || []).push(I); });
+    var toItems = function (m) { return Object.keys(m).map(function (k) { return { label: k, v: m[k].length, action: 'open-ids', extra: ' data-ids="' + esc(m[k].map(function (I) { return I.id; }).join(',')) + '" data-title="' + esc(k) + '"' }; }).sort(function (a, b) { return b.v - a.v; }).slice(0, 8); };
+    var kpis = '<div class="ox-kpis">' +
+      kpiCard({ title: 'Incidentes por Mudança', icon: 'shuffle', value: fmtInt(s.n) + '<small>' + fmtPct(pct(s.n, M.sCur.n), 0) + ' do total</small>', delta: deltaHtml(sp ? deltaCount(s.n, sp.n, 'lower') : nobase(), vsTxt()) }) +
+      kpiCard({ title: 'Tipo de SM', icon: 'layers', value: (types.Deploy || []).length + '<small>Deploy</small>', split: splitCell('Tradicional (Normal/Urgente/Emerg.)', ['Normal', 'Urgente', 'Emergencial'].reduce(function (a, k) { return a + (types[k] || []).length; }, 0)) + splitCell('Não informado', (types['Não informado'] || []).length) }) +
+      kpiCard({ title: 'MTTR de incidentes por Mudança', icon: 'clock', value: fmtHM(s.mttr), delta: deltaHtml(sp ? deltaMin(s.mttr, sp.mttr) : nobase(), vsTxt()), split: splitCell('Sev 0', fmtHM(s.mttr0), targetCls(s.mttr0, T.mttrSev0)) + splitCell('Sev 1', fmtHM(s.mttr1), targetCls(s.mttr1, T.mttrSev1)) }) +
+      kpiCard({ title: 'Detecção após a janela', icon: 'radar', value: (mttd.length ? fmtNum(avg(mttd), 1) : '—') + '<small>h</small>', tip: 'Tempo médio entre o término planejado da SM (Change_MI) e a abertura do incidente. Valores negativos = incidente aberto antes do fim da janela.', foot: mttd.length + ' de ' + s.n + ' com SM localizada na Change_MI' }) + '</div>';
+    var list = c.length ? '<div class="ox-tbl-wrap"><table class="ox-tbl"><thead><tr><th>Incidente</th><th class="n">Abertura</th><th>Tipo</th><th>SM</th><th>Grupo executor</th><th>Service</th><th>Fluxo · localidade</th><th class="n">TTR</th></tr></thead><tbody>' +
+      c.map(function (I) {
+        return '<tr class="clickable" data-action="open-inc" data-id="' + esc(I.id) + '"><td class="nm">' + esc(I.id) + '<div class="desc">' + esc(I.tImpMain) + '</div></td><td class="n">' + fmtDay(I.ab) + '</td><td>' + esc(typeOf(I)) + '</td><td>' + esc(I.sm || '—') + (I.chgObj && I.chgObj.desc ? '<div class="desc">' + esc(I.chgObj.desc) + '</div>' : '') + '</td>' +
+          '<td>' + esc((I.chgObj && I.chgObj.group) || '—') + '</td><td>' + esc((I.chgObj && I.chgObj.service) || '—') + '</td><td>' + esc(flowNames(I).join(', ')) + '<div class="desc">' + esc(I.ents.join(', ')) + '</div></td><td class="n">' + fmtHM(I.ttrU) + '</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<div class="empty">Nenhum incidente de O&amp;L causado por Mudança no período.</div>';
+    $('sec-mudancas').innerHTML = sectionHead('shuffle', 'Gestão de Mudanças', 'Incidentes causados por Mudança',
+      'Ofensor = Mudança (MajorIncidentes), com o tipo e o número da SM e os dados da Change_MI (grupo, service e janela planejada).') +
+      kpis + '<div class="grid cols-2" style="margin-top:14px"><div class="panel"><div class="panel-head"><div class="sub-title">' + icon('users') + 'Grupos executores</div></div>' + barsHtml(toItems(grp), null, { empty: 'Sem SMs no período.' }) + '</div>' +
+      '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('monitor') + 'Services afetados</div></div>' + barsHtml(toItems(svc), null, { empty: 'Sem SMs no período.' }) + '</div></div>' +
+      '<div class="panel" style="margin-top:14px"><div class="panel-head"><div class="sub-title">' + icon('list') + 'Incidentes por Mudança</div></div>' + list + '</div>';
+  }
+
+  /* ------------------------------------------------------------ Disponibilidade */
+  function heatRow(name, nodeFor, lv, cls) {
+    var dw = dispWindow(nodeFor, M.w), dp = dispWindow(nodeFor, M.cw);
+    if (!dw.cells.some(function (c) { return isNum(c.v); }) && !isNum(dp.cv)) return '';
+    var cells = dw.cells.map(function (c) {
+      if (c.st === 'NAO_INICIADO' || !isNum(c.v)) return '<td class="c st-none">—</td>';
+      var st = statusOf(c.v, c.refs || dw.refs);
+      return '<td class="c st-' + st.key + (c.st === 'PARCIAL' ? ' is-partial' : '') + '" data-tip="' + esc(MONTHS[c.m - 1] + '/' + c.y + ': ' + fmtPct(c.v, 2) + ' · ' + st.label + (c.st === 'PARCIAL' ? ' (apuração parcial)' : '')) + '">' + fmtNum(c.v, 2) + '</td>';
+    }).join('');
+    return '<tr class="' + (lv ? 'lv1' : '') + (cls ? ' ' + cls : '') + '"><td class="nm">' + esc(name) + '</td>' + cells +
+      '<td class="c st-' + dw.status.key + '">' + (isNum(dw.cv) ? fmtNum(dw.cv, 2) : '—') + '</td><td class="c">' + (isNum(dp.cv) ? fmtNum(dp.cv, 2) : '—') + '</td><td class="n">' + deltaHtml(deltaPP(dw.cv, dp.cv, 2, 'higher')) + '</td>' +
+      '<td class="n">' + (hasRefs(dw.refs) ? fmtNum(dw.refs.meta, 2) : '—') + '</td></tr>';
+  }
+  function renderDisp() {
+    var head = '<tr><th>Item</th>' + M.w.months.map(function (x) { return '<th class="n">' + MABBR[x.m - 1] + '/' + String(x.y).slice(2) + '</th>'; }).join('') + '<th class="n">Período</th><th class="n">' + esc(M.L.prevShort) + '</th><th class="n">Variação</th><th class="n">Meta</th></tr>';
+    var body = heatRow('O&L (total)', dispOlNode, 0, 'total');
+    M.flows.forEach(function (f) {
+      body += heatRow(f.cfg.short, function (y) { return dispFlowNode(y, f.cfg.key); }, 0);
+      var node = dispFlowNode(D.year, f.cfg.key);
+      (node && node.children || []).forEach(function (ch) {
+        body += heatRow(ch.name, function (y) { return findDesc(dispFlowNode(y, f.cfg.key), [ch.name]); }, 1);
+      });
+    });
+    var has = !!body;
+    // incidentes que mais consumiram disponibilidade (apuração)
+    var byInc = {};
+    M.w.months.forEach(function (x) {
+      var yd = ydOf(x.y), ap = yd && yd.apuracao;
+      if (!ap || !ap.found) return;
+      ap.rows.forEach(function (r) { if (r.m !== x.m || !r.isInc) return; var e = byInc[r.inc] = byInc[r.inc] || { inc: r.inc, min: 0, flows: {}, servs: {} }; e.min += r.min; if (r.flow) e.flows[r.flow] = true; if (r.serv) e.servs[r.serv] = true; });
+    });
+    var top = Object.keys(byInc).map(function (k) { return byInc[k]; }).sort(function (a, b) { return b.min - a.min; }).slice(0, 10);
+    var totalMin = sum(Object.keys(byInc).map(function (k) { return byInc[k].min; }));
+    var flowLbl = function (k) { var f = D.config.flows.find(function (x) { return x.key === k; }); return f ? f.short : k; };
+    var topTbl = top.length ? '<div class="ox-tbl-wrap"><table class="ox-tbl"><thead><tr><th>Incidente</th><th class="n">Minutos apurados</th><th class="n">% do período</th><th>Fluxo(s)</th><th>Serviço(s)</th><th>Tecnologia · ofensor</th></tr></thead><tbody>' +
+      top.map(function (e) {
+        var I = BYID[e.inc];
+        return '<tr' + (I ? ' class="clickable" data-action="open-inc" data-id="' + esc(e.inc) + '"' : '') + '><td class="nm">' + esc(e.inc) + (I ? '<div class="desc">' + fmtDay(I.ab) + ' · ' + (isNum(I.sevN) ? 'Sev ' + I.sevN : '') + '</div>' : '') + '</td><td class="n">' + fmtInt(e.min) + '</td><td class="n">' + fmtPct(pct(e.min, totalMin), 0) + '</td>' +
+          '<td>' + esc(Object.keys(e.flows).map(flowLbl).join(', ')) + '</td><td><div class="desc">' + esc(Object.keys(e.servs).slice(0, 4).join(', ')) + '</div></td><td>' + (I ? esc(I.tImpMain + ' · ' + I.ofe) + ' ' + layerTag(I.layer) : '<span class="muted">fora da base de O&amp;L/Tecnologia</span>') + '</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<div class="empty">Sem minutos de indisponibilidade apurados (aba apuracao) no período.</div>';
+    $('sec-disp').innerHTML = sectionHead('gauge', 'Indicador oficial', 'Disponibilidade por fluxo e país',
+      'Resultado mensal da aba Disponibilidade com o status vs Mínimo/Meta/Desafio. "Período" = média simples dos meses apurados (meses em apuração parcial aparecem hachurados e não entram na média).') +
+      (has ? '<div class="ox-tbl-wrap"><table class="ox-tbl ox-heat"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>' : '<div class="empty">Aba de Disponibilidade não encontrada ou sem O&amp;L para o período.</div>') +
+      '<div class="panel" style="margin-top:14px"><div class="panel-head"><div class="sub-title">' + icon('clock') + 'Incidentes que mais consumiram disponibilidade</div></div>' + topTbl +
+      '<div class="ox-note">Minutos apurados por incidente na aba apuracao (marca Natura, Stream O&amp;L/Planejamento Logístico), somando todos os países e serviços. Total do período: ' + fmtInt(totalMin) + ' min.</div></div>';
+  }
+
+  /* ---------------------------------------------- Oportunidades & próximos passos */
+  function buildOpportunities() {
+    var c = M.sCur, p = M.sPrev, list = M.cur, ops = [];
+    var push = function (o) { o.id = o.rule + ':' + fold(o.subject || '').replace(/[^a-z0-9]+/g, '-'); ops.push(o); };
+    if (!c.n) return ops;
+    // 1. Monitoração
+    if (isNum(c.pEu) && c.pEu >= 30) {
+      var eu = topOf(list.filter(function (I) { return I.ok === 'eu'; }), KEYS.tec, 3);
+      push({ rule: 'mon', subject: 'monitoracao', prio: c.pEu >= 50 ? 'alta' : 'media', front: 'Monitoração', title: 'Ampliar a detecção pela Monitoração',
+        ev: '<b>' + fmtPct(c.pEu, 0) + '</b> dos incidentes (' + c.org.eu + ') foram reportados por End-users; só ' + fmtPct(c.pMon, 0) + ' vieram da Monitoração.' + (eu.length ? ' Principais tecnologias: ' + esc(eu.map(function (t) { return t.k + ' (' + t.n + ')'; }).join(', ')) + '.' : ''),
+        action: 'Mapear alertas faltantes (sintéticos, filas, jobs e integrações) para essas tecnologias e acompanhar a meta de detecção pela Monitoração por fluxo.',
+        ids: list.filter(function (I) { return I.ok === 'eu'; }).map(function (I) { return I.id; }) });
+    }
+    // 2. Infraestrutura
+    var infra = list.filter(function (I) { return I.layer === 'infra'; });
+    if (infra.length >= 2) {
+      var io = topOf(infra, KEYS.ofe, 3), ie = topOf(infra, KEYS.ent, 3);
+      push({ rule: 'infra', subject: 'infra', prio: pct(infra.length, c.n) >= 25 ? 'alta' : 'media', front: 'Infraestrutura', title: 'Plano conjunto com Infraestrutura para as aplicações de O&L',
+        ev: '<b>' + infra.length + '</b> incidentes de infraestrutura (' + fmtPct(pct(infra.length, c.n), 0) + '), MTTR ' + fmtHM(stats(infra).mttr) + '. Ofensores: ' + esc(io.map(function (t) { return t.k + ' (' + t.n + ')'; }).join(', ')) + (ie.length ? '. Localidades / sistemas: ' + esc(ie.map(function (t) { return t.k + ' (' + t.n + ')'; }).join(', ')) : '') + '.',
+        action: 'Revisar redundância (link, energia, rede local) nas localidades citadas e acordar com Infraestrutura o tempo de acionamento e comunicação quando a falha impactar as aplicações de O&L.',
+        ids: infra.map(function (I) { return I.id; }) });
+    }
+    // 3. Reincidência sem Problem
+    clusters(list, KEYS.tec, 2).filter(function (cl) { return cl.noPrb > 0; }).slice(0, 3).forEach(function (cl) {
+      push({ rule: 'rec', subject: cl.k, prio: cl.n >= 3 ? 'alta' : 'media', front: 'Problemas', title: 'Tratar a recorrência em ' + cl.k,
+        ev: '<b>' + cl.n + '</b> incidentes com ' + esc(cl.k) + ' no período (intervalo médio de ' + (isNum(cl.gap) ? fmtNum(cl.gap, 0) + ' dias' : '—') + '); ' + cl.noPrb + ' sem Problem associado.',
+        action: 'Abrir (ou vincular) Problema com RCA para a recorrência e definir solução definitiva com o time da aplicação.',
+        ids: cl.list.map(function (I) { return I.id; }) });
+    });
+    // 4. MTTR acima da meta
+    [[0, c.mttr0, T.mttrSev0, c.mttrSO0, T.mttrSemOutliersSev0], [1, c.mttr1, T.mttrSev1, c.mttrSO1, T.mttrSemOutliersSev1]].forEach(function (x) {
+      if (!(isNum(x[1]) && x[1] > x[2])) return;
+      var worst = M.flows.filter(function (f) { return isNum(f.s['mttr' + x[0]]); }).sort(function (a, b) { return b.s['mttr' + x[0]] - a.s['mttr' + x[0]]; })[0];
+      var tail = isNum(x[3]) && x[3] <= x[4];
+      push({ rule: 'mttr', subject: 'sev' + x[0], prio: 'alta', front: 'Restauração', title: 'Reduzir o MTTR de Sev ' + x[0],
+        ev: 'MTTR Sev ' + x[0] + ' em <b>' + fmtHM(x[1]) + '</b> (meta ' + fmtHM(x[2]) + ')' + (worst ? '; pior fluxo: ' + esc(worst.cfg.short) + ' (' + fmtHM(worst.s['mttr' + x[0]]) + ')' : '') + '. Sem outliers: ' + fmtHM(x[3]) + (tail ? ' — dentro da meta, ou seja, o desvio vem de poucos incidentes longos.' : '.'),
+        action: tail ? 'Revisar os outliers (acionamento, escalonamento e fornecedor) com post-mortem e gatilhos de escalonamento por tempo.' : 'Revisar runbooks, acionamento e escalonamento dos times de aplicação do fluxo; medir MTTA/MTTR por grupo resolvedor.',
+        ids: list.filter(function (I) { return I.sevN === x[0]; }).map(function (I) { return I.id; }) });
+    });
+    // 5. OLA
+    if (isNum(c.ola) && c.ola < 80) push({ rule: 'ola', subject: 'ola', prio: c.ola < 60 ? 'alta' : 'media', front: 'Restauração', title: 'Recuperar a aderência ao OLA de resolução',
+      ev: 'OLA de resolução em <b>' + fmtPct(c.ola) + '</b> (Sev 0 ' + fmtPct(c.ola0) + ' · Sev 1 ' + fmtPct(c.ola1) + ')' + (p && isNum(p.ola) ? ', vs ' + fmtPct(p.ola) + ' no comparativo' : '') + '.',
+      action: 'Acompanhar semanalmente os incidentes fora do OLA por fluxo e grupo resolvedor e tratar as causas de atraso (dependência de fornecedor, acesso, diagnóstico).',
+      ids: list.filter(function (I) { return I.olaOk === false; }).map(function (I) { return I.id; }) });
+    // 6. Mudança
+    var chg = list.filter(function (I) { return I.isChange; });
+    if (chg.length >= 2 || pct(chg.length, c.n) >= 15) {
+      var g = topOf(chg, function (I) { return [(I.chgObj && I.chgObj.group) || '']; }, 2);
+      push({ rule: 'chg', subject: 'mudanca', prio: pct(chg.length, c.n) >= 20 ? 'alta' : 'media', front: 'Mudanças', title: 'Reduzir incidentes causados por Mudança',
+        ev: '<b>' + chg.length + '</b> incidentes causados por Mudança (' + fmtPct(pct(chg.length, c.n), 0) + ')' + (g.length ? '; grupos: ' + esc(g.map(function (t) { return t.k + ' (' + t.n + ')'; }).join(', ')) : '') + '.',
+        action: 'Reforçar testes em não-produção, plano de rollback e janelas fora do pico da operação (expedição/faturamento) para as SMs que afetam O&L.',
+        ids: chg.map(function (I) { return I.id; }) });
+    }
+    // 7. Planos de ação vencidos
+    var od = [];
+    M.problems.forEach(function (pp) { (pp.tasks || []).forEach(function (t) { if (t.type === 'IMP' && !t.closed && isNum(t.due) && t.due < D.today) od.push({ t: t, p: pp }); }); });
+    if (od.length) push({ rule: 'acts', subject: 'vencidas', prio: 'alta', front: 'Problemas', title: 'Cobrar os planos de ação vencidos',
+      ev: '<b>' + od.length + '</b> ' + plural(od.length, 'ação vencida', 'ações vencidas') + ' em Problemas ligados aos incidentes do período (grupos: ' + esc(uniq(od.map(function (x) { return x.t.group; })).slice(0, 4).join(', ')) + ').',
+      action: 'Revisar prazos com os grupos responsáveis e registrar o novo compromisso (ou risco aceito) no ServiceNow.',
+      ids: uniq([].concat.apply([], od.map(function (x) { return x.p.incidents; }))) });
+    // 8. RCA envelhecido
+    var oldRca = M.problems.filter(function (pp) { return prbStatus(pp) === 'rca' && (prbAging(pp) || 0) > 30; });
+    if (oldRca.length) push({ rule: 'rca', subject: 'aging', prio: oldRca.length >= 3 ? 'alta' : 'media', front: 'Problemas', title: 'Acelerar os RCAs em aberto há mais de 30 dias',
+      ev: '<b>' + oldRca.length + '</b> ' + plural(oldRca.length, 'Problema', 'Problemas') + ' em RCA há mais de 30 dias (' + esc(oldRca.slice(0, 4).map(function (pp) { return pp.id; }).join(', ')) + ').',
+      action: 'Definir dono e data para conclusão do RCA e, quando necessário, envolver fornecedor/infra.',
+      ids: uniq([].concat.apply([], oldRca.map(function (pp) { return pp.incidents; }))) });
+    // 9. Incidentes Sev 0 sem Problem
+    var s0np = list.filter(function (I) { return I.sevN === 0 && !(I.prbs || []).length; });
+    if (s0np.length) push({ rule: 'noprb', subject: 'sev0', prio: 'alta', front: 'Problemas', title: 'Garantir Problem para todo Sev 0',
+      ev: '<b>' + s0np.length + '</b> ' + plural(s0np.length, 'incidente Sev 0 sem', 'incidentes Sev 0 sem') + ' Problem associado (' + esc(s0np.slice(0, 4).map(function (I) { return I.id; }).join(', ')) + ').',
+      action: 'Abrir o Problema e a RCA para cada Sev 0 de O&L e acompanhar até o plano de ação.', ids: s0np.map(function (I) { return I.id; }) });
+    // 10. Hotspot de localidade
+    var hot = topOf(list, function (I) { return I.rows.filter(function (r) { return rowOk(r) && r.entKind !== 'sistema'; }).map(function (r) { return r.entName; }); }, 1)[0];
+    if (hot && hot.n >= 3) {
+      var ho = topOf(hot.list, KEYS.ofe, 2);
+      push({ rule: 'hot', subject: hot.k, prio: hot.n >= 5 ? 'alta' : 'media', front: 'Operação', title: 'Deep-dive em ' + hot.k,
+        ev: '<b>' + hot.n + '</b> incidentes em ' + esc(hot.k) + ' (MTTR ' + fmtHM(stats(hot.list).mttr) + ')' + (ho.length ? '; ofensores: ' + esc(ho.map(function (t) { return t.k + ' (' + t.n + ')'; }).join(', ')) : '') + '.',
+        action: 'Agenda específica com a operação da localidade e os times de aplicação/infra para um plano de estabilização.', ids: hot.list.map(function (I) { return I.id; }) });
+    }
+    // 11. Disponibilidade abaixo da Meta
+    M.flows.forEach(function (f) {
+      if (!isNum(f.disp.cv) || !hasRefs(f.disp.refs) || r2(f.disp.cv) >= r2(f.disp.refs.meta)) return;
+      push({ rule: 'disp', subject: f.cfg.key, prio: f.disp.status.key === 'atencao' ? 'alta' : 'media', front: 'Disponibilidade', title: 'Recuperar a Disponibilidade de ' + f.cfg.short,
+        ev: 'Média do período em <b>' + fmtPct(f.disp.cv, 2) + '</b> vs Meta ' + fmtPct(f.disp.refs.meta, 2) + ' (' + f.disp.status.label + '); ' + f.s.n + ' incidentes no fluxo.',
+        action: 'Priorizar os incidentes que mais consumiram minutos no fluxo (seção Disponibilidade) e revisar os planos dos Problemas ligados a eles.', ids: f.cur.map(function (I) { return I.id; }) });
+    });
+    var order = { alta: 0, media: 1, baixa: 2 };
+    ops.sort(function (a, b) { return order[a.prio] - order[b.prio]; });
+    return ops;
+  }
+  var ACT_KEY = 'olx-acoes-v1';
+  function loadActs() { try { return JSON.parse(window.localStorage.getItem(ACT_KEY) || '{}') || {}; } catch (e) { return {}; } }
+  function saveActs(a) { try { window.localStorage.setItem(ACT_KEY, JSON.stringify(a)); } catch (e) { /* armazenamento indisponível */ } }
+  function renderAcoes() {
+    var acts = loadActs(), ops = M.ops;
+    var cards = ops.length ? '<div class="ox-ops">' + ops.map(function (o) {
+      var a = acts[o.id] || {};
+      return '<div class="ox-op is-' + (o.prio === 'alta' ? 'high' : 'mid') + (a.cap ? ' is-captured' : '') + '" data-op="' + esc(o.id) + '"><div class="oh"><h4>' + esc(o.title) + '</h4><span class="prio ' + o.prio + '">' + (o.prio === 'alta' ? 'Alta' : 'Média') + '</span></div>' +
+        '<div class="tags"><span class="tag">' + esc(o.front) + '</span>' + (o.ids && o.ids.length ? '<button type="button" class="tag" style="cursor:pointer" data-action="open-ids" data-ids="' + esc(o.ids.join(',')) + '" data-title="' + esc(o.title) + '">' + o.ids.length + ' incidentes →</button>' : '') + '</div>' +
+        '<div class="ev">' + o.ev + '</div><div class="ac"><b>Ação sugerida:</b> ' + esc(o.action) + '</div>' +
+        '<div class="cap"><label><input type="checkbox" data-act="cap"' + (a.cap ? ' checked' : '') + '> Capturar ação</label><input type="text" data-act="owner" placeholder="Responsável" value="' + esc(a.owner || '') + '"><input type="date" data-act="due" value="' + esc(a.due || '') + '" aria-label="Prazo"></div>' +
+        '<textarea data-act="note" placeholder="Combinado na agenda / próximo passo">' + esc(a.note || '') + '</textarea></div>';
+    }).join('') + '</div>' : '<div class="empty">Nenhuma oportunidade identificada pelas regras para o período.</div>';
+    var nCap = ops.filter(function (o) { return (acts[o.id] || {}).cap; }).length;
+    $('sec-acoes').innerHTML = sectionHead('target', 'Saída da agenda', 'Oportunidades e próximos passos',
+      'Sugestões geradas a partir dos dados do período (regras de monitoração, infraestrutura, recorrência, MTTR/OLA, mudanças, problemas e disponibilidade). Marque o que foi acordado, com responsável e prazo, e exporte a lista. As anotações ficam salvas neste navegador.',
+      '<button type="button" class="btn" data-action="export-ops">' + icon('sheet') + 'Exportar oportunidades</button><button type="button" class="btn btn-accent" data-action="export-acts">' + icon('sheet') + 'Exportar ações capturadas (' + nCap + ')</button>') + cards;
+  }
+  function onActInput(ev) {
+    var t = ev.target, k = t && t.getAttribute && t.getAttribute('data-act');
+    if (!k) return;
+    var card = t.closest('[data-op]');
+    if (!card) return;
+    var id = card.getAttribute('data-op'), acts = loadActs(), a = acts[id] = acts[id] || {};
+    a[k] = t.type === 'checkbox' ? t.checked : t.value;
+    saveActs(acts);
+    if (k === 'cap') {
+      card.classList.toggle('is-captured', !!a.cap);
+      var btn = document.querySelector('[data-action="export-acts"]');
+      if (btn) btn.innerHTML = icon('sheet') + 'Exportar ações capturadas (' + M.ops.filter(function (o) { return (acts[o.id] || {}).cap; }).length + ')';
+    }
+  }
+  function strip(html) { var d = document.createElement('div'); d.innerHTML = html; return d.textContent || ''; }
+  function exportOps(onlyCaptured) {
+    var acts = loadActs();
+    var ops = M.ops.filter(function (o) { return !onlyCaptured || (acts[o.id] || {}).cap; });
+    if (!ops.length) { toast(onlyCaptured ? 'Nenhuma ação capturada. Marque "Capturar ação" nos cartões.' : 'Nenhuma oportunidade para exportar.'); return; }
+    exportSheet('O&L - ' + (onlyCaptured ? 'Ações capturadas' : 'Oportunidades') + ' - ' + M.L.curShort,
+      ['Prioridade', 'Frente', 'Oportunidade', 'Evidência', 'Ação sugerida', 'Capturada', 'Responsável', 'Prazo', 'Combinado', 'Incidentes', 'Período', 'Comparativo'],
+      ops.map(function (o) { var a = acts[o.id] || {}; return [o.prio === 'alta' ? 'Alta' : 'Média', o.front, o.title, strip(o.ev), o.action, a.cap ? 'Sim' : 'Não', a.owner || '', a.due ? a.due.split('-').reverse().join('/') : '', a.note || '', (o.ids || []).join(', '), M.L.cur, M.L.prev]; }));
+  }
+
+  /* ------------------------------------------------------- Base de incidentes */
+  function baseFiltered() {
+    var f = state.base, q = fold(f.q);
+    return M.cur.filter(function (I) {
+      if (f.flow && I.flows.indexOf(f.flow) === -1) return false;
+      if (f.layer && I.layer !== f.layer) return false;
+      if (f.sev !== '' && String(I.sevN) !== f.sev) return false;
+      if (f.origem && I.ok !== f.origem) return false;
+      if (f.prb === 'com' && !(I.prbs || []).length) return false;
+      if (f.prb === 'sem' && (I.prbs || []).length) return false;
+      if (q && fold([I.id, I.tit, I.ofe, (I.tImp || []).join(' '), I.ents.join(' '), I.imps.join(' '), (I.prbs || []).join(' '), I.dOf, I.dImp].join(' ')).indexOf(q) === -1) return false;
+      return true;
+    });
+  }
+  function incRow(I) {
+    var ola = I.olaOk === null ? '<span class="muted">—</span>' : (I.olaOk ? '<span class="target-ok">✓</span>' : '<span class="target-bad">✕</span>');
+    var prbs = (I.prbObjs || []).map(function (p) { return esc(p.id) + ' <span class="muted">(' + esc(PRB_STATUS[prbStatus(p)].label) + ')</span>'; }).join('<br>') || esc((I.prbs || []).join(', ')) || '<span class="muted">—</span>';
+    var cz = incCausa(I);
+    return '<tr><td class="id">' + esc(I.id) + '<div class="desc">' + esc(I.streams.join(', ')) + '</div></td><td class="nowrap"><span class="sev-dot s' + (I.sevN === 0 ? 0 : 1) + '"></span>' + (isNum(I.sevN) ? 'Sev ' + I.sevN : '—') + '</td><td class="nowrap">' + fmtDate(I.ab) + '</td>' +
+      '<td>' + esc(flowNames(I).join(', ') || 'Sem fluxo mapeado') + '<div class="desc">' + esc(I.ents.join(', ')) + '</div>' + (I.mks.length ? '<div class="flags" style="display:flex;margin-top:3px">' + I.mks.map(function (k) { return flag(k); }).join('') + '</div>' : '') + '</td>' +
+      '<td>' + layerTag(I.layer) + '</td><td class="nowrap">' + esc(ORIGENS.find(function (o) { return o.key === I.ok; }).label) + '</td><td class="nowrap">' + fmtHM(I.ttrU) + (I.outlier ? ' <span class="tag">outlier</span>' : '') + '</td><td class="nowrap">' + ola + '</td>' +
+      '<td>' + esc((I.tImp || []).join(', ')) + '</td><td>' + esc(I.ofe) + (I.isChange && I.sm ? '<div class="desc">' + esc(I.typeSm || '') + ' ' + esc(I.sm) + '</div>' : '') + '</td><td class="nowrap">' + prbs + '</td>' +
+      '<td class="wrap">' + (I.tit ? '<b>' + esc(I.tit) + '</b>' : '') + (I.dImp ? '<div class="desc">' + esc(I.dImp) + '</div>' : '') + (I.dOf ? '<div class="desc"><b>Ofensor:</b> ' + esc(I.dOf) + '</div>' : '') + (cz.causa ? '<div class="desc"><b>Causa raiz:</b> ' + esc(cz.causa) + (cz.processo ? ' · ' + esc(cz.processo) : '') + '</div>' : '') + '</td></tr>';
+  }
+  function incTable(list) {
+    if (!list.length) return '<div class="empty">Sem incidentes.</div>';
+    return '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Incidente</th><th>Sev</th><th>Abertura</th><th>Fluxo · localidade</th><th>Camada</th><th>Detecção</th><th>TTR</th><th>OLA</th><th>Tecnologia impactada</th><th>Ofensor</th><th>Problem</th><th>Descrição</th></tr></thead><tbody>' +
+      list.map(incRow).join('') + '</tbody></table></div>';
+  }
+  function renderBase() {
+    var f = state.base, list = baseFiltered();
+    var opt = function (v, l, cur) { return '<option value="' + esc(v) + '"' + (cur === v ? ' selected' : '') + '>' + esc(l) + '</option>'; };
+    var filters = '<div class="ox-filters">' +
+      '<select data-bf="flow">' + opt('', 'Todos os fluxos', f.flow) + D.config.flows.map(function (x) { return opt(x.key, x.short, f.flow); }).join('') + '</select>' +
+      '<select data-bf="layer">' + opt('', 'Todas as camadas', f.layer) + opt('app', 'Aplicação', f.layer) + opt('infra', 'Infraestrutura', f.layer) + '</select>' +
+      '<select data-bf="sev">' + opt('', 'Sev 0 e Sev 1', f.sev) + opt('0', 'Sev 0', f.sev) + opt('1', 'Sev 1', f.sev) + '</select>' +
+      '<select data-bf="origem">' + opt('', 'Toda detecção', f.origem) + ORIGENS.map(function (o) { return opt(o.key, o.label, f.origem); }).join('') + '</select>' +
+      '<select data-bf="prb">' + opt('', 'Com e sem Problem', f.prb) + opt('com', 'Com Problem', f.prb) + opt('sem', 'Sem Problem', f.prb) + '</select>' +
+      '<input type="search" data-bf="q" placeholder="Buscar incidente, tecnologia, ofensor, localidade…" value="' + esc(f.q) + '"></div>';
+    $('sec-base').innerHTML = sectionHead('list', 'Base analítica', 'Base de incidentes do período',
+      list.length + ' de ' + M.cur.length + ' incidentes de ' + esc(M.L.cur) + ' (filtro de camada do topo aplicado). Clique nos cabeçalhos dos cards e rankings para filtrar por tema.',
+      '<button type="button" class="btn btn-accent" data-action="export-base">' + icon('sheet') + 'Exportar para Planilhas Google</button>') +
+      filters + '<div id="ox-base-table">' + incTable(list) + '</div>';
+  }
+  function exportIncidents(title, list) {
+    if (!list.length) { toast('Não há incidentes para exportar.'); return; }
+    exportSheet(title, ['Incidente', 'Ano', 'Stream', 'Severidade', 'Abertura', 'Fluxo(s)', 'Localidade(s) / Sistema(s)', 'Mercado(s)', 'Impacto(s)', 'Camada', 'Critério da camada', 'Origem da Detecção', 'TTR (MI)', 'Dentro do OLA', 'Outlier', 'Tecnologia impactada', 'Ofensor', 'Tipo SM', 'SM', 'Problem(s)', 'Status do Problem', 'Causa raiz (IA)', 'Processo de origem (IA)', 'Grupo (ServiceNow)', 'Service (ServiceNow)', 'Título', 'Descrição do impacto', 'Descrição do ofensor', 'Solução'],
+      list.map(function (I) {
+        var cz = incCausa(I);
+        return [I.id, I.year, I.streams.join(', '), isNum(I.sevN) ? 'Sev ' + I.sevN : '', fmtDate(I.ab), flowNames(I).join(', '), I.ents.join(', '), I.mks.join(', ').toUpperCase(), I.imps.join(', '), LAYER_LABEL[I.layer], I.layerWhy,
+          ORIGENS.find(function (o) { return o.key === I.ok; }).label, fmtHM(I.ttrU), I.olaOk === null ? '' : (I.olaOk ? 'Sim' : 'Não'), I.outlier ? 'Sim' : 'Não', (I.tImp || []).join(', '), I.ofe, I.typeSm || '', I.sm || '',
+          (I.prbs || []).join(', '), (I.prbObjs || []).map(function (p) { return PRB_STATUS[prbStatus(p)].label; }).join(', '), cz.causa || '', cz.processo || '', (I.sn && I.sn.group) || '', (I.sn && I.sn.service) || '', I.tit, I.dImp, I.dOf, I.sol];
+      }));
+  }
+
+  /* ------------------------------------------------------------- Rodapé */
+  function renderFoot() {
+    var w = (D.warnings || []).slice();
+    $('ox-foot').innerHTML = 'Fontes: Major_Incidents_Impactos_' + D.year + '/' + D.prevYear + ' (Stream O&amp;L e Planejamento Logístico, origem Tecnologia) · MajorIncidentes (TTR oficial, Ofensor, Tecnologia impactada, SM) · Major_ServiceNow (Caller, Grupo, Service, Category) · MajorProblems, Problem_ServiceNow, Manual_Info e PTASK_RCA/IMP · Change_MI · Disponibilidade e apuracao. ' +
+      'Metas: MTTR Sev 0 ≤ ' + fmtHM(T.mttrSev0) + ' · Sev 1 ≤ ' + fmtHM(T.mttrSev1) + ' · OLA Sev 0 ≤ ' + fmtHM(T.olaSev0) + ' · Sev 1 ≤ ' + fmtHM(T.olaSev1) + '.' +
+      (w.length ? '<br>Avisos: ' + esc(w.join(' · ')) : '');
+  }
+
+  /* ---------------------------------------------------------------- Modal */
+  function openModal(o) { state.modal = o; o.which = o.which || 'cur'; renderModal(); }
+  function closeModal() { state.modal = null; $('ox-modal-root').innerHTML = ''; document.body.style.overflow = ''; }
+  function renderModal() {
+    var o = state.modal;
+    if (!o) return;
+    var list = (o.which === 'prev' ? o.prevList : o.list) || [];
+    list = list.slice().sort(function (a, b) { return (b.ab || 0) - (a.ab || 0); });
+    var s = stats(list);
+    var seg = o.prevList ? '<div class="seg" id="ox-modal-year"><button type="button" data-v="cur"' + (o.which === 'cur' ? ' class="is-active"' : '') + '>' + esc(M.L.curShort) + ' (' + o.list.length + ')</button><button type="button" data-v="prev"' + (o.which === 'prev' ? ' class="is-active"' : '') + '>' + esc(M.L.prevShort) + ' (' + o.prevList.length + ')</button></div>' : '';
+    var sm = '<div class="legend">' + s.n + ' ' + plural(s.n, 'incidente', 'incidentes') + ' · ' + s.sev0 + ' Sev 0 · ' + s.sev1 + ' Sev 1 · MTTR ' + fmtHM(s.mttr) + ' · OLA ' + fmtPct(s.ola) + ' · Monitoração ' + fmtPct(s.pMon, 0) + ' · Infra ' + s.lay.infra + '</div>';
+    $('ox-modal-root').innerHTML = '<div class="modal-overlay" data-action="modal-bg"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="ox-modal-title">' +
+      '<div class="modal-head">' + tile(o.icon || 'list') + '<div class="titles"><div class="eyebrow">' + esc(o.eyebrow || 'Incidentes de O&L') + '</div><h3 id="ox-modal-title">' + esc(o.title) + '</h3>' + sm + '</div>' +
+      '<button type="button" class="close-x" data-action="modal-close" aria-label="Fechar">' + icon('close') + '</button></div>' +
+      '<div class="modal-body"><div class="modal-tools">' + seg + '<button type="button" class="btn" data-action="modal-export">' + icon('sheet') + 'Exportar para Planilhas Google</button></div>' + incTable(list) + '</div></div></div>';
+    document.body.style.overflow = 'hidden';
+  }
+  function openKey(spec) {
+    var parts = spec.split('|'), kind = parts[0], k = parts[1], scope = parts[2] || '';
+    var f = function (l) {
+      return l.filter(function (I) {
+        if (KEYS[kind](I).indexOf(k) === -1) return false;
+        if (scope === 'app' || scope === 'infra') return I.layer === scope;
+        if (scope === 'eu') return I.ok === 'eu';
+        if (scope && D.config.flows.some(function (x) { return x.key === scope; })) return flowRows(I, scope).length > 0;
+        return true;
+      });
+    };
+    var all = scope === 'app' || scope === 'infra';
+    var cur = f(all ? select(M.w, 'all') : M.cur), prev = M.prev ? f(all ? select(M.cw, 'all') : M.prev) : null;
+    openModal({ title: k, eyebrow: { tec: 'Tecnologia impactada', ofe: 'Ofensor', ent: 'Localidade / sistema', grp: 'Grupo resolvedor', svc: 'Service' }[kind] + (scope ? ' · ' + (LAYER_LABEL[scope] || (scope === 'eu' ? 'End-users' : (D.config.flows.find(function (x) { return x.key === scope; }) || {}).short || scope)) : ''), icon: kind === 'ent' ? 'pin' : 'monitor', list: cur, prevList: prev });
+  }
+
+  /* ----------------------------------------------------- Exportação (Sheets) */
+  var EXPORTING = false;
+  function toast(msg, url) {
+    var el = $('ox-toast');
+    if (!el) { el = document.createElement('div'); el.id = 'ox-toast'; el.className = 'ox-toast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+    clearTimeout(el._t);
+    el.innerHTML = '<div style="display:flex;gap:10px;align-items:flex-start"><div style="flex:1">' + esc(msg) + (url ? '<div style="margin-top:6px"><a href="' + esc(url) + '" target="_blank" rel="noopener">Abrir planilha</a></div>' : '') + '</div><button type="button" class="close-x" aria-label="Fechar" onclick="this.closest(\'.ox-toast\').remove()">' + icon('close') + '</button></div>';
+    el._t = setTimeout(function () { if (el.parentNode) el.remove(); }, url ? 20000 : 9000);
+  }
+  function exportSheet(title, headers, rows) {
+    if (EXPORTING) { toast('Já existe uma planilha sendo gerada. Aguarde.'); return; }
+    if (!(window.google && google.script && google.script.run)) { toast('Exportação disponível só pela URL do Web App.'); return; }
+    var win = null;
+    try { win = window.open('', '_blank'); if (win) { win.document.title = 'Gerando planilha…'; win.document.body.innerHTML = '<p style="font:15px Arial,sans-serif;padding:32px">Gerando a planilha no Google Sheets…</p>'; } } catch (e) { /* aba de outra origem */ }
+    EXPORTING = true;
+    toast('Gerando a planilha (' + rows.length + ' linha(s))…');
+    google.script.run.withSuccessHandler(function (res) {
+      EXPORTING = false;
+      if (!res || res.error || !res.url) { if (win) try { win.close(); } catch (e) {} toast('Não foi possível gerar a planilha: ' + ((res && res.error) || 'resposta vazia.')); return; }
+      var opened = false;
+      if (win && !win.closed) { try { win.location.href = res.url; opened = true; } catch (e) { opened = false; } }
+      toast(opened ? 'Planilha aberta em uma nova aba.' : 'Planilha pronta.', res.url);
+    }).withFailureHandler(function (err) {
+      EXPORTING = false;
+      if (win) try { win.close(); } catch (e) {}
+      toast('Falha ao gerar a planilha: ' + (err && err.message ? err.message : err));
+    }).exportToGoogleSheet({ title: title, headers: headers, rows: rows.map(function (r) { return r.map(function (v) { return v === null || v === undefined ? '' : (typeof v === 'number' ? v : String(v)); }); }) });
+  }
+
+  /* --------------------------------------------------------------- eventos */
+  function onClick(ev) {
+    var t = ev.target.closest('[data-action], .seg button');
+    if (!t) return;
+    var segEl = t.closest('.seg');
+    if (segEl && t.tagName === 'BUTTON' && !t.hasAttribute('data-action')) { onSeg(segEl, t.getAttribute('data-v')); return; }
+    var a = t.getAttribute('data-action');
+    if (a === 'goto') { var el = $(t.getAttribute('data-target')); if (el) { if (window.olScrollTo) window.olScrollTo(el); else el.scrollIntoView(); } }
+    else if (a === 'open-all') openModal({ title: 'Todos os incidentes de O&L', eyebrow: M.L.cur, icon: 'truck', list: M.cur, prevList: M.prev });
+    else if (a === 'open-flow') { var f = M.flows.find(function (x) { return x.cfg.key === t.getAttribute('data-flow'); }); if (f) openModal({ title: f.cfg.label, eyebrow: 'Fluxo', icon: f.cfg.icon, list: f.cur, prevList: f.prev }); }
+    else if (a === 'open-ent') {
+      var fl = M.flows.find(function (x) { return x.cfg.key === t.getAttribute('data-flow'); });
+      var e = fl && flowEntities(fl).find(function (x) { return x.key === t.getAttribute('data-ent'); });
+      if (e) openModal({ title: e.name, eyebrow: fl.cfg.short, icon: entIcon(e.kind, e.name), list: e.cur, prevList: e.prev });
+    }
+    else if (a === 'open-layer') { var l = t.getAttribute('data-layer'); openModal({ title: LAYER_LABEL[l], eyebrow: 'Camada', icon: l === 'infra' ? 'server' : 'monitor', list: select(M.w, 'all').filter(function (I) { return I.layer === l; }), prevList: M.prev ? select(M.cw, 'all').filter(function (I) { return I.layer === l; }) : null }); }
+    else if (a === 'open-origem') { var ok = t.getAttribute('data-k'), on = ORIGENS.find(function (o) { return o.key === ok; }); openModal({ title: on.label, eyebrow: 'Origem da Detecção', icon: 'radar', list: M.cur.filter(function (I) { return I.ok === ok; }), prevList: M.prev ? M.prev.filter(function (I) { return I.ok === ok; }) : null }); }
+    else if (a === 'open-key') openKey(t.getAttribute('data-k'));
+    else if (a === 'open-ids') { var ids = (t.getAttribute('data-ids') || '').split(',').filter(Boolean); openModal({ title: t.getAttribute('data-title') || 'Incidentes', eyebrow: 'Incidentes relacionados', icon: 'list', list: ids.map(function (id) { return BYID[id]; }).filter(Boolean) }); }
+    else if (a === 'open-inc') { var I = BYID[t.getAttribute('data-id')]; if (I) openModal({ title: I.id + (I.tit ? ' · ' + I.tit : ''), eyebrow: 'Incidente', icon: 'alert', list: [I] }); }
+    else if (a === 'modal-close') closeModal();
+    else if (a === 'modal-bg') { if (ev.target === t) closeModal(); }
+    else if (a === 'modal-export') { var o = state.modal; if (o) exportIncidents('O&L - ' + o.title + ' - ' + (o.which === 'prev' ? M.L.prevShort : M.L.curShort), (o.which === 'prev' ? o.prevList : o.list) || []); }
+    else if (a === 'export-base') exportIncidents('O&L - Base de incidentes - ' + M.L.curShort, baseFiltered());
+    else if (a === 'export-ops') exportOps(false);
+    else if (a === 'export-acts') exportOps(true);
+  }
+  function rerender() { var y = window.scrollY; renderAll(); window.scrollTo(0, y); }
+  function onSeg(segEl, v) {
+    var id = segEl.id;
+    if (id === 'ox-cmp') { if (state.cmp === v) return; state.cmp = v; setSegActive(segEl, v); rerender(); }
+    else if (id === 'ox-layer') { if (state.layer === v) return; state.layer = v; setSegActive(segEl, v); rerender(); }
+    else if (id === 'ox-card') { if (state.card === v) return; state.card = v; setSegActive(segEl, v); rerender(); }
+    else if (id === 'ox-rank') { state.rank = v; if (charts.pareto) { charts.pareto.destroy(); charts.pareto = null; } renderTecnologias(); }
+    else if (id === 'ox-modal-year') { state.modal.which = v; renderModal(); }
+  }
+  function setSegActive(segEl, v) { Array.prototype.forEach.call(segEl.querySelectorAll('button'), function (b) { b.classList.toggle('is-active', b.getAttribute('data-v') === v); }); }
+  function onKey(ev) {
+    if (ev.key === 'Escape' && state.modal) { closeModal(); return; }
+    if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.getAttribute && ev.target.getAttribute('role') === 'button' && ev.target.hasAttribute('data-action')) { ev.preventDefault(); ev.target.click(); }
+  }
+  var baseTimer = null;
+  function onBaseFilter(ev) {
+    var t = ev.target, k = t && t.getAttribute && t.getAttribute('data-bf');
+    if (!k) return;
+    state.base[k] = t.value;
+    clearTimeout(baseTimer);
+    baseTimer = setTimeout(function () {
+      var list = baseFiltered();
+      $('ox-base-table').innerHTML = incTable(list);
+      var sub = document.querySelector('#sec-base .sec-head .sub');
+      if (sub) sub.textContent = list.length + ' de ' + M.cur.length + ' incidentes de ' + M.L.cur + ' (filtro de camada do topo aplicado).';
+    }, k === 'q' ? 220 : 0);
+  }
+
+  var tipEl = null;
+  function onOver(ev) {
+    var t = ev.target.closest('[data-tip]');
+    if (!t) return;
+    tipEl = tipEl || $('ox-tooltip');
+    tipEl.textContent = t.getAttribute('data-tip');
+    tipEl.hidden = false;
+    var r = t.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+    var x = Math.min(window.innerWidth - w - 8, Math.max(8, r.left + r.width / 2 - w / 2)), y = r.top - h - 8;
+    if (y < 8) y = r.bottom + 8;
+    tipEl.style.left = x + 'px'; tipEl.style.top = y + 'px';
+  }
+  function onOut(ev) { var t = ev.target.closest('[data-tip]'); if (!t || (ev.relatedTarget && t.contains(ev.relatedTarget))) return; if (tipEl) tipEl.hidden = true; }
+
+  var spy = null;
+  function setupScrollSpy() {
+    if (spy || !('IntersectionObserver' in window)) return;
+    var links = Array.prototype.slice.call(document.querySelectorAll('#ox-nav a'));
+    spy = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) { if (en.isIntersecting) links.forEach(function (l) { l.classList.toggle('is-active', l.getAttribute('data-sec') === en.target.id); }); });
+    }, { rootMargin: '-150px 0px -60% 0px' });
+    links.forEach(function (l) { var s = $(l.getAttribute('data-sec')); if (s) spy.observe(s); });
+  }
+  function destroyCharts() { Object.keys(charts).forEach(function (k) { if (charts[k]) charts[k].destroy(); charts[k] = null; }); }
+
+  /* ------------------------------------------------------------------ carga */
+  function setLoading(on) { $('ox-loading').hidden = !on; }
+  function showError(msg) {
+    setLoading(false);
+    var box = $('ox-error');
+    box.hidden = false;
+    box.innerHTML = '<div class="error-box"><div class="sub-title" style="color:#691B34">' + icon('alert') + 'Não foi possível carregar a análise de O&amp;L</div><p>' + esc(msg) + '</p><button type="button" class="btn btn-accent" id="ox-retry">Tentar novamente</button></div>';
+    $('ox-retry').onclick = function () { box.hidden = true; load(state.year); };
+  }
+  function fillPeriods() {
+    var ps = $('ox-period'), list = periodDefs(), groups = {}, order = [];
+    if (!list.find(function (w) { return w.key === state.periodKey; })) state.periodKey = list[0].key;
+    list.forEach(function (w) { if (!groups[w.group]) { groups[w.group] = []; order.push(w.group); } groups[w.group].push(w); });
+    ps.innerHTML = order.map(function (g) { return '<optgroup label="' + esc(g) + '">' + groups[g].map(function (w) { return '<option value="' + w.key + '"' + (w.key === state.periodKey ? ' selected' : '') + '>' + esc(w.label + ' · ' + w.range) + '</option>'; }).join('') + '</optgroup>'; }).join('');
+    ps.disabled = false;
+  }
+  function onData(res) {
+    setLoading(false);
+    if (!res || !res.ok) { showError((res && res.error) || 'Resposta vazia do servidor.'); return; }
+    CACHE[res.year] = res;
+    D = res;
+    state.year = res.year;
+    prepare();
+    fillPeriods();
+    $('ox-error').hidden = true;
+    renderAll();
+    setupScrollSpy();
+  }
+  function load(year) {
+    if (year && CACHE[year]) { onData(CACHE[year]); return; }
+    setLoading(true);
+    if (!(window.google && google.script && google.script.run)) { showError('google.script.run indisponível (abra pela URL do Web App).'); return; }
+    google.script.run.withSuccessHandler(onData).withFailureHandler(function (e) { showError(e && e.message ? e.message : String(e)); }).getOLAnaliseData(year || null);
+  }
+  function init() {
+    if (window.Chart && window.ChartDataLabels) { Chart.register(window.ChartDataLabels); Chart.defaults.set('plugins.datalabels', { display: false }); }
+    if (window.Chart) { Chart.defaults.font.family = "'Aptos', 'Segoe UI', system-ui, sans-serif"; Chart.defaults.color = '#333D20'; }
+    Array.prototype.forEach.call(document.querySelectorAll('#ox-nav a'), function (a) {
+      a.insertAdjacentHTML('afterbegin', icon(a.getAttribute('data-icon')));
+      a.addEventListener('click', function (ev) { ev.preventDefault(); var s = $(a.getAttribute('data-sec')); if (s) { if (window.olScrollTo) window.olScrollTo(s); else s.scrollIntoView(); } });
+    });
+    var portal = $('ox-portal-link'); if (portal) portal.href = BASE_URL || '#';
+    var ol = $('ox-ol-link'); if (ol) ol.href = BASE_URL ? BASE_URL + '?view=ol' : '#';
+    document.addEventListener('click', onClick);
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('change', function (ev) { onActInput(ev); onBaseFilter(ev); });
+    document.addEventListener('input', function (ev) { var t = ev.target; if (t && t.getAttribute && (t.getAttribute('data-act') === 'owner' || t.getAttribute('data-act') === 'note')) onActInput(ev); if (t && t.getAttribute && t.getAttribute('data-bf') === 'q') onBaseFilter(ev); });
+    document.addEventListener('mouseover', onOver);
+    document.addEventListener('mouseout', onOut);
+    window.addEventListener('scroll', function () { if (tipEl) tipEl.hidden = true; }, { passive: true });
+    $('ox-period').addEventListener('change', function () { state.periodKey = this.value; rerender(); });
+    load(null);
+  }
+
+  window.OLX_DEBUG = { getState: function () { return state; }, getModel: function () { return M; }, getData: function () { return D; } };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
