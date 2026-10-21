@@ -10,11 +10,15 @@
 //  - MajorIncidentes[Ano]: TTR oficial, Severidade, Tecnologia Impactada, Ofensor, Problem, Type SM, SM Number;
 //  - Major_ServiceNow: Caller (Origem da Detecção), Priority, Grupo, Service, Category, Change Request;
 //  - Camada (Aplicação x Infraestrutura): aba opcional OL_Camada + regras por palavra-chave (olxClassifyLayer);
-//  - Problemas: MajorProblems / MajorProblems2026, Problem_ServiceNow, Manual_Info (Causa Raiz e Processo
-//    de Origem da IA, Qualidade de RCA/Plano), PTASK_RCA e PTASK_IMP (planos de ação e prazos);
+//  - Problemas: MajorProblems / MajorProblems2026, Problem_ServiceNow, PTASK_RCA (Causa do Problema e
+//    Processo de Origem classificados na tarefa de RCA) e PTASK_IMP, com estado, datas e equipe das tarefas
+//    pela RCATask_List (mesma base do Engajamento por Equipe da Visão Geral);
 //  - Mudanças: Change_MI (Type, Service, Grupo, janela planejada).
 
 const OLX_LAYER_SHEET = 'OL_Camada';
+// Meta de MTTR da sub-visão: a mesma com ou sem outliers (Sev 0 <= 02:00 e Sev 1 <= 06:00).
+const OLX_MTTR_TARGET_SEV0_MIN = 120;
+const OLX_MTTR_TARGET_SEV1_MIN = 360;
 
 // Palavras-chave (sem acento/caixa) que indicam Infraestrutura. Termos de até 4 letras casam só como
 // palavra inteira (olMatchKeyword), para "rf" não casar dentro de "performance", por exemplo.
@@ -184,8 +188,10 @@ function olxReadServiceNow(ss, idSet) {
 
 /**
  * Problemas ligados aos incidentes de O&L: MajorProblems/MajorProblems2026 (status, área, datas, risco aceito),
- * Problem_ServiceNow (statement, estado, grupo, notas de causa/correção), Manual_Info (Causa Raiz e Processo
- * de Origem da IA, Qualidade de RCA e de Plano de Ação) e as tarefas PTASK_RCA / PTASK_IMP (planos de ação).
+ * Problem_ServiceNow (statement, estado, grupo, notas de causa/correção) e as tarefas PTASK_RCA / PTASK_IMP.
+ * Causa do Problema e Processo de Origem vêm só da tarefa de RCA (PTASK_RCA: Cause Problem e Source process).
+ * Estado, abertura, fechamento e equipe de cada tarefa vêm da RCATask_List quando a tarefa está lá (mesma regra
+ * do Engajamento por Equipe da Visão Geral: fechada = state "closed"); senão, das próprias abas PTASK.
  */
 function olxReadProblems(ss, incSet, prbSeed) {
   const prbSet = {};
@@ -247,29 +253,20 @@ function olxReadProblems(ss, incSet, prbSeed) {
     }
   }
 
-  // 3) Manual_Info (IA): por Incidente, em qualquer um dos 3 blocos (Geral, Deploys, Tradicionais)
-  const rca = {};
-  const mi = olxSheetValues(ss, 'Manual_Info');
-  if (mi) {
-    const blocks = [
-      { u: 'Geral', id: MI_GERAL_ID, prb: MI_GERAL_PROBLEMA, causa: MI_GERAL_TIPO_CAUSA_RAIZ, proc: MI_GERAL_PROCESSO_ORIGEM, qr: MI_GERAL_QUALIDADE_RCA, qp: MI_GERAL_QUALIDADE_PLANO_ACAO },
-      { u: 'Deploy', id: MI_DEPLOY_ID, prb: MI_DEPLOY_PROBLEMA, causa: MI_DEPLOY_TIPO_CAUSA_RAIZ, proc: MI_DEPLOY_PROCESSO_ORIGEM, qr: MI_DEPLOY_QUALIDADE_RCA, qp: MI_DEPLOY_QUALIDADE_PLANO_ACAO },
-      { u: 'Tradicional', id: MI_TRAD_ID, prb: MI_TRAD_PROBLEMA, causa: MI_TRAD_TIPO_CAUSA_RAIZ, proc: MI_TRAD_PROCESSO_ORIGEM, qr: MI_TRAD_QUALIDADE_RCA, qp: MI_TRAD_QUALIDADE_PLANO_ACAO }
-    ];
-    for (let i = 2; i < mi.length; i++) {
-      const r = mi[i];
-      blocks.forEach(b => {
-        const inc = String(r[b.id] || '').trim();
-        if (!inc || !incSet[inc]) return;
-        const prbs = olxPrbList(r[b.prb]);
-        prbs.forEach(prb => link(inc, prb));
-        const cur = rca[inc] || {};
-        rca[inc] = {
-          universo: cur.universo || b.u,
-          causa: cur.causa || olxTxt(r[b.causa]), processo: cur.processo || olxTxt(r[b.proc]),
-          qRca: cur.qRca || olxTxt(r[b.qr]), qPlano: cur.qPlano || olxTxt(r[b.qp]), prb: cur.prb || prbs[0] || ''
-        };
-      });
+  // 3) RCATask_List: estado, abertura, fechamento e equipe de cada tarefa (base do Engajamento por Equipe)
+  const rtl = {};
+  const rtlValues = olxSheetValues(ss, 'RCATask_List');
+  const rtlDate = v => {
+    if (olIsDate(v)) return v.getTime();
+    const m = String(v || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    return m ? new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)).getTime() : null;
+  };
+  if (rtlValues) {
+    for (let i = 1; i < rtlValues.length; i++) {
+      const r = rtlValues[i];
+      const num = String(r[0] || '').trim();
+      if (!num || rtl[num]) continue;
+      rtl[num] = { state: olxTxt(r[1]), opened: rtlDate(r[2]), closed: rtlDate(r[3]), group: olxTxt(r[6]) || 'N/A', taskType: olxTxt(r[10]) };
     }
   }
 
@@ -283,12 +280,16 @@ function olxReadProblems(ss, incSet, prbSeed) {
       const inc = String(r[3] || '').trim();
       if (prb && incSet[inc]) link(inc, prb);
       if (!prb || !prbSet[prb]) continue;
+      const num = olxTxt(r[PTASK_COL_NUMBER]);
+      const L = rtl[num] || null;
+      const closed = L ? olFold(L.state) === 'closed' : olxIsClosedState(r[PTASK_COL_STATE]);
       P(prb).tasks.push({
-        num: olxTxt(r[PTASK_COL_NUMBER]), type: type, desc: olxTxt(r[PTASK_COL_SHORT_DESC], 220), taskType: olxTxt(r[PTASK_COL_TYPE]),
-        state: olxTxt(r[PTASK_COL_STATE]), closed: olxIsClosedState(r[PTASK_COL_STATE]), closeCode: olxTxt(r[9]),
-        group: olxTxt(r[PTASK_COL_ASSIGNMENT_GROUP]) || 'N/A', causa: olxTxt(r[12]), processo: olxTxt(r[13]),
-        causeNotes: olxTxt(r[14], 400), plano: olxTxt(r[15], 500), due: olxMs(r[17]), created: olxMs(r[19]),
-        iaCausa: type === 'RCA' ? olxTxt(r[23]) : '', iaProc: type === 'RCA' ? olxTxt(r[24]) : ''
+        num: num, type: type, desc: olxTxt(r[PTASK_COL_SHORT_DESC], 220), taskType: (L && L.taskType) || olxTxt(r[PTASK_COL_TYPE]),
+        state: (L && L.state) || olxTxt(r[PTASK_COL_STATE]), closed: closed, src: L ? 'RCATask_List' : name,
+        group: (L && L.group !== 'N/A' ? L.group : olxTxt(r[PTASK_COL_ASSIGNMENT_GROUP])) || 'N/A',
+        opened: L && L.opened ? L.opened : olxMs(r[19]), closedAt: L ? L.closed : (closed ? olxMs(r[21]) : null),
+        causa: type === 'RCA' ? olxTxt(r[12]) : '', processo: type === 'RCA' ? olxTxt(r[13]) : '',
+        plano: olxTxt(r[15], 500), due: olxMs(r[17])
       });
     }
   };
@@ -298,7 +299,7 @@ function olxReadProblems(ss, incSet, prbSeed) {
   Object.keys(byInc).forEach(inc => byInc[inc].forEach(prb => { const p = P(prb); if (p.incidents.indexOf(inc) === -1) p.incidents.push(inc); }));
   // Só os Problemas ligados a algum incidente de O&L
   Object.keys(problems).forEach(prb => { if (!problems[prb].incidents.some(inc => incSet[inc])) delete problems[prb]; });
-  return { byInc: byInc, problems: problems, rca: rca };
+  return { byInc: byInc, problems: problems, rtlFound: !!rtlValues };
 }
 
 /** Change_MI só para as Mudanças pedidas. */
@@ -425,7 +426,6 @@ function getOLAnaliseData(year) {
         I.chgInfo = I.sm && changes[I.sm] ? changes[I.sm] : null;
         const L = olxClassifyLayer(I, overrides);
         I.layer = L.layer; I.layerWhy = L.why; I.layerSrc = L.src;
-        I.rca = prob.rca[id] || null;
         delete I.chgInfo; // Mudança vai em changes (evita duplicar no payload)
       });
       out[y] = {
@@ -454,6 +454,7 @@ function getOLAnaliseData(year) {
       problems: prob.problems,
       changes: changes,
       layerOverrides: { found: overrides.found, rows: overrides.rows, sheet: OLX_LAYER_SHEET },
+      rcaTaskListFound: prob.rtlFound,
       config: {
         flows: OL_FLOW_DISPLAY_ORDER.map(k => {
           const f = OL_FLOWS.find(x => x.key === k);
@@ -462,8 +463,8 @@ function getOLAnaliseData(year) {
         catalog: OL_CATALOGO,
         targets: {
           olaSev0: OLA_TARGET_SEV0_MIN, olaSev1: OLA_TARGET_SEV1_MIN,
-          mttrSev0: MTTR_TARGET_SEV0_MIN, mttrSev1: MTTR_TARGET_SEV1_MIN,
-          mttrSemOutliersSev0: MTTR_TARGET_SEM_OUTLIERS_SEV0_MIN, mttrSemOutliersSev1: MTTR_TARGET_SEM_OUTLIERS_SEV1_MIN,
+          mttrSev0: OLX_MTTR_TARGET_SEV0_MIN, mttrSev1: OLX_MTTR_TARGET_SEV1_MIN,
+          mttrSemOutliersSev0: OLX_MTTR_TARGET_SEV0_MIN, mttrSemOutliersSev1: OLX_MTTR_TARGET_SEV1_MIN,
           outlierSev0: MTTR_OUTLIER_SEV0_MIN, outlierSev1: MTTR_OUTLIER_SEV1_MIN
         }
       }

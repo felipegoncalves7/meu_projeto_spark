@@ -79,6 +79,7 @@ const OL_CATALOGO = {
     { name: 'HUB Itupeva', country: 'br', kind: 'hub', aliases: ['cd itupeva'], prevAliases: ['cd itupeva'] },
     { name: 'PEA Cachoeirinha', country: 'br', kind: 'pea' },
     { name: 'PEA Manaus', country: 'br', kind: 'pea' },
+    { name: 'CD Garín', country: 'ar', kind: 'cd' },
     { name: 'CD Pudahuel', country: 'cl', kind: 'cd' },
     { name: 'CD Guarne', country: 'co', kind: 'cd' },
     { name: 'CD Amaguaña', country: 'ec', kind: 'cd' },
@@ -128,7 +129,7 @@ const OL_MERCADOS = {
 // Países CARD (América Central e República Dominicana): ficam fora por padrão (filtro "CARD" na tela).
 const OL_CARD_ISO = ['gt', 'sv', 'hn', 'ni', 'pa', 'cr', 'do', 'card'];
 // Países em que o fluxo de Separação tem CDs nomeados no catálogo; nos demais, a linha sem Localidade vira card do país.
-const OL_SEP_COUNTRIES_WITH_CD = ['br', 'cl', 'co', 'ec', 'mx', 'pe'];
+const OL_SEP_COUNTRIES_WITH_CD = ['br', 'ar', 'cl', 'co', 'ec', 'mx', 'pe'];
 
 const OL_MONTHS_PT = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 

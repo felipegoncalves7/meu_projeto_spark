@@ -171,7 +171,8 @@
   var D = null, M = null, ALL = [], BYID = {}, charts = {}, CACHE = {};
   var state = {
     year: null, periodKey: 'l6', cmp: 'yoy', layer: 'all', card: 'exc', rank: 'tec', modal: null,
-    base: { flow: '', layer: '', sev: '', origem: '', prb: '', q: '' }
+    base: { flow: '', layer: '', sev: '', origem: '', prb: '', q: '' },
+    eng: { type: 'rca', sort: 'volume', teams: [] }
   };
   var BASE_URL = (document.body && document.body.getAttribute('data-base-url')) || '';
   var T = {};
@@ -380,14 +381,25 @@
   function prbAging(p) {
     var o = prbOpened(p);
     if (!isNum(o)) return null;
-    var st = prbStatus(p), end = st === 'resolved' && p.gprob && isNum(p.gprob.closed) ? p.gprob.closed : D.today;
-    return Math.max(0, Math.floor((end - o) / 86400000));
+    var st = prbStatus(p);
+    if (st === 'resolved' || st === 'risk') return p.gprob && isNum(p.gprob.closed) ? Math.max(0, Math.floor((p.gprob.closed - o) / 86400000)) : null;
+    return Math.max(0, Math.floor((D.today - o) / 86400000));
   }
+  // Contagem por status: abertos = todos menos Resolvidos e Risco aceito
+  function prbSummary(probs) {
+    var o = { total: probs.length, rca: 0, fix: 0, resolved: 0, risk: 0, other: 0 };
+    probs.forEach(function (p) { var s = prbStatus(p); if (s === 'nd') s = 'other'; o[s]++; });
+    o.open = o.total - o.resolved - o.risk;
+    o.agingRes = avg(probs.filter(function (p) { return prbStatus(p) === 'resolved'; }).map(prbAging));
+    return o;
+  }
+  // Causa do Problema e Processo de Origem: só o que foi classificado na tarefa de RCA (PTASK_RCA: Cause Problem e
+  // Source process), priorizando as tarefas já concluídas.
   function prbCausa(p) {
-    var c = '', pr = '', q = '', qp = '';
-    (p.incidents || []).forEach(function (id) { var I = BYID[id]; if (I && I.rca) { c = c || I.rca.causa; pr = pr || I.rca.processo; q = q || I.rca.qRca; qp = qp || I.rca.qPlano; } });
-    (p.tasks || []).forEach(function (t) { if (t.type === 'RCA') { c = c || t.iaCausa || t.causa; pr = pr || t.iaProc || t.processo; } });
-    return { causa: c, processo: pr, qRca: q, qPlano: qp };
+    var c = '', pr = '';
+    var tasks = (p.tasks || []).filter(function (t) { return t.type === 'RCA'; }).sort(function (a, b) { return (b.closed ? 1 : 0) - (a.closed ? 1 : 0); });
+    tasks.forEach(function (t) { c = c || t.causa; pr = pr || t.processo; });
+    return { causa: c, processo: pr };
   }
   function problemsOf(list) {
     var seen = {}, out = [];
@@ -395,7 +407,6 @@
     return out;
   }
   function incCausa(I) {
-    if (I.rca && (I.rca.causa || I.rca.processo)) return { causa: I.rca.causa, processo: I.rca.processo };
     for (var i = 0; i < (I.prbObjs || []).length; i++) { var c = prbCausa(I.prbObjs[i]); if (c.causa || c.processo) return c; }
     return { causa: '', processo: '' };
   }
@@ -487,13 +498,12 @@
 
   /* ---------------------------------------------------------------- Agenda */
   function renderAgenda() {
-    var s = M.sCur, yd = D.current, rec = yd && yd.reconcile;
     var steps = [
       ['sec-panorama', 'Panorama do período', 'Volume, MTTR e OLA de resolução por Severidade, detecção e tendência mês a mês.'],
       ['sec-camadas', 'Aplicação x Infraestrutura', 'Foco na camada de aplicação e desdobramento da infraestrutura que impacta as aplicações.'],
       ['sec-fluxos', 'Fluxos e localidades', 'Separação, Faturamento e Transporte por CD; Manufatura por planta; Atendimento e Planejamento por sistema.'],
       ['sec-deteccao', 'Detecção, tecnologias e reincidência', 'Quem detecta, quais tecnologias concentram incidentes e o que se repete.'],
-      ['sec-problemas', 'Problemas, RCA e Mudanças', 'Causa raiz, processo de origem, planos de ação e incidentes causados por mudança.'],
+      ['sec-problemas', 'Problemas, RCA e Mudanças', 'Status dos Problemas, causa raiz, processo de origem, engajamento das equipes e incidentes causados por mudança.'],
       ['sec-disp', 'Disponibilidade', 'Resultado mês a mês por fluxo e incidentes que mais consumiram disponibilidade.'],
       ['sec-acoes', 'Oportunidades e próximos passos', 'Ações sugeridas a partir dos dados, para capturar com responsável e prazo.']
     ];
@@ -506,9 +516,7 @@
     var left = '<div><div class="eyebrow">Objetivo da agenda</div><h3>Visão tático-estratégica dos incidentes nas frentes de O&amp;L</h3>' +
       '<p>Foco central na <b>tecnologia a nível de aplicação</b>, com o desdobramento do volume de <b>incidentes de infraestrutura</b> que impactam diretamente as aplicações usadas pelas frentes de O&amp;L.</p>' +
       '<p>Panorama dos <b>últimos seis meses</b> para extrair insights, identificar oportunidades e sair alinhados sobre os próximos passos: captura de ações de melhoria e ajustes de processos.</p>' +
-      '<div class="eyebrow" style="margin-top:14px">Escopo desta leitura</div><div class="ox-scope">' + scope + '</div>' +
-      '<div class="ox-note">Base: incidentes de O&amp;L (Stream O&amp;L e Planejamento Logístico da aba Major_Incidents_Impactos) com origem Tecnologia. ' +
-      '<b>' + s.n + ' ' + plural(s.n, 'incidente', 'incidentes') + '</b> no período' + (rec ? ' · ' + rec.incidentsTec + ' de origem Tecnologia em ' + D.year + ' (de ' + rec.incidentsAll + ' incidentes de O&amp;L na aba)' : '') + '. MTTR e OLA pelo TTR oficial da MajorIncidentes.</div></div>';
+      '<div class="eyebrow" style="margin-top:14px">Escopo desta leitura</div><div class="ox-scope">' + scope + '</div></div>';
     var right = '<div><div class="eyebrow">Roteiro sugerido</div><ol class="ox-steps">' + steps.map(function (st) {
       return '<li><div><a href="#' + st[0] + '">' + esc(st[1]) + '</a><span class="legend">' + esc(st[2]) + '</span></div></li>';
     }).join('') + '</ol></div>';
@@ -527,9 +535,7 @@
     var c = M.sCur, p = M.sPrev, P = p || {}, vs = vsTxt();
     var nMonths = M.w.months.length;
     var dl = function (fn, a, b, x, y) { return p ? deltaHtml(fn(a, b, x, y)) : deltaHtml(nobase()); };
-    var problems = M.problems, openActs = 0, overdue = 0;
-    problems.forEach(function (pp) { (pp.tasks || []).forEach(function (t) { if (t.type === 'IMP' && !t.closed) { openActs++; if (isNum(t.due) && t.due < D.today) overdue++; } }); });
-    var resolved = problems.filter(function (pp) { return prbStatus(pp) === 'resolved'; }).length;
+    var ps = prbSummary(M.problems);
     var cards = [
       kpiCard({ title: 'Incidentes', icon: 'alert', value: fmtInt(c.n), delta: deltaHtml(p ? deltaCount(c.n, P.n, 'lower') : nobase(), vs),
         split: splitCell('<span class="sev-dot s0"></span>Sev 0', c.sev0, '', dl(deltaCount, c.sev0, P.sev0, 'lower')) + splitCell('<span class="sev-dot s1"></span>Sev 1', c.sev1, '', dl(deltaCount, c.sev1, P.sev1, 'lower')),
@@ -555,9 +561,10 @@
         split: splitCell('MTTR Aplicação', fmtHM(c.mttrLay.app)) + splitCell('MTTR Infra', fmtHM(c.mttrLay.infra)) }),
       kpiCard({ title: 'Causados por Mudança', icon: 'shuffle', value: fmtInt(c.chg) + '<small>' + fmtPct(c.pChg, 0) + '</small>', delta: deltaHtml(p ? deltaCount(c.chg, P.chg, 'lower') : nobase(), vs),
         split: splitCell('Deploy', c.list.filter(function (I) { return I.isChange && I.typeSm === 'DEPLOY'; }).length) + splitCell('Tradicional', c.list.filter(function (I) { return I.isChange && I.typeSm && I.typeSm !== 'DEPLOY'; }).length) }),
-      kpiCard({ title: 'Problemas', icon: 'search', value: fmtPct(c.pPrb, 0) + '<small>com Problem</small>', delta: deltaHtml(p ? deltaPP(c.pPrb, P.pPrb, 1, 'higher') : nobase(), vs),
-        split: splitCell('Problemas resolvidos', resolved + ' de ' + problems.length) + splitCell('Ações vencidas', overdue + (openActs ? ' de ' + openActs : ''), overdue ? 'bad' : ''),
-        alert: overdue > 0 })
+      kpiCard({ title: 'Problemas resolvidos', icon: 'search', value: fmtPct(pct(ps.resolved, ps.total), 0) + '<small>' + ps.resolved + ' de ' + ps.total + '</small>',
+        tip: 'Problemas ligados aos incidentes do período com status Resolvido ou Fechado (MajorProblems / Problem_ServiceNow).',
+        split: splitCell('Em RCA', ps.rca, ps.rca ? 'bad' : '') + splitCell('Em implementação', ps.fix),
+        foot: isNum(ps.agingRes) ? 'Aging médio de resolução: ' + fmtNum(ps.agingRes, 0) + ' dias' : '' })
     ].join('');
 
     var od = M.olDisp, odp = M.olDispP;
@@ -674,8 +681,8 @@
     // mudança
     if (c.chg) out.push('<b>' + c.chg + '</b> ' + plural(c.chg, 'incidente causado', 'incidentes causados') + ' por Mudança (' + fmtPct(c.pChg, 0) + ')' + (p ? ', vs ' + p.chg + ' no comparativo' : '') + '.');
     // problemas
-    var probs = M.problems, open = probs.filter(function (pp) { var s = prbStatus(pp); return s === 'rca' || s === 'fix'; }).length;
-    out.push(fmtPct(c.pPrb, 0) + ' dos incidentes têm Problem associado; ' + probs.length + ' ' + plural(probs.length, 'Problema', 'Problemas') + ' no período, ' + open + ' ainda em RCA ou implementação.');
+    var ps = prbSummary(M.problems);
+    if (ps.total) out.push('<b>' + ps.total + ' ' + plural(ps.total, 'Problema', 'Problemas') + '</b> ligados aos incidentes do período: ' + fmtPct(pct(ps.resolved, ps.total), 0) + ' resolvidos, ' + ps.rca + ' em RCA e ' + ps.fix + ' em implementação' + (isNum(ps.agingRes) ? ' (aging médio de resolução de ' + fmtNum(ps.agingRes, 0) + ' dias)' : '') + '.');
     // reincidência
     var rec = tec.filter(function (t) { return t.n >= 2; });
     if (rec.length) out.push(rec.length + ' ' + plural(rec.length, 'tecnologia teve', 'tecnologias tiveram') + ' 2 ou mais incidentes no período; a mais recorrente foi <b>' + esc(rec[0].k) + '</b> (' + rec[0].n + ').');
@@ -706,18 +713,6 @@
     M.sAll = stats(all);
     var app = all.filter(function (I) { return I.layer === 'app'; }), inf = all.filter(function (I) { return I.layer === 'infra'; });
     var appP = allP ? allP.filter(function (I) { return I.layer === 'app'; }) : null, infP = allP ? allP.filter(function (I) { return I.layer === 'infra'; }) : null;
-    // Infra -> aplicações impactadas -> fluxos
-    var infraMatrix = '';
-    if (inf.length) {
-      var rows = inf.slice().sort(function (a, b) { return (b.ab || 0) - (a.ab || 0); });
-      infraMatrix = '<div class="panel" style="margin-top:14px"><div class="panel-head"><div class="sub-title">' + icon('server') + 'Infraestrutura impactando as aplicações de O&amp;L</div></div>' +
-        '<div class="ox-tbl-wrap"><table class="ox-tbl"><thead><tr><th>Incidente</th><th>Abertura</th><th>Sev</th><th>Ofensor (infra)</th><th>Aplicação / tecnologia impactada</th><th>Fluxo · localidade</th><th class="n">TTR</th><th>Por que é infra</th></tr></thead><tbody>' +
-        rows.map(function (I) {
-          return '<tr class="clickable" data-action="open-inc" data-id="' + esc(I.id) + '"><td class="nm">' + esc(I.id) + '</td><td class="n">' + fmtDay(I.ab) + '</td><td><span class="sev-dot s' + (I.sevN === 0 ? 0 : 1) + '"></span>' + (isNum(I.sevN) ? 'Sev ' + I.sevN : '—') + '</td>' +
-            '<td>' + esc(I.ofe) + '</td><td>' + esc((I.tImp || []).join(', ')) + '</td><td>' + esc(flowNames(I).join(', ')) + (I.ents.length ? '<div class="desc">' + esc(I.ents.join(', ')) + '</div>' : '') + '</td>' +
-            '<td class="n">' + fmtHM(I.ttrU) + '</td><td><div class="desc">' + esc(I.layerWhy) + '</div></td></tr>';
-        }).join('') + '</tbody></table></div></div>';
-    }
     // tabela de classificação
     var byOfe = {};
     all.forEach(function (I) { var k = I.ofe || 'N/A'; var e = byOfe[k] = byOfe[k] || { ofe: k, app: 0, infra: 0, why: {}, src: {} }; e[I.layer]++; e.why[I.layerWhy] = true; e.src[I.layerSrc] = true; });
@@ -735,7 +730,7 @@
       '<div class="legend" style="margin-top:8px">' + s.lay.app + ' de Aplicação e ' + s.lay.infra + ' de Infraestrutura' + (allP ? ' · comparativo (' + esc(M.L.prevShort) + '): ' + stats(allP).lay.app + ' e ' + stats(allP).lay.infra : '') + '. MTTR Aplicação ' + fmtHM(s.mttrLay.app) + ' · Infra ' + fmtHM(s.mttrLay.infra) + '.</div></div>';
     $('sec-camadas').innerHTML = sectionHead('server', 'Tecnologia · camada', 'Aplicação x Infraestrutura',
       'Foco na camada de aplicação e desdobramento dos incidentes de infraestrutura que impactaram as aplicações de O&amp;L. Esta seção ignora o filtro de camada.') +
-      head + '<div class="grid" style="margin-top:14px">' + layerPanel('app', app, appP) + layerPanel('infra', inf, infP) + '</div>' + infraMatrix + clsHtml;
+      head + '<div class="grid" style="margin-top:14px">' + layerPanel('app', app, appP) + layerPanel('infra', inf, infP) + '</div>' + clsHtml;
   }
   function flowNames(I) { return I.flows.map(function (k) { var f = D.config.flows.find(function (x) { return x.key === k; }); return f ? f.short : k; }); }
 
@@ -856,7 +851,6 @@
     var tecs = topOf(f.cur, KEYS.tec, 6), ofes = topOf(f.cur, KEYS.ofe, 6);
     var causas = {}, procs = {};
     problemsOf(f.cur).forEach(function (p) { var c = prbCausa(p); if (c.causa) causas[c.causa] = (causas[c.causa] || 0) + 1; if (c.processo) procs[c.processo] = (procs[c.processo] || 0) + 1; });
-    f.cur.filter(function (I) { return !(I.prbObjs || []).length && I.rca; }).forEach(function (I) { if (I.rca.causa) causas[I.rca.causa] = (causas[I.rca.causa] || 0) + 1; if (I.rca.processo) procs[I.rca.processo] = (procs[I.rca.processo] || 0) + 1; });
     var toItems = function (m) { return Object.keys(m).map(function (k) { return { label: k, v: m[k] }; }).sort(function (a, b) { return b.v - a.v; }).slice(0, 6); };
     var mx = function (a) { return a.length ? a[0].n || a[0].v : 1; };
     var panels = '<div class="grid cols-3" style="margin-top:14px">' +
@@ -865,7 +859,7 @@
       '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('search') + 'Causa raiz e processo de origem</div></div>' +
       '<div class="eyebrow" style="margin-bottom:4px">Causa do Problema</div>' + barsHtml(toItems(causas), null, { empty: 'Sem RCA classificado.' }) +
       '<div class="eyebrow" style="margin:10px 0 4px">Processo de origem</div>' + barsHtml(toItems(procs), null, { empty: 'Sem processo de origem classificado.' }) +
-      '<div class="ox-note">Por Problema (IA da Manual_Info / PTASK_RCA). ' + problemsOf(f.cur).length + ' Problema(s) ligados aos incidentes do fluxo.</div></div></div>';
+      '<div class="ox-note">Por Problema, conforme a classificação da tarefa de RCA (Cause Problem e Source process). ' + problemsOf(f.cur).length + ' Problema(s) ligados aos incidentes do fluxo.</div></div></div>';
     return '<div class="ox-flow" id="sec-flow-' + cfg.key + '"><div class="ox-flow-head">' + tile(cfg.icon) + '<div><div class="eyebrow">Fluxo</div><h3>' + esc(cfg.label) + '</h3></div><span class="sp"></span>' +
       '<button type="button" class="btn" data-action="open-flow" data-flow="' + cfg.key + '">' + icon('list') + 'Ver incidentes do fluxo (' + s.n + ')</button></div>' +
       strip + cardsHtml + panels + '</div>';
@@ -983,54 +977,112 @@
 
   /* ---------------------------------------------------------- Problemas & RCA */
   function renderProblemas() {
-    var c = M.cur, probs = M.problems;
-    var st = {}; Object.keys(PRB_STATUS).forEach(function (k) { st[k] = 0; });
-    probs.forEach(function (p) { st[prbStatus(p)]++; });
-    var openAging = avg(probs.filter(function (p) { var s = prbStatus(p); return s === 'rca' || s === 'fix'; }).map(prbAging));
-    var resAging = avg(probs.filter(function (p) { return prbStatus(p) === 'resolved'; }).map(prbAging));
-    var qFilled = 0, qBoa = 0, pFilled = 0, pBoa = 0, causas = {}, procs = {};
+    var probs = M.problems, ps = prbSummary(probs), causas = {}, procs = {};
     probs.forEach(function (p) {
       var cc = prbCausa(p);
-      if (cc.qRca) { qFilled++; if (/^boa/.test(fold(cc.qRca))) qBoa++; }
-      if (cc.qPlano) { pFilled++; if (/^boa/.test(fold(cc.qPlano))) pBoa++; }
       if (cc.causa) (causas[cc.causa] = causas[cc.causa] || []).push(p);
       if (cc.processo) (procs[cc.processo] = procs[cc.processo] || []).push(p);
     });
-    var tasks = [];
-    probs.forEach(function (p) { (p.tasks || []).forEach(function (t) { if (t.type === 'IMP') tasks.push({ t: t, p: p }); }); });
-    var openT = tasks.filter(function (x) { return !x.t.closed; }), overdue = openT.filter(function (x) { return isNum(x.t.due) && x.t.due < D.today; });
-    openT.sort(function (a, b) { return (a.t.due || 9e15) - (b.t.due || 9e15); });
-    var noPrb = c.filter(function (I) { return !(I.prbs || []).length; }).sort(function (a, b) { return (a.sevN === 0 ? 0 : 1) - (b.sevN === 0 ? 0 : 1) || (b.ttrU || 0) - (a.ttrU || 0); });
     var items = function (m) { return Object.keys(m).map(function (k) { return { label: k, v: m[k].length, action: 'open-ids', extra: ' data-ids="' + esc(uniq([].concat.apply([], m[k].map(function (p) { return p.incidents; }))).join(',')) + '" data-title="' + esc(k) + '"' }; }).sort(function (a, b) { return b.v - a.v; }).slice(0, 8); };
-    var parts = Object.keys(PRB_STATUS).filter(function (k) { return st[k]; }).map(function (k, i) { return { cls: ['exp', 'app', 'mon', 'na', 'na', 'na'][PRB_STATUS[k].order], label: PRB_STATUS[k].label, v: st[k] }; });
-    var kpis = '<div class="ox-kpis">' +
-      kpiCard({ title: 'Incidentes com Problem', icon: 'search', value: fmtPct(M.sCur.pPrb, 0), delta: deltaHtml(M.sPrev ? deltaPP(M.sCur.pPrb, M.sPrev.pPrb, 1, 'higher') : nobase(), vsTxt()), foot: M.sCur.withPrb + ' de ' + M.sCur.n + ' incidentes · ' + noPrb.length + ' sem Problem' }) +
-      kpiCard({ title: 'Problemas no período', icon: 'layers', value: fmtInt(probs.length), split: splitCell('Em RCA', st.rca, st.rca ? 'bad' : '') + splitCell('Em implementação', st.fix), foot: st.resolved + ' resolvidos' + (st.risk ? ' · ' + st.risk + ' com risco aceito' : '') }) +
-      kpiCard({ title: 'Aging dos Problemas', icon: 'clock', value: (isNum(openAging) ? fmtNum(openAging, 0) : '—') + '<small>dias em aberto</small>', split: splitCell('Resolvidos (média)', isNum(resAging) ? fmtNum(resAging, 0) + ' dias' : '—') + splitCell('Qualidade do RCA', qFilled ? fmtPct(pct(qBoa, qFilled), 0) + ' boa' : '—'), alert: isNum(openAging) && openAging > 30 }) +
-      kpiCard({ title: 'Planos de ação (PTASK)', icon: 'wrench', value: fmtInt(openT.length) + '<small>abertos</small>', split: splitCell('Vencidos', overdue.length, overdue.length ? 'bad' : 'good') + splitCell('Concluídos', tasks.length - openT.length), foot: pFilled ? 'Qualidade do plano de ação: ' + fmtPct(pct(pBoa, pFilled), 0) + ' boa' : '', alert: overdue.length > 0 }) + '</div>';
-    var actTbl = openT.length ? '<div class="ox-tbl-wrap"><table class="ox-tbl"><thead><tr><th>Tarefa</th><th>Problema</th><th>Ação / plano</th><th>Grupo</th><th class="n">Prazo</th><th>Estado</th><th>Incidente(s)</th></tr></thead><tbody>' +
-      openT.slice(0, 25).map(function (x) {
-        var od = isNum(x.t.due) && x.t.due < D.today;
-        return '<tr><td class="nm">' + esc(x.t.num) + '</td><td>' + esc(x.p.id) + '<div class="desc">' + esc(PRB_STATUS[prbStatus(x.p)].label) + '</div></td><td>' + esc(x.t.desc) + (x.t.plano ? '<div class="desc">' + esc(x.t.plano) + '</div>' : '') + '</td><td>' + esc(x.t.group) + '</td>' +
-          '<td class="n ' + (od ? 'bad' : '') + '">' + fmtDay(x.t.due) + (od ? '<div class="desc">vencida há ' + Math.floor((D.today - x.t.due) / 86400000) + ' d</div>' : '') + '</td><td>' + esc(x.t.state) + '</td><td><div class="desc">' + esc(x.p.incidents.join(', ')) + '</div></td></tr>';
-      }).join('') + '</tbody></table></div>' + (openT.length > 25 ? '<div class="ox-note">Mostrando 25 de ' + openT.length + ' ações abertas (vencidas primeiro).</div>' : '') : '<div class="empty">Nenhum plano de ação (PTASK_IMP) aberto para os Problemas do período.</div>';
-    var probTbl = probs.length ? '<div class="ox-tbl-wrap"><table class="ox-tbl"><thead><tr><th>Problema</th><th>Status</th><th class="n">Aging</th><th>Área / grupo</th><th>Causa raiz (IA)</th><th>Processo de origem (IA)</th><th>Incidente(s)</th></tr></thead><tbody>' +
-      probs.slice().sort(function (a, b) { return PRB_STATUS[prbStatus(a)].order - PRB_STATUS[prbStatus(b)].order || (prbAging(b) || 0) - (prbAging(a) || 0); }).slice(0, 15).map(function (p) {
-        var cc = prbCausa(p), s = prbStatus(p), ag = prbAging(p);
-        return '<tr class="clickable" data-action="open-ids" data-ids="' + esc(p.incidents.join(',')) + '" data-title="' + esc(p.id) + '"><td class="nm">' + esc(p.id) + (p.sn && p.sn.statement ? '<div class="desc">' + esc(p.sn.statement) + '</div>' : '') + '</td><td>' + esc(PRB_STATUS[s].label) + '</td>' +
-          '<td class="n ' + ((s === 'rca' || s === 'fix') && ag > 30 ? 'bad' : '') + '">' + (isNum(ag) ? ag + ' d' : '—') + '</td><td>' + esc((p.gprob && p.gprob.area) || (p.sn && p.sn.group) || '—') + '</td><td>' + esc(cc.causa || '—') + '</td><td>' + esc(cc.processo || '—') + '</td><td><div class="desc">' + esc(p.incidents.join(', ')) + '</div></td></tr>';
-      }).join('') + '</tbody></table></div>' + (probs.length > 15 ? '<div class="ox-note">Mostrando 15 de ' + probs.length + ' Problemas (em RCA e com maior aging primeiro).</div>' : '') : '<div class="empty">Nenhum Problema associado aos incidentes do período.</div>';
-    var noPrbTbl = noPrb.length ? '<ul class="ox-bars">' + noPrb.slice(0, 10).map(function (I) {
-      return '<li class="clickable" data-action="open-inc" data-id="' + esc(I.id) + '"><span class="nm">' + esc(I.id) + ' · ' + esc(I.tImpMain) + '<span class="legend">' + (isNum(I.sevN) ? 'Sev ' + I.sevN : '') + ' · ' + fmtDay(I.ab) + ' · ' + esc(flowNames(I).join(', ')) + ' · ' + esc(I.ofe) + '</span></span><span class="br"><span style="width:' + Math.min(100, (I.ttrU || 0) / (T.outlierSev1 || 1080) * 100).toFixed(0) + '%"></span></span><span class="ct">' + fmtHM(I.ttrU) + '</span></li>';
-    }).join('') + '</ul>' + (noPrb.length > 10 ? '<div class="ox-note">Mostrando 10 de ' + noPrb.length + ' (Sev 0 e maior TTR primeiro).</div>' : '') : '<div class="empty">Todos os incidentes do período têm Problem associado.</div>';
-    $('sec-problemas').innerHTML = sectionHead('search', 'Gestão de Problemas', 'Problemas, causa raiz e planos de ação',
-      'Problemas ligados aos incidentes do período (MajorProblems, Problem_ServiceNow, Manual_Info e PTASK). Causa do Problema e Processo de Origem conforme a classificação da IA usada na Visão Geral.') +
-      kpis + '<div style="margin-top:12px">' + (parts.length ? stackHtml(parts, true) + stackLegend(parts, true) : '') + '</div>' +
-      '<div class="grid cols-2" style="margin-top:14px"><div class="panel"><div class="panel-head"><div class="sub-title">' + icon('search') + 'Causa do Problema</div></div>' + barsHtml(items(causas), null, { empty: 'Sem causa raiz classificada.' }) + '</div>' +
-      '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('layers') + 'Processo de origem</div></div>' + barsHtml(items(procs), null, { empty: 'Sem processo de origem classificado.' }) + '</div></div>' +
-      '<div class="panel" style="margin-top:14px"><div class="panel-head"><div class="sub-title">' + icon('wrench') + 'Planos de ação abertos (PTASK_IMP)</div></div>' + actTbl + '</div>' +
-      '<div class="panel" style="margin-top:14px"><div class="panel-head"><div class="sub-title">' + icon('list') + 'Problemas do período</div></div>' + probTbl + '</div>' +
-      '<div class="panel" style="margin-top:14px"><div class="panel-head"><div class="sub-title">' + icon('alert') + 'Incidentes sem Problem associado</div></div>' + noPrbTbl + '</div>';
+    var share = function (n) { return ps.total ? fmtPct(pct(n, ps.total), 0) + ' dos ' + ps.total + ' Problemas' : ''; };
+    var kpis = '<div class="ox-kpis c5">' +
+      kpiCard({ title: 'Problemas abertos', icon: 'layers', value: fmtInt(ps.open), foot: share(ps.open), tip: 'Todos os Problemas ligados aos incidentes do período, menos os Resolvidos e os com Risco aceito.' }) +
+      kpiCard({ title: 'Em RCA', icon: 'search', value: fmtInt(ps.rca), foot: share(ps.rca), alert: ps.rca > 0 && pct(ps.rca, ps.total) >= 40 }) +
+      kpiCard({ title: 'Em implementação', icon: 'wrench', value: fmtInt(ps.fix), foot: share(ps.fix) }) +
+      kpiCard({ title: 'Resolvidos', icon: 'check', value: fmtInt(ps.resolved), foot: share(ps.resolved) + (ps.risk ? ' · ' + ps.risk + ' com risco aceito' : '') }) +
+      kpiCard({ title: 'Aging de resolução', icon: 'clock', value: (isNum(ps.agingRes) ? fmtNum(ps.agingRes, 0) : '—') + '<small>dias</small>', foot: 'Média entre a abertura e o fechamento dos Problemas resolvidos', tip: 'Data PRB Opened até Data PRB Closed (MajorProblems).' }) + '</div>';
+    var eng = '<div class="panel" style="margin-top:14px" id="ox-eng"><div class="panel-head" style="flex-wrap:wrap;gap:10px"><div><div class="sub-title">' + icon('users') + 'Engajamento por Equipe</div>' +
+      '<div class="legend">Cada ponto é uma equipe: eixo X mostra o Aging médio (dias) e eixo Y o volume de tarefas dos Problemas ligados aos incidentes do período.</div></div>' +
+      '<div class="ox-eng-tools"><div class="ox-eng-filter"><input type="text" list="ox-eng-teams" data-eng="team" placeholder="Filtrar por equipe…" aria-label="Filtrar por equipe"><datalist id="ox-eng-teams"></datalist><div class="ox-chips" id="ox-eng-chips"></div></div>' +
+      '<div class="seg" id="ox-eng-type"><button type="button" data-v="rca"' + (state.eng.type === 'rca' ? ' class="is-active"' : '') + '>Tarefas de RCA</button><button type="button" data-v="implementation"' + (state.eng.type === 'implementation' ? ' class="is-active"' : '') + '>Tarefas de Implementação</button></div></div></div>' +
+      '<div id="ox-eng-body"></div></div>';
+    $('sec-problemas').innerHTML = sectionHead('search', 'Gestão de Problemas', 'Problemas, causa raiz e engajamento das equipes',
+      'Problemas ligados aos incidentes do período (MajorProblems e Problem_ServiceNow). Causa do Problema e Processo de Origem conforme a classificação da tarefa de RCA (PTASK_RCA); tarefas e equipes pela RCATask_List, como na Visão Geral.') +
+      kpis +
+      '<div class="grid cols-2" style="margin-top:14px"><div class="panel"><div class="panel-head"><div class="sub-title">' + icon('search') + 'Causa do Problema</div></div>' + barsHtml(items(causas), null, { empty: 'Sem causa classificada nas tarefas de RCA.' }) + '</div>' +
+      '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('layers') + 'Processo de origem</div></div>' + barsHtml(items(procs), null, { empty: 'Sem processo de origem classificado nas tarefas de RCA.' }) + '</div></div>' +
+      eng;
+    renderEngagement();
+  }
+
+  /* -------------------------------------------- Engajamento por Equipe (Problemas) */
+  // Mesma leitura da Visão Geral: tarefas de RCA ou de Implementação por equipe, separadas em Backlog (não fechadas)
+  // e Resolvido (state "closed"), com Aging médio = (fechamento ou hoje) - abertura. % Causa Raiz = dos incidentes do
+  // período com Problem, quantos tiveram a causa identificada por RCAs concluídas da equipe.
+  function engagementData(type) {
+    var seen = {}, back = {}, res = {}, cover = {}, inWin = {}, base = 0;
+    M.cur.forEach(function (I) { inWin[I.id] = true; if ((I.prbs || []).length) base++; });
+    M.problems.forEach(function (p) {
+      (p.tasks || []).forEach(function (t) {
+        var tt = fold(t.taskType), k;
+        if (t.src === 'RCATask_List') k = tt === 'root cause analysis' ? 'rca' : (tt.indexOf('implement') !== -1 ? 'implementation' : '');
+        else k = t.type === 'RCA' ? 'rca' : 'implementation';
+        if (k !== type || !t.num || seen[t.num]) return;
+        seen[t.num] = true;
+        var end = t.closed && isNum(t.closedAt) ? t.closedAt : D.today;
+        var aging = isNum(t.opened) ? Math.max(0, Math.floor((end - t.opened) / 86400000)) : 0;
+        var bucket = t.closed ? res : back, g = t.group || 'N/A';
+        var e = bucket[g] = bucket[g] || { name: g, count: 0, total: 0, incs: {} };
+        e.count++; e.total += aging;
+        p.incidents.forEach(function (id) { if (inWin[id]) e.incs[id] = true; });
+        if (t.closed && type === 'rca') { cover[g] = cover[g] || {}; p.incidents.forEach(function (id) { if (inWin[id]) cover[g][id] = true; }); }
+      });
+    });
+    var pts = function (b, withCov) {
+      return Object.keys(b).map(function (k) {
+        var e = b[k];
+        return { name: e.name, count: e.count, aging: e.count ? Math.round(e.total / e.count) : 0, ids: Object.keys(e.incs), cov: withCov && type === 'rca' ? (base ? Math.round(Object.keys(cover[k] || {}).length / base * 1000) / 10 : 0) : null };
+      }).sort(function (a, b) { return b.count - a.count; });
+    };
+    return { backlog: pts(back, false), resolved: pts(res, true), base: base };
+  }
+  function renderEngagement() {
+    var body = $('ox-eng-body');
+    if (!body) return;
+    ['engBack', 'engRes'].forEach(function (k) { if (charts[k]) { charts[k].destroy(); charts[k] = null; } });
+    var all = engagementData(state.eng.type), other = engagementData(state.eng.type === 'rca' ? 'implementation' : 'rca');
+    var teams = uniq([].concat(all.backlog, all.resolved, other.backlog, other.resolved).map(function (x) { return x.name; })).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+    state.eng.teams = state.eng.teams.filter(function (t) { return teams.indexOf(t) !== -1; });
+    var dl = $('ox-eng-teams');
+    if (dl) dl.innerHTML = teams.filter(function (t) { return state.eng.teams.indexOf(t) === -1; }).map(function (t) { return '<option value="' + esc(t) + '"></option>'; }).join('');
+    var chips = $('ox-eng-chips');
+    if (chips) chips.innerHTML = state.eng.teams.map(function (t) { return '<span class="ox-chip">' + esc(t) + '<button type="button" data-action="eng-rm-team" data-team="' + esc(t) + '" aria-label="Remover ' + esc(t) + '">×</button></span>'; }).join('');
+    var flt = function (l) { return state.eng.teams.length ? l.filter(function (x) { return state.eng.teams.indexOf(x.name) !== -1; }) : l; };
+    var back = flt(all.backlog), res = flt(all.resolved);
+    var rank = function (list, withCov) {
+      if (!list.length) return '<div class="empty">Nenhum dado encontrado.</div>';
+      var sorted = list.slice().sort(function (a, b) { return withCov && state.eng.sort === 'coverage' ? (b.cov || 0) - (a.cov || 0) || b.count - a.count : b.count - a.count; });
+      return '<ul class="ox-rank">' + sorted.map(function (x) {
+        return '<li class="clickable" data-action="open-ids" data-ids="' + esc(x.ids.join(',')) + '" data-title="' + esc(x.name) + '"><span class="nm" title="' + esc(x.name) + '">' + esc(x.name) + '</span>' +
+          '<span class="vv"><b class="c1">' + x.count + '</b> ' + plural(x.count, 'tarefa', 'tarefas') + ' | <b class="c2">' + x.aging + '</b> dias' + (withCov && isNum(x.cov) ? ' <span class="ox-cov">' + fmtNum(x.cov, x.cov % 1 ? 1 : 0) + '% Causa Raiz</span>' : '') + '</span></li>';
+      }).join('') + '</ul>';
+    };
+    var covTip = 'Do total de incidentes do período com Problem (' + all.base + '), quantos tiveram a Causa Raiz identificada por RCAs concluídas desta equipe (1 Problema pode reunir vários incidentes e várias tarefas).';
+    body.innerHTML = '<div class="grid cols-2" style="margin-top:12px">' +
+      '<div class="ox-eng-card"><span class="ox-eng-tag bk">' + icon('clock').replace('class="ico"', 'class="ico" style="width:12px;height:12px"') + 'Backlog</span><h4>Aging de Backlog × Tarefas em Backlog</h4><div class="legend">Equipes com tarefas ainda não concluídas: envelhecimento médio vs. volume pendente.</div>' +
+      '<div class="ox-chart sm" style="margin-top:8px"><canvas id="ox-ch-eng-back"></canvas></div><div class="eyebrow" style="margin:12px 0 4px">Ranking por equipe</div>' + rank(back, false) + '</div>' +
+      '<div class="ox-eng-card"><span class="ox-eng-tag rs">' + icon('check').replace('class="ico"', 'class="ico" style="width:12px;height:12px"') + 'Resolvido</span><h4>Aging de Resolução × Tarefas Resolvidas</h4><div class="legend">Equipes com tarefas concluídas: tempo médio até o fechamento vs. volume resolvido.</div>' +
+      '<div class="ox-chart sm" style="margin-top:8px"><canvas id="ox-ch-eng-res"></canvas></div>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:12px 0 4px"><span class="eyebrow">Ranking por equipe' + (state.eng.type === 'rca' ? ' <span class="info-i" data-tip="' + esc(covTip) + '">i</span>' : '') + '</span>' +
+      (state.eng.type === 'rca' ? '<div class="seg sm" id="ox-eng-sort"><button type="button" data-v="volume"' + (state.eng.sort !== 'coverage' ? ' class="is-active"' : '') + '>Volume</button><button type="button" data-v="coverage"' + (state.eng.sort === 'coverage' ? ' class="is-active"' : '') + '>% Causa Raiz</button></div>' : '') + '</div>' +
+      rank(res, true) + '</div></div>' +
+      (D.rcaTaskListFound === false ? '<div class="ox-note">Aba RCATask_List não encontrada: estado, datas e equipe vêm das abas PTASK_RCA / PTASK_IMP.</div>' : '');
+    charts.engBack = drawEngScatter('ox-ch-eng-back', back, '#B54708', 'Tarefas em Backlog');
+    charts.engRes = drawEngScatter('ox-ch-eng-res', res, '#045473', 'Tarefas Resolvidas');
+  }
+  function drawEngScatter(id, points, color, label) {
+    var cv = $(id);
+    if (!cv || !window.Chart || !points.length) return null;
+    return new Chart(cv, {
+      type: 'scatter',
+      data: { datasets: [{ label: label, data: points.map(function (x) { return { x: x.aging, y: x.count, name: x.name }; }), backgroundColor: color, borderColor: color, pointRadius: 7, pointHoverRadius: 9 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        onClick: function (e, els) { if (!els.length) return; var x = points[els[0].index]; openModal({ title: x.name, eyebrow: 'Engajamento por Equipe', icon: 'users', list: x.ids.map(function (i) { return BYID[i]; }).filter(Boolean) }); },
+        scales: { x: { beginAtZero: true, title: { display: true, text: 'Aging médio (dias)' }, grid: { color: 'rgba(51,61,32,.08)' } }, y: { beginAtZero: true, title: { display: true, text: 'Nº de tarefas' }, ticks: { precision: 0 }, grid: { color: 'rgba(51,61,32,.08)' } } },
+        plugins: { legend: { display: false }, datalabels: { display: false }, tooltip: { callbacks: { label: function (ctx) { var r = ctx.raw; return r.name + ': ' + r.y + ' ' + plural(r.y, 'tarefa', 'tarefas') + ', ' + r.x + ' dias de aging'; } } } }
+      }
+    });
   }
 
   /* --------------------------------------------------------------- Mudanças */
@@ -1259,7 +1311,7 @@
     var cz = incCausa(I);
     return '<tr><td class="id">' + esc(I.id) + '<div class="desc">' + esc(I.streams.join(', ')) + '</div></td><td class="nowrap"><span class="sev-dot s' + (I.sevN === 0 ? 0 : 1) + '"></span>' + (isNum(I.sevN) ? 'Sev ' + I.sevN : '—') + '</td><td class="nowrap">' + fmtDate(I.ab) + '</td>' +
       '<td>' + esc(flowNames(I).join(', ') || 'Sem fluxo mapeado') + '<div class="desc">' + esc(I.ents.join(', ')) + '</div>' + (I.mks.length ? '<div class="flags" style="display:flex;margin-top:3px">' + I.mks.map(function (k) { return flag(k); }).join('') + '</div>' : '') + '</td>' +
-      '<td>' + layerTag(I.layer) + '</td><td class="nowrap">' + esc(ORIGENS.find(function (o) { return o.key === I.ok; }).label) + '</td><td class="nowrap">' + fmtHM(I.ttrU) + (I.outlier ? ' <span class="tag">outlier</span>' : '') + '</td><td class="nowrap">' + ola + '</td>' +
+      '<td>' + layerTag(I.layer) + '<div class="desc" style="max-width:220px">' + esc(I.layerWhy || '') + '</div></td><td class="nowrap">' + esc(ORIGENS.find(function (o) { return o.key === I.ok; }).label) + '</td><td class="nowrap">' + fmtHM(I.ttrU) + (I.outlier ? ' <span class="tag">outlier</span>' : '') + '</td><td class="nowrap">' + ola + '</td>' +
       '<td>' + esc((I.tImp || []).join(', ')) + '</td><td>' + esc(I.ofe) + (I.isChange && I.sm ? '<div class="desc">' + esc(I.typeSm || '') + ' ' + esc(I.sm) + '</div>' : '') + '</td><td class="nowrap">' + prbs + '</td>' +
       '<td class="wrap">' + (I.tit ? '<b>' + esc(I.tit) + '</b>' : '') + (I.dImp ? '<div class="desc">' + esc(I.dImp) + '</div>' : '') + (I.dOf ? '<div class="desc"><b>Ofensor:</b> ' + esc(I.dOf) + '</div>' : '') + (cz.causa ? '<div class="desc"><b>Causa raiz:</b> ' + esc(cz.causa) + (cz.processo ? ' · ' + esc(cz.processo) : '') + '</div>' : '') + '</td></tr>';
   }
@@ -1285,7 +1337,7 @@
   }
   function exportIncidents(title, list) {
     if (!list.length) { toast('Não há incidentes para exportar.'); return; }
-    exportSheet(title, ['Incidente', 'Ano', 'Stream', 'Severidade', 'Abertura', 'Fluxo(s)', 'Localidade(s) / Sistema(s)', 'Mercado(s)', 'Impacto(s)', 'Camada', 'Critério da camada', 'Origem da Detecção', 'TTR (MI)', 'Dentro do OLA', 'Outlier', 'Tecnologia impactada', 'Ofensor', 'Tipo SM', 'SM', 'Problem(s)', 'Status do Problem', 'Causa raiz (IA)', 'Processo de origem (IA)', 'Grupo (ServiceNow)', 'Service (ServiceNow)', 'Título', 'Descrição do impacto', 'Descrição do ofensor', 'Solução'],
+    exportSheet(title, ['Incidente', 'Ano', 'Stream', 'Severidade', 'Abertura', 'Fluxo(s)', 'Localidade(s) / Sistema(s)', 'Mercado(s)', 'Impacto(s)', 'Camada', 'Critério da camada', 'Origem da Detecção', 'TTR (MI)', 'Dentro do OLA', 'Outlier', 'Tecnologia impactada', 'Ofensor', 'Tipo SM', 'SM', 'Problem(s)', 'Status do Problem', 'Causa do Problema (tarefa de RCA)', 'Processo de origem (tarefa de RCA)', 'Grupo (ServiceNow)', 'Service (ServiceNow)', 'Título', 'Descrição do impacto', 'Descrição do ofensor', 'Solução'],
       list.map(function (I) {
         var cz = incCausa(I);
         return [I.id, I.year, I.streams.join(', '), isNum(I.sevN) ? 'Sev ' + I.sevN : '', fmtDate(I.ab), flowNames(I).join(', '), I.ents.join(', '), I.mks.join(', ').toUpperCase(), I.imps.join(', '), LAYER_LABEL[I.layer], I.layerWhy,
@@ -1297,7 +1349,7 @@
   /* ------------------------------------------------------------- Rodapé */
   function renderFoot() {
     var w = (D.warnings || []).slice();
-    $('ox-foot').innerHTML = 'Fontes: Major_Incidents_Impactos_' + D.year + '/' + D.prevYear + ' (Stream O&amp;L e Planejamento Logístico, origem Tecnologia) · MajorIncidentes (TTR oficial, Ofensor, Tecnologia impactada, SM) · Major_ServiceNow (Caller, Grupo, Service, Category) · MajorProblems, Problem_ServiceNow, Manual_Info e PTASK_RCA/IMP · Change_MI · Disponibilidade e apuracao. ' +
+    $('ox-foot').innerHTML = 'Fontes: Major_Incidents_Impactos_' + D.year + '/' + D.prevYear + ' (Stream O&amp;L e Planejamento Logístico, origem Tecnologia) · MajorIncidentes (TTR oficial, Ofensor, Tecnologia impactada, SM) · Major_ServiceNow (Caller, Grupo, Service, Category) · MajorProblems, Problem_ServiceNow, PTASK_RCA/IMP e RCATask_List · Change_MI · Disponibilidade e apuracao. ' +
       'Metas: MTTR Sev 0 ≤ ' + fmtHM(T.mttrSev0) + ' · Sev 1 ≤ ' + fmtHM(T.mttrSev1) + ' · OLA Sev 0 ≤ ' + fmtHM(T.olaSev0) + ' · Sev 1 ≤ ' + fmtHM(T.olaSev1) + '.' +
       (w.length ? '<br>Avisos: ' + esc(w.join(' · ')) : '');
   }
@@ -1390,6 +1442,7 @@
     else if (a === 'export-base') exportIncidents('O&L - Base de incidentes - ' + M.L.curShort, baseFiltered());
     else if (a === 'export-ops') exportOps(false);
     else if (a === 'export-acts') exportOps(true);
+    else if (a === 'eng-rm-team') { var tm = t.getAttribute('data-team'); state.eng.teams = state.eng.teams.filter(function (x) { return x !== tm; }); renderEngagement(); }
   }
   function rerender() { var y = window.scrollY; renderAll(); window.scrollTo(0, y); }
   function onSeg(segEl, v) {
@@ -1399,11 +1452,23 @@
     else if (id === 'ox-card') { if (state.card === v) return; state.card = v; setSegActive(segEl, v); rerender(); }
     else if (id === 'ox-rank') { state.rank = v; if (charts.pareto) { charts.pareto.destroy(); charts.pareto = null; } renderTecnologias(); }
     else if (id === 'ox-modal-year') { state.modal.which = v; renderModal(); }
+    else if (id === 'ox-eng-type') { state.eng.type = v; setSegActive(segEl, v); renderEngagement(); }
+    else if (id === 'ox-eng-sort') { state.eng.sort = v; renderEngagement(); }
   }
   function setSegActive(segEl, v) { Array.prototype.forEach.call(segEl.querySelectorAll('button'), function (b) { b.classList.toggle('is-active', b.getAttribute('data-v') === v); }); }
   function onKey(ev) {
     if (ev.key === 'Escape' && state.modal) { closeModal(); return; }
     if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.getAttribute && ev.target.getAttribute('role') === 'button' && ev.target.hasAttribute('data-action')) { ev.preventDefault(); ev.target.click(); }
+  }
+  function onEngTeam(ev) {
+    var t = ev.target;
+    if (!t || !t.getAttribute || t.getAttribute('data-eng') !== 'team') return;
+    var v = String(t.value || '').trim();
+    var opts = Array.prototype.map.call(document.querySelectorAll('#ox-eng-teams option'), function (o) { return o.value; });
+    var hit = opts.find(function (o) { return o === v; }) || opts.find(function (o) { return fold(o) === fold(v); });
+    if (hit && state.eng.teams.indexOf(hit) === -1) state.eng.teams.push(hit);
+    t.value = '';
+    renderEngagement();
   }
   var baseTimer = null;
   function onBaseFilter(ev) {
@@ -1489,7 +1554,7 @@
     var ol = $('ox-ol-link'); if (ol) ol.href = BASE_URL ? BASE_URL + '?view=ol' : '#';
     document.addEventListener('click', onClick);
     document.addEventListener('keydown', onKey);
-    document.addEventListener('change', function (ev) { onActInput(ev); onBaseFilter(ev); });
+    document.addEventListener('change', function (ev) { onActInput(ev); onBaseFilter(ev); onEngTeam(ev); });
     document.addEventListener('input', function (ev) { var t = ev.target; if (t && t.getAttribute && (t.getAttribute('data-act') === 'owner' || t.getAttribute('data-act') === 'note')) onActInput(ev); if (t && t.getAttribute && t.getAttribute('data-bf') === 'q') onBaseFilter(ev); });
     document.addEventListener('mouseover', onOver);
     document.addEventListener('mouseout', onOut);
