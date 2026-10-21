@@ -28,11 +28,20 @@
     <div class="head-controls" role="group" aria-label="Filtros">
       <label class="field"><span class="eyebrow">Período</span>
         <select id="ox-period" disabled aria-label="Período da análise"></select></label>
+      <div class="field" id="ox-custom" hidden>
+        <span class="eyebrow">Intervalo personalizado</span>
+        <div class="ox-range">
+          <input type="date" id="ox-start" aria-label="Data de início">
+          <span aria-hidden="true">a</span>
+          <input type="date" id="ox-end" aria-label="Data de fim">
+          <button type="button" class="btn btn-ghost-dark" id="ox-apply">Aplicar</button>
+        </div>
+      </div>
       <div class="field">
         <span class="eyebrow">Comparar com</span>
         <div class="seg on-dark" id="ox-cmp" role="group" aria-label="Comparativo">
           <button type="button" data-v="yoy" class="is-active" data-tip="Mesmos meses do ano anterior, cortados no mesmo dia quando o período chega até hoje.">Ano anterior</button>
-          <button type="button" data-v="pop" data-tip="Os meses imediatamente anteriores, com a mesma quantidade de meses (ex.: últimos 6 meses vs os 6 meses antes deles).">Período anterior</button>
+          <button type="button" data-v="pop" data-tip="O intervalo imediatamente anterior, com a mesma duração (ex.: últimos 6 meses vs os 6 meses antes deles; no Personalizado, a mesma quantidade de dias).">Período anterior</button>
         </div>
       </div>
       <div class="field">

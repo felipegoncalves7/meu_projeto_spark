@@ -16,6 +16,12 @@
 .sec-head .sec-actions { max-width: 100%; min-width: 0; flex-wrap: wrap; }
 .sec-head .sec-actions .seg { max-width: 100%; }
 
+/* ---------- intervalo personalizado (cabeçalho) ---------- */
+.ox-range { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ox-range span { color: rgba(255,255,255,.7); font-size: 12px; }
+.ox-range input[type="date"] { height: 34px; padding: 0 8px; font: inherit; font-size: 13px; font-weight: 600; color: #fff; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.28); border-radius: var(--radius-sm); color-scheme: dark; }
+.ox-range .btn { height: 34px; }
+
 /* ---------- agenda ---------- */
 .ox-agenda { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 0; border: var(--border-hairline); }
 .ox-agenda > div { padding: 20px 22px; min-width: 0; }

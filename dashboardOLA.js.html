@@ -171,6 +171,7 @@
   var D = null, M = null, ALL = [], BYID = {}, charts = {}, CACHE = {};
   var state = {
     year: null, periodKey: 'l6', cmp: 'yoy', layer: 'all', card: 'exc', rank: 'tec', modal: null,
+    custom: null,
     base: { flow: '', layer: '', sev: '', origem: '', prb: '', q: '' },
     eng: { type: 'rca', sort: 'volume', teams: [] }
   };
@@ -245,10 +246,10 @@
     if (a.y === b.y) return MABBR[a.m - 1] + '–' + MABBR[b.m - 1] + '/' + b.y;
     return MABBR[a.m - 1] + '/' + a.y + '–' + MABBR[b.m - 1] + '/' + b.y;
   }
-  function mkWin(key, label, group, months, cut) {
+  function mkWin(key, label, group, months, cut, start) {
     var set = {};
     months.forEach(function (x) { set[x.y + '-' + x.m] = true; });
-    var w = { key: key, label: label, group: group, months: months, cut: cut, set: set };
+    var w = { key: key, label: label, group: group, months: months, cut: cut, start: start || null, set: set, short: rangeTxt(months) };
     var t = cut ? new Date(cut) : null;
     var stOf = function (x) { var yd = ydOf(x.y); return yd && yd.statuses ? yd.statuses[x.m - 1] : null; };
     var partial = months.filter(function (x) { return stOf(x) === 'PARCIAL'; });
@@ -260,9 +261,34 @@
       (notStarted.length && own ? ' · ' + mlist(notStarted) + ' sem apuração' : '');
     w.partial = partial;
     w.notStarted = notStarted;
+    if (w.start) {
+      // intervalo por datas: o rótulo mostra as datas (os meses tocados continuam em w.months)
+      w.short = fmtDay(w.start) + ' a ' + fmtDay(cut);
+      w.range = w.short + (partial.length && own ? ' · ' + mlist(partial) + ' parcial' : '') + (notStarted.length && own ? ' · ' + mlist(notStarted) + ' sem apuração' : '');
+    }
     return w;
   }
-  function periodDefs() {
+  // Intervalo personalizado (data início e data fim escolhidas pelo usuário)
+  function dayStart(ms) { var d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); }
+  function isoDay(ms) { var d = new Date(ms); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+  function parseIsoDay(s) { var m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : null; }
+  function monthsBetween(a, b) {
+    var out = [], d = new Date(a), e = new Date(b);
+    var y = d.getFullYear(), m = d.getMonth() + 1;
+    while (y < e.getFullYear() || (y === e.getFullYear() && m <= e.getMonth() + 1)) { out.push({ y: y, m: m }); m++; if (m > 12) { m = 1; y++; } }
+    return out;
+  }
+  function mkCustom(startMs, endMs, key, label) {
+    var s0 = dayStart(startMs), e0 = endOfDay(endMs);
+    return mkWin(key || 'custom', label || 'Personalizado', 'Personalizado', monthsBetween(s0, e0), e0, s0);
+  }
+  function customDefault() {
+    var list = periodDefs(true), w = list.find(function (x) { return x.key === state.periodKey; }) || list[0];
+    var f = w.months[0], l = w.months[w.months.length - 1];
+    var end = w.cut || endOfDay(new Date(l.y, l.m, 0).getTime());
+    return { start: w.start || new Date(f.y, f.m - 1, 1).getTime(), end: Math.min(end, endOfDay(D.today)) };
+  }
+  function periodDefs(noCustom) {
     var rp = refPoint(), y = rp.y, m = rp.m, out = [];
     var inCut = function (months) { return months.some(function (x) { return x.y === y && x.m === m; }) ? rp.cut : null; };
     var l6 = monthsBack(y, m, 6);
@@ -292,10 +318,23 @@
       var qe = Math.min(q * 3, m), qm = monthsBack(y, qe, qe - qs + 1);
       out.push(mkWin('q' + q, q + 'º trimestre', 'Trimestres', qm, inCut(qm)));
     }
+    if (!noCustom) {
+      var c = state.custom || customDefault();
+      out.push(mkCustom(c.start, c.end));
+    }
     return out;
   }
   function getWin(key) { var list = periodDefs(); return list.find(function (w) { return w.key === key; }) || list[0]; }
   function cmpWin(w, mode) {
+    if (w.start) {
+      if (mode === 'pop') {
+        var nDays = Math.round((dayStart(w.cut) - w.start) / 86400000) + 1;
+        var ps = new Date(w.start); ps.setDate(ps.getDate() - nDays);
+        var pe = new Date(w.start); pe.setDate(pe.getDate() - 1);
+        return mkCustom(ps.getTime(), pe.getTime(), 'pop', 'Período anterior');
+      }
+      return mkCustom(shiftYear(w.start, -1), shiftYear(dayStart(w.cut), -1), 'yoy', 'Mesmo período do ano anterior');
+    }
     if (mode === 'pop') {
       var f = w.months[0], n = w.months.length, pm = f.m - 1, py = f.y;
       if (pm < 1) { pm = 12; py--; }
@@ -310,7 +349,7 @@
   }
 
   /* ------------------------------------------------------------- seleção */
-  function inWin(I, w) { return !!w.set[I.year + '-' + I.m] && (!w.cut || !isNum(I.ab) || I.ab <= w.cut); }
+  function inWin(I, w) { return !!w.set[I.year + '-' + I.m] && (!w.cut || !isNum(I.ab) || I.ab <= w.cut) && (!w.start || !isNum(I.ab) || I.ab >= w.start); }
   function passLayer(I, layer) { layer = layer || state.layer; return layer === 'all' || I.layer === layer; }
   function select(w, layer) { return ALL.filter(function (I) { return inWin(I, w) && passLayer(I, layer); }); }
   function rowOk(r) { return !r.unm && r.flow !== 'outros' && (state.card === 'inc' || !r.card); }
@@ -448,7 +487,7 @@
     var cur = select(w), prevAvail = !cov.none;
     var prev = prevAvail ? select(cw) : null;
     var L = {
-      cur: w.range, prev: cw.range, curShort: rangeTxt(w.months), prevShort: rangeTxt(cw.months),
+      cur: w.range, prev: cw.range, curShort: w.short, prevShort: cw.short,
       cmpName: state.cmp === 'yoy' ? 'mesmo período do ano anterior' : 'período anterior'
     };
     M = { w: w, cw: cw, cov: cov, cur: cur, prev: prev, sCur: stats(cur), sPrev: prev ? stats(prev) : null, L: L };
@@ -503,6 +542,7 @@
     var tNow = new Date(D.today), started = rp.y === tNow.getFullYear() ? tNow.getMonth() + 1 : 12;
     var next = rp.none ? null : (rp.m < started && st[rp.m] === 'NAO_INICIADO' ? MONTHS[rp.m] : null);
     var lastTxt = '<b>' + MONTHS[rp.m - 1] + '/' + rp.y + '</b>' + (rp.partial ? ' (apuração parcial)' : '');
+    if (M.w.start) h += notice('info', 'calendar', 'Intervalo personalizado de <b>' + esc(M.w.short) + '</b>: os incidentes seguem as datas escolhidas; a Disponibilidade usa a média dos meses apurados que o intervalo toca (o indicador é mensal).');
     if (M.w.notStarted && M.w.notStarted.length) {
       h += notice('out', 'clock', 'O período inclui <b>' + esc(M.w.notStarted.map(function (x) { return MONTHS[x.m - 1] + '/' + x.y; }).join(', ')) + '</b>, ainda sem apuração iniciada na aba Status_Apuracao: os incidentes já registrados entram nos números, mas a Disponibilidade considera só os meses apurados (até ' + lastTxt + ').');
     } else {
@@ -573,7 +613,7 @@
   function splitCell(label, v, cls, dl) { return '<div><div class="legend">' + label + '</div><div class="v ' + (cls || '') + '">' + v + '</div>' + (dl || '') + '</div>'; }
   function renderPanorama() {
     var c = M.sCur, p = M.sPrev, P = p || {}, vs = vsTxt();
-    var nMonths = M.w.months.length;
+    var nMonths = M.w.start ? Math.max(1, (M.w.cut - M.w.start) / 86400000 / 30.4375) : M.w.months.length;
     var dl = function (fn, a, b, x, y) { return p ? deltaHtml(fn(a, b, x, y)) : deltaHtml(nobase()); };
     var ps = prbSummary(M.problems);
     var cards = [
@@ -631,7 +671,7 @@
     drawMttr();
   }
 
-  function monthSeries(w, fn) { return w.months.map(function (x) { var mw = mkWin('m', '', '', [x], w.cut); return fn(select(mw), x); }); }
+  function monthSeries(w, fn) { return w.months.map(function (x) { var mw = mkWin('m', '', '', [x], w.cut, w.start); return fn(select(mw), x); }); }
   function drawTrend() {
     var cv = $('ox-ch-trend');
     if (!cv || !window.Chart) return;
@@ -647,7 +687,7 @@
       type: 'bar', data: { labels: labels, datasets: ds },
       options: {
         responsive: true, maintainAspectRatio: false,
-        onClick: function (e, els) { if (!els.length) return; var x = M.w.months[els[0].index]; openModal({ title: 'Incidentes de ' + MONTHS[x.m - 1] + '/' + x.y, eyebrow: 'Panorama', icon: 'calendar', list: select(mkWin('m', '', '', [x], M.w.cut)) }); },
+        onClick: function (e, els) { if (!els.length) return; var x = M.w.months[els[0].index]; openModal({ title: 'Incidentes de ' + MONTHS[x.m - 1] + '/' + x.y, eyebrow: 'Panorama', icon: 'calendar', list: select(mkWin('m', '', '', [x], M.w.cut, M.w.start)) }); },
         plugins: {
           legend: { position: 'top', align: 'end', labels: { boxWidth: 10, boxHeight: 10, font: { size: 11 } } },
           datalabels: { display: function (ctx) { return ctx.dataset.type !== 'line' && ctx.dataset.data[ctx.dataIndex] > 0; }, color: '#fff', font: { size: 10, weight: '700' } },
@@ -1562,8 +1602,32 @@
     var ps = $('ox-period'), list = periodDefs(), groups = {}, order = [];
     if (!list.find(function (w) { return w.key === state.periodKey; })) state.periodKey = list[0].key;
     list.forEach(function (w) { if (!groups[w.group]) { groups[w.group] = []; order.push(w.group); } groups[w.group].push(w); });
-    ps.innerHTML = order.map(function (g) { return '<optgroup label="' + esc(g) + '">' + groups[g].map(function (w) { return '<option value="' + w.key + '"' + (w.key === state.periodKey ? ' selected' : '') + '>' + esc(w.label + ' · ' + w.range) + '</option>'; }).join('') + '</optgroup>'; }).join('');
+    ps.innerHTML = order.map(function (g) { return '<optgroup label="' + esc(g) + '">' + groups[g].map(function (w) {
+      var txt = w.key === 'custom' ? 'Personalizado (escolher datas)' : w.label + ' · ' + w.range;
+      return '<option value="' + w.key + '"' + (w.key === state.periodKey ? ' selected' : '') + (w.key === 'custom' && state.custom ? ' title="' + esc(w.range) + '"' : '') + '>' + esc(txt) + '</option>'; }).join('') + '</optgroup>'; }).join('');
     ps.disabled = false;
+    syncCustom();
+  }
+  // Mostra/oculta e preenche as datas do intervalo personalizado
+  function syncCustom() {
+    var box = $('ox-custom');
+    if (!box) return;
+    box.hidden = state.periodKey !== 'custom';
+    var c = state.custom || customDefault(), si = $('ox-start'), ei = $('ox-end');
+    var min = (D.year - 1) + '-01-01', max = isoDay(D.today);
+    [si, ei].forEach(function (i) { i.min = min; i.max = max; });
+    si.value = isoDay(c.start); ei.value = isoDay(c.end);
+  }
+  function applyCustom() {
+    var a = parseIsoDay($('ox-start').value), b = parseIsoDay($('ox-end').value);
+    if (!isNum(a) || !isNum(b)) { toast('Informe a data de início e a data de fim.'); return; }
+    if (a > b) { var t = a; a = b; b = t; }
+    var min = new Date(D.year - 1, 0, 1).getTime(), max = dayStart(D.today);
+    if (b < min || a > max) { toast('Escolha datas entre 01/01/' + (D.year - 1) + ' e hoje.'); return; }
+    state.custom = { start: Math.max(a, min), end: Math.min(b, max) };
+    state.periodKey = 'custom';
+    fillPeriods();
+    rerender();
   }
   function onData(res) {
     setLoading(false);
@@ -1599,7 +1663,14 @@
     document.addEventListener('mouseover', onOver);
     document.addEventListener('mouseout', onOut);
     window.addEventListener('scroll', function () { if (tipEl) tipEl.hidden = true; }, { passive: true });
-    $('ox-period').addEventListener('change', function () { state.periodKey = this.value; rerender(); });
+    $('ox-period').addEventListener('change', function () {
+      if (this.value === 'custom' && !state.custom) state.custom = customDefault();
+      state.periodKey = this.value;
+      fillPeriods();
+      rerender();
+    });
+    $('ox-apply').addEventListener('click', applyCustom);
+    ['ox-start', 'ox-end'].forEach(function (id) { $(id).addEventListener('keydown', function (ev) { if (ev.key === 'Enter') applyCustom(); }); });
     load(null);
   }
 
