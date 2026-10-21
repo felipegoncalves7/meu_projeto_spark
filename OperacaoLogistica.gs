@@ -65,10 +65,11 @@ const OL_FLOW_DISPLAY_ORDER = ['separacao', 'manufatura', 'atendimento', 'planej
 
 // Catálogo de Localidades / Sistemas por fluxo (exibidas mesmo sem incidentes no período).
 // kind: cd | hub | pea | planta | ecoparque | sistema. aliases: nomes alternativos (sem acento/caixa).
+// deactivated: localidade desativada — só aparece quando tem incidentes no período (transferNote explica o motivo).
 const OL_CATALOGO = {
   separacao: [
     { name: 'CD Cabreúva', country: 'br', kind: 'cd' },
-    { name: 'CD Cajamar', country: 'br', kind: 'cd' },
+    { name: 'CD Cajamar', country: 'br', kind: 'cd', deactivated: true, inactiveNote: 'Desativado', transferNote: 'Operação transferida para o CD Cabreúva. Os incidentes são do período em que o CD Cajamar operava.' },
     { name: 'CD Castanhal', country: 'br', kind: 'cd' },
     { name: 'CD Matias Barbosa', country: 'br', kind: 'cd' },
     { name: 'CD Murici', country: 'br', kind: 'cd' },

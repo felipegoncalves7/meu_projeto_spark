@@ -583,7 +583,7 @@
       var c = e.catalog || {};
       e.retired = !!(c.years && c.years.indexOf(cy) === -1);
       e.noPrevBase = !e.retired && !e.predecessorName && !!(c.years && c.years.indexOf(py) === -1);
-      e.inactive = !!(c.inactiveAfterYear && cy > c.inactiveAfterYear);
+      e.inactive = !!(c.inactiveAfterYear && cy > c.inactiveAfterYear) || !!c.deactivated;
       var path = matchDispPath(f.key, e, 'cur');
       e.disp = path ? dispFor(path, months, undefined, matchDispPath(f.key, e, 'prev') || undefined) : null;
       return e;
@@ -1235,7 +1235,7 @@
     meta.push(esc(kind));
     var flagsHtml = e.kind === 'sistema' && e.countries.length ? '<div class="flags" style="margin-top:4px">' + e.countries.map(function (iso) { return flag(iso); }).join('') + '</div>' : '';
     var tags = '';
-    if (e.catalog && e.catalog.inactiveNote) tags += '<span class="tag is-inactive">' + esc(e.catalog.inactiveNote) + '</span>';
+    if (e.catalog && e.catalog.inactiveNote) tags += '<span class="tag is-inactive"' + (e.catalog.transferNote ? ' data-tip="' + esc(e.catalog.transferNote) + '"' : '') + '>' + esc(e.catalog.inactiveNote) + '</span>';
     if (e.retired) tags += '<span class="tag is-inactive">Até ' + esc(String(Math.max.apply(null, e.catalog.years))) + '</span>';
     if (e.noPrevBase) tags += '<span class="tag is-new" data-tip="Sistema sem histórico em ' + esc(L.prevYear) + ': variação sem base comparável.">Sem histórico ' + esc(L.prevYear) + '</span>';
     if (e.unnamed) tags += '<span class="tag" data-tip="Linhas de impacto sem Localidade preenchida: agrupadas pelo Mercado.">CD não nomeado</span>';

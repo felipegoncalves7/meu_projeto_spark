@@ -30,8 +30,15 @@ const OLX_INFRA_KEYWORDS = [
   'storage', 'disco', 'vm', 'vmware', 'virtualizacao', 'cluster', 'cloud', 'nuvem', 'gcp', 'aws', 'azure', 'oci',
   'radius', 'active directory', 'ldap', 'certificado', 'citrix', 'sistema operacional', 'backup', 'basis',
   'banco de dados', 'database', 'dba', 'coletor', 'coletores', 'impressora', 'impressoras', 'printer', 'rf',
-  'memoria', 'cpu', 'capacidade', 'kubernetes', 'k8s', 'gke', 'container', 'noc', 'ar condicionado', 'refrigeracao'
+  'memoria', 'cpu', 'capacidade', 'kubernetes', 'k8s', 'gke', 'container', 'noc', 'ar condicionado', 'refrigeracao',
+  // datacenter, rede e segurança de perímetro
+  'dc', 'equinix', 'ascenty', 'colocation', 'rack', 'fex', 'nexus', 'fabric extender', 'vlan', 'bgp', 'roteamento', 'fibra',
+  'cabeamento', 'embratel', 'load balancer', 'balanceador', 'f5', 'fortinet', 'fortigate', 'palo alto', 'hypervisor',
+  'hipervisor', 'esxi', 'vcenter', 'firmware', 'subestacao', 'eletricidade', 'climatizacao'
 ];
+// Termos inequívocos de datacenter/rede: valem também no Título e nas Descrições, antes das palavras de Aplicação
+// (ex.: Ofensor "Interface FEX" ou "DC Equinix" é Infraestrutura, mesmo com "interface" na lista de Aplicação).
+const OLX_INFRA_STRONG = ['equinix', 'ascenty', 'colocation', 'fex', 'nexus', 'fabric extender'];
 // Palavras-chave que indicam Aplicação (decidem quando o Ofensor é claramente de aplicação).
 const OLX_APP_KEYWORDS = [
   'aplicacao', 'aplicacoes', 'software', 'parametrizacao', 'parametro', 'regra de negocio', 'regra negocio', 'job', 'jobs',
@@ -95,12 +102,13 @@ function olxReadLayerOverrides(ss) {
 /**
  * Camada do Incidente: Aplicação ou Infraestrutura. Ordem dos sinais (o primeiro que decidir vale):
  *  1. aba OL_Camada (por Incidente, Ofensor, Tecnologia impactada ou Grupo);
- *  2. Ofensor (palavras-chave de Infraestrutura / de Aplicação);
- *  3. Category / Subcategory do ServiceNow;
- *  4. Tecnologia impactada;
- *  5. Grupo responsável (ServiceNow ou da Mudança);
- *  6. frases fortes na Descrição do Ofensor;
- *  7. padrão: Aplicação.
+ *  2. termos de Infraestrutura no Ofensor ou na Tecnologia impactada (inclui datacenter, rede, energia);
+ *  3. termos inequívocos de datacenter (Equinix, FEX, Nexus...) no Título ou nas Descrições;
+ *  4. Ofensor com termo de Aplicação;
+ *  5. Category / Subcategory do ServiceNow;
+ *  6. Grupo responsável (ServiceNow ou da Mudança);
+ *  7. frases fortes na Descrição do Ofensor (queda de energia, link, switch, datacenter...);
+ *  8. padrão: Aplicação.
  */
 function olxClassifyLayer(I, ov) {
   const done = (layer, why, src) => ({ layer: layer, why: why, src: src });
@@ -120,10 +128,25 @@ function olxClassifyLayer(I, ov) {
     if (ov.grupo[k]) return done(ov.grupo[k], 'Grupo "' + groups[i] + '" na aba ' + OLX_LAYER_SHEET, 'planilha');
   }
   const isChange = ofensores.some(o => olFold(o) === 'mudanca');
+  // 1º) termos de Infraestrutura no Ofensor e na Tecnologia impactada
   for (let i = 0; i < ofensores.length; i++) {
     if (olFold(ofensores[i]) === 'mudanca') continue; // Mudança decide pela Category/Grupo da SM
     const kwI = olxAnyKeyword(ofensores[i], OLX_INFRA_KEYWORDS);
     if (kwI) return done('infra', 'Ofensor "' + ofensores[i] + '" (termo "' + kwI + '")', 'regra');
+  }
+  for (let i = 0; i < I.tImp.length; i++) {
+    const kwT = olxAnyKeyword(I.tImp[i], OLX_INFRA_KEYWORDS);
+    if (kwT) return done('infra', 'Tecnologia impactada "' + I.tImp[i] + '" (termo "' + kwT + '")', 'regra');
+  }
+  // 2º) termos inequívocos de datacenter no Título e nas Descrições
+  const texts = [['Título', I.tit], ['Descrição do Ofensor', I.dOf], ['Descrição do Impacto', I.dImp]];
+  for (let i = 0; i < texts.length; i++) {
+    const kwS = olxAnyKeyword(texts[i][1], OLX_INFRA_STRONG);
+    if (kwS) return done('infra', texts[i][0] + ' menciona "' + kwS + '"', 'regra');
+  }
+  // 3º) Ofensor claramente de Aplicação
+  for (let i = 0; i < ofensores.length; i++) {
+    if (olFold(ofensores[i]) === 'mudanca') continue;
     const kwA = olxAnyKeyword(ofensores[i], OLX_APP_KEYWORDS);
     if (kwA) return done('app', 'Ofensor "' + ofensores[i] + '" (termo "' + kwA + '")', 'regra');
   }
@@ -134,15 +157,11 @@ function olxClassifyLayer(I, ov) {
     const kwA = olxAnyKeyword(cat, ['software', 'application', 'aplicacao', 'sistema']);
     if (kwA && !isChange) return done('app', 'Category do ServiceNow "' + cat + '"', 'regra');
   }
-  for (let i = 0; i < I.tImp.length; i++) {
-    const kw = olxAnyKeyword(I.tImp[i], OLX_INFRA_KEYWORDS);
-    if (kw) return done('infra', 'Tecnologia impactada "' + I.tImp[i] + '" (termo "' + kw + '")', 'regra');
-  }
   for (let i = 0; i < groups.length; i++) {
     const kw = olxAnyKeyword(groups[i], OLX_INFRA_KEYWORDS);
     if (kw) return done('infra', 'Grupo "' + groups[i] + '" (termo "' + kw + '")', 'regra');
   }
-  const ph = olxAnyKeyword(I.dOf, OLX_INFRA_PHRASES);
+  const ph = olxAnyKeyword(I.dOf, OLX_INFRA_PHRASES.concat(['datacenter', 'data center']));
   if (ph) return done('infra', 'Descrição do Ofensor menciona "' + ph + '"', 'regra');
   return done('app', isChange ? 'Mudança sem indício de Infraestrutura (Category/Grupo)' : 'Sem indício de Infraestrutura nos campos', 'padrão');
 }

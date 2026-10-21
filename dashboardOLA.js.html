@@ -359,7 +359,7 @@
 
   /* --------------------------------------------------------- agregação */
   function stats(list) {
-    var s = { n: list.length, sev0: 0, sev1: 0, ttrN: 0, ttrSum: 0, n0: 0, t0: 0, n1: 0, t1: 0, ok0: 0, ok1: 0, out0: 0, out1: 0, so0: 0, so0n: 0, so1: 0, so1n: 0, outTtr: 0,
+    var s = { n: list.length, sev0: 0, sev1: 0, ttrN: 0, ttrSum: 0, n0: 0, t0: 0, n1: 0, t1: 0, ok0: 0, ok1: 0, out0: 0, out1: 0, so0: 0, so0n: 0, so1: 0, so1n: 0, okSO0: 0, okSO1: 0, outTtr: 0,
       org: { eu: 0, mon: 0, exp: 0, na: 0 }, orgT: { eu: [0, 0], mon: [0, 0], exp: [0, 0], na: [0, 0] }, lay: { app: 0, infra: 0 }, layT: { app: [0, 0], infra: [0, 0] },
       chg: 0, withPrb: 0, list: list };
     list.forEach(function (I) {
@@ -372,14 +372,15 @@
         s.orgT[I.ok][0] += I.ttrU; s.orgT[I.ok][1]++;
         s.layT[I.layer][0] += I.ttrU; s.layT[I.layer][1]++;
         if (I.outlier) s.outTtr += I.ttrU;
-        if (I.sevN === 0) { s.n0++; s.t0 += I.ttrU; if (I.olaOk) s.ok0++; if (I.outlier) s.out0++; else { s.so0 += I.ttrU; s.so0n++; } }
-        else if (I.sevN === 1) { s.n1++; s.t1 += I.ttrU; if (I.olaOk) s.ok1++; if (I.outlier) s.out1++; else { s.so1 += I.ttrU; s.so1n++; } }
+        if (I.sevN === 0) { s.n0++; s.t0 += I.ttrU; if (I.olaOk) s.ok0++; if (I.outlier) s.out0++; else { s.so0 += I.ttrU; s.so0n++; if (I.olaOk) s.okSO0++; } }
+        else if (I.sevN === 1) { s.n1++; s.t1 += I.ttrU; if (I.olaOk) s.ok1++; if (I.outlier) s.out1++; else { s.so1 += I.ttrU; s.so1n++; if (I.olaOk) s.okSO1++; } }
       }
     });
     s.mttr = s.ttrN ? s.ttrSum / s.ttrN : null;
     s.mttr0 = s.n0 ? s.t0 / s.n0 : null; s.mttr1 = s.n1 ? s.t1 / s.n1 : null;
     s.mttrSO0 = s.so0n ? s.so0 / s.so0n : null; s.mttrSO1 = s.so1n ? s.so1 / s.so1n : null;
     s.ola0 = pct(s.ok0, s.n0); s.ola1 = pct(s.ok1, s.n1); s.ola = pct(s.ok0 + s.ok1, s.n0 + s.n1);
+    s.olaSO0 = pct(s.okSO0, s.so0n); s.olaSO1 = pct(s.okSO1, s.so1n); s.olaSO = pct(s.okSO0 + s.okSO1, s.so0n + s.so1n);
     s.pMon = pct(s.org.mon, s.n); s.pEu = pct(s.org.eu, s.n); s.pExp = pct(s.org.exp, s.n);
     s.pInfra = pct(s.lay.infra, s.n); s.pApp = pct(s.lay.app, s.n); s.pChg = pct(s.chg, s.n); s.pPrb = pct(s.withPrb, s.n);
     s.mttrOrg = {}; Object.keys(s.orgT).forEach(function (k) { s.mttrOrg[k] = s.orgT[k][1] ? s.orgT[k][0] / s.orgT[k][1] : null; });
@@ -598,10 +599,11 @@
         tip: 'Desconsidera incidentes com TTR ≥ ' + fmtHM(T.outlierSev0) + ' (Sev 0) e ≥ ' + fmtHM(T.outlierSev1) + ' (Sev 1). Metas: Sev 0 ≤ ' + fmtHM(T.mttrSemOutliersSev0) + ' e Sev 1 ≤ ' + fmtHM(T.mttrSemOutliersSev1) + '.',
         split: splitCell('Sev 0 · meta ' + fmtHM(T.mttrSemOutliersSev0), fmtHM(c.mttrSO0), targetCls(c.mttrSO0, T.mttrSemOutliersSev0), dl(deltaMin, c.mttrSO0, P.mttrSO0)) + splitCell('Sev 1 · meta ' + fmtHM(T.mttrSemOutliersSev1), fmtHM(c.mttrSO1), targetCls(c.mttrSO1, T.mttrSemOutliersSev1), dl(deltaMin, c.mttrSO1, P.mttrSO1)),
         foot: isNum(c.outShare) ? 'Outliers somam ' + fmtPct(c.outShare, 0) + ' das horas de TTR do período' : '' }),
-      kpiCard({ title: 'OLA de resolução', icon: 'check', value: fmtPct(c.ola), delta: deltaHtml(p ? deltaPP(c.ola, P.ola, 1, 'higher') : nobase(), vs),
-        tip: 'Incidentes resolvidos dentro do OLA: Sev 0 ≤ ' + fmtHM(T.olaSev0) + ' e Sev 1 ≤ ' + fmtHM(T.olaSev1) + ' (TTR oficial).',
-        split: splitCell('Sev 0 · ≤ ' + fmtHM(T.olaSev0), fmtPct(c.ola0), olaCls(c.ola0), dl(deltaPP, c.ola0, P.ola0, 1, 'higher')) + splitCell('Sev 1 · ≤ ' + fmtHM(T.olaSev1), fmtPct(c.ola1), olaCls(c.ola1), dl(deltaPP, c.ola1, P.ola1, 1, 'higher')),
-        alert: isNum(c.ola) && c.ola < 80 }),
+      kpiCard({ title: 'OLA de resolução s/ outliers', icon: 'check', value: fmtPct(c.olaSO), delta: deltaHtml(p ? deltaPP(c.olaSO, P.olaSO, 1, 'higher') : nobase(), vs),
+        tip: 'Incidentes resolvidos dentro do OLA (Sev 0 ≤ ' + fmtHM(T.olaSev0) + ' e Sev 1 ≤ ' + fmtHM(T.olaSev1) + ', TTR oficial), desconsiderando os outliers (TTR ≥ ' + fmtHM(T.outlierSev0) + ' no Sev 0 e ≥ ' + fmtHM(T.outlierSev1) + ' no Sev 1), mesma regra do MTTR sem outliers.',
+        split: splitCell('Sev 0 · ≤ ' + fmtHM(T.olaSev0), fmtPct(c.olaSO0), olaCls(c.olaSO0), dl(deltaPP, c.olaSO0, P.olaSO0, 1, 'higher')) + splitCell('Sev 1 · ≤ ' + fmtHM(T.olaSev1), fmtPct(c.olaSO1), olaCls(c.olaSO1), dl(deltaPP, c.olaSO1, P.olaSO1, 1, 'higher')),
+        foot: 'Com todos os incidentes (inclui ' + (c.out0 + c.out1) + ' ' + plural(c.out0 + c.out1, 'outlier', 'outliers') + '): ' + fmtPct(c.ola) + ' (Sev 0 ' + fmtPct(c.ola0) + ' · Sev 1 ' + fmtPct(c.ola1) + ')',
+        alert: isNum(c.olaSO) && c.olaSO < 80 }),
       kpiCard({ title: 'Detectados pela Monitoração', icon: 'radar', value: fmtPct(c.pMon, 0), delta: deltaHtml(p ? deltaPP(c.pMon, P.pMon, 1, 'higher') : nobase(), vs),
         tip: 'Origem da Detecção pelo Caller do ServiceNow: Monitoração (integrações), Experiências e End-users (pessoas).',
         split: splitCell('End-users', fmtPct(c.pEu, 0), isNum(c.pEu) && c.pEu >= 40 ? 'bad' : '', dl(deltaPP, c.pEu, P.pEu, 1, 'lower')) + splitCell('Experiências', fmtPct(c.pExp, 0), '', dl(deltaPP, c.pExp, P.pExp, 1, 'higher')),
@@ -725,7 +727,7 @@
       (c.out0 + c.out1 ? '; ' + (c.out0 + c.out1) + ' ' + plural(c.out0 + c.out1, 'outlier concentra', 'outliers concentram') + ' ' + fmtPct(c.outShare, 0) + ' das horas de TTR' : '') + '.');
     else if (isNum(c.mttr)) out.push('MTTR dentro das metas de Severidade (Sev 0 ' + fmtHM(c.mttr0) + ' · Sev 1 ' + fmtHM(c.mttr1) + ').');
     // OLA
-    if (isNum(c.ola)) out.push('OLA de resolução em <b>' + fmtPct(c.ola) + '</b> (Sev 0 ' + fmtPct(c.ola0) + ' · Sev 1 ' + fmtPct(c.ola1) + ')' + (p && isNum(p.ola) ? ', ' + fmtSigned(c.ola - p.ola, 1) + ' p.p. vs ' + esc(vs) : '') + '.');
+    if (isNum(c.olaSO)) out.push('OLA de resolução sem outliers em <b>' + fmtPct(c.olaSO) + '</b> (Sev 0 ' + fmtPct(c.olaSO0) + ' · Sev 1 ' + fmtPct(c.olaSO1) + ')' + (p && isNum(p.olaSO) ? ', ' + fmtSigned(c.olaSO - p.olaSO, 1) + ' p.p. vs ' + esc(vs) : '') + '; com todos os incidentes, ' + fmtPct(c.ola) + '.');
     // detecção
     if (isNum(c.pEu)) out.push('<b>' + fmtPct(c.pEu, 0) + '</b> dos incidentes foram reportados por End-users e ' + fmtPct(c.pMon, 0) + ' detectados pela Monitoração' + (isNum(c.mttrOrg.eu) && isNum(c.mttrOrg.mon) ? ' (MTTR ' + fmtHM(c.mttrOrg.eu) + ' x ' + fmtHM(c.mttrOrg.mon) + ')' : '') + '.');
     // mudança
@@ -810,6 +812,7 @@
     cat.forEach(function (c) {
       if (c.years && !c.years.some(function (y) { return yrs.indexOf(y) !== -1; })) return;
       if (c.inactiveAfterYear && yrs.every(function (y) { return y > c.inactiveAfterYear; })) return;
+      if (c.deactivated) return; // localidade desativada: só aparece pelos incidentes do período
       add((c.kind === 'sistema' ? 'sys:' : 'loc:') + fold(c.name), c.name, c.kind, c.country, { catalog: c });
     });
     var catBy = {};
@@ -818,7 +821,7 @@
     (f.prev || []).forEach(function (I) {
       flowRows(I, cfg.key).forEach(function (r) {
         var c = catBy[r.ent];
-        if (c && ((c.years && !c.years.some(function (y) { return yrs.indexOf(y) !== -1; })) || c.successor)) return;
+        if (c && ((c.years && !c.years.some(function (y) { return yrs.indexOf(y) !== -1; })) || c.successor || c.deactivated)) return;
         add(r.ent, r.entName, r.entKind, r.entCc, { unnamed: r.entUnnamed, catalog: c });
       });
     });
@@ -837,7 +840,7 @@
   function entCard(f, e, withFlag) {
     var s = e.s, sp = e.sp, has = s.n > 0;
     var tags = '';
-    if (e.catalog && e.catalog.inactiveNote) tags += '<span class="tag is-inactive">' + esc(e.catalog.inactiveNote) + '</span>';
+    if (e.catalog && e.catalog.inactiveNote) tags += '<span class="tag is-inactive"' + (e.catalog.transferNote ? ' data-tip="' + esc(e.catalog.transferNote) + '"' : '') + '>' + esc(e.catalog.inactiveNote) + '</span>';
     if (e.catalog && e.catalog.predecessor) tags += '<span class="tag is-new" data-tip="Comparativo usa o ' + esc(e.catalog.predecessor) + ' (sistema do fluxo antes do ' + esc(e.name) + ').">Sucede o ' + esc(e.catalog.predecessor) + '</span>';
     if (e.unnamed) tags += '<span class="tag">CD não nomeado</span>';
     var topO = topOf(e.cur, KEYS.ofe, 1)[0], topT = topOf(e.cur, KEYS.tec, 1)[0];
@@ -848,6 +851,7 @@
     var disp = isNum(e.disp.cv) ? '<div class="row"><span class="k">Disponibilidade</span><span class="v">' + fmtPct(e.disp.cv, 2) + ' ' + chip(e.disp.status, true) + '</span></div>' : '';
     return '<div role="button" tabindex="0" class="ox-card' + (s.n >= 3 ? ' is-hot' : '') + '" data-action="open-ent" data-flow="' + f.cfg.key + '" data-ent="' + esc(e.key) + '" aria-label="Ver incidentes de ' + esc(e.name) + '">' +
       '<div class="ch">' + tile(entIcon(e.kind, e.name), 'sm') + '<div style="min-width:0"><div class="nm">' + esc(e.name) + '</div><div class="kd">' + (withFlag && e.country ? flag(e.country) + ' ' + esc(COUNTRY_NAMES[e.country] || e.country.toUpperCase()) + ' · ' : '') + esc(KIND_LABEL[e.kind] || 'Localidade') + tags + '</div></div></div>' +
+      (e.catalog && e.catalog.transferNote ? '<div class="ox-note" style="margin:0">' + icon('info').replace('class="ico"', 'class="ico" style="width:13px;height:13px;vertical-align:-2px;margin-right:3px"') + esc(e.catalog.transferNote) + '</div>' : '') +
       '<div class="cm"><div class="cnt">' + s.n + '<small>' + plural(s.n, 'incidente', 'incidentes') + '</small></div>' + deltaHtml(sp ? deltaCount(s.n, sp.n, 'lower') : nobase()) + '</div>' +
       (has ? '<div class="ox-sev">' + sev('Sev 0', 's0', s.sev0, s.mttr0, T.mttrSev0, s.ola0) + sev('Sev 1', 's1', s.sev1, s.mttr1, T.mttrSev1, s.ola1) + '</div>' +
         '<div><div class="legend" style="margin-bottom:3px">Origem da Detecção</div>' + stackHtml(origemParts(s)) + stackLegend(origemParts(s)) + '</div>' +
