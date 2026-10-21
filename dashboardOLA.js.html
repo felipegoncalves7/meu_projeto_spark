@@ -558,7 +558,6 @@
     destroyCharts();
     computeModel();
     renderStamp();
-    renderAgenda();
     renderPanorama();
     renderCamadas();
     renderFluxos();
@@ -574,35 +573,6 @@
   }
   function renderStamp() {
     $('ox-stamp').textContent = 'Base atualizada em ' + (D.lastUpdated || 'N/A') + ' · ' + M.L.cur + ' vs ' + M.L.prev;
-  }
-
-  /* ---------------------------------------------------------------- Agenda */
-  function renderAgenda() {
-    var steps = [
-      ['sec-panorama', 'Panorama do período', 'Volume, MTTR e OLA de resolução por Severidade, detecção e tendência mês a mês.'],
-      ['sec-camadas', 'Aplicação x Infraestrutura', 'Foco na camada de aplicação e desdobramento da infraestrutura que impacta as aplicações.'],
-      ['sec-fluxos', 'Fluxos e localidades', 'Separação, Faturamento e Transporte por CD; Manufatura por planta; Atendimento e Planejamento por sistema.'],
-      ['sec-deteccao', 'Detecção, tecnologias e reincidência', 'Quem detecta, quais tecnologias concentram incidentes e o que se repete.'],
-      ['sec-problemas', 'Problemas, RCA e Mudanças', 'Status dos Problemas, causa raiz, processo de origem, engajamento das equipes e incidentes causados por mudança.'],
-      ['sec-disp', 'Disponibilidade', 'Resultado mês a mês por fluxo e incidentes que mais consumiram disponibilidade.'],
-      ['sec-acoes', 'Oportunidades e próximos passos', 'Ações sugeridas a partir dos dados, para capturar com responsável e prazo.']
-    ];
-    var scope = [
-      '<span class="tag">' + icon('calendar').replace('class="ico"', 'class="ico" style="width:13px;height:13px"') + esc(M.w.label) + ': ' + esc(M.L.cur) + '</span>',
-      '<span class="tag">Comparativo: ' + esc(M.L.prev) + '</span>',
-      '<span class="tag">Camada: ' + (state.layer === 'all' ? 'Aplicação + Infraestrutura' : LAYER_LABEL[state.layer]) + '</span>',
-      '<span class="tag">CARD: ' + (state.card === 'exc' ? 'fora dos fluxos' : 'incluído') + '</span>'
-    ].join('');
-    var left = '<div><div class="eyebrow">Objetivo da agenda</div><h3>Visão tático-estratégica dos incidentes nas frentes de O&amp;L</h3>' +
-      '<p>Foco central na <b>tecnologia a nível de aplicação</b>, com o desdobramento do volume de <b>incidentes de infraestrutura</b> que impactam diretamente as aplicações usadas pelas frentes de O&amp;L.</p>' +
-      '<p>Panorama dos <b>últimos seis meses</b> para extrair insights, identificar oportunidades e sair alinhados sobre os próximos passos: captura de ações de melhoria e ajustes de processos.</p>' +
-      '<div class="eyebrow" style="margin-top:14px">Escopo desta leitura</div><div class="ox-scope">' + scope + '</div></div>';
-    var right = '<div><div class="eyebrow">Roteiro sugerido</div><ol class="ox-steps">' + steps.map(function (st) {
-      return '<li><div><a href="#' + st[0] + '">' + esc(st[1]) + '</a><span class="legend">' + esc(st[2]) + '</span></div></li>';
-    }).join('') + '</ol></div>';
-    $('sec-agenda').innerHTML = sectionHead('flag', 'Visão O&amp;L · Análise tático-estratégica', 'Agenda O&amp;L — ' + esc(M.L.cur),
-      'Sub-visão para a agenda com a liderança de O&amp;L: incidentes, disponibilidade, problemas e mudanças, por fluxo e localidade.') +
-      scopeNotices() + '<div class="ox-agenda">' + left + right + '</div>';
   }
 
   /* -------------------------------------------------------------- Panorama */
@@ -664,9 +634,9 @@
       '<div class="legend" style="margin-top:6px">Linhas pontilhadas = metas de MTTR (Sev 0 ' + fmtHM(T.mttrSev0) + ' · Sev 1 ' + fmtHM(T.mttrSev1) + ').</div></div></div>';
 
     $('sec-panorama').innerHTML = sectionHead('spark', 'Panorama · ' + esc(M.L.cur), 'O que aconteceu em O&amp;L no período',
-      'Comparativo com o ' + esc(M.L.cmpName) + ' (' + esc(M.L.prev) + '). Clique nos cards de fluxo, localidade e nos rankings para ver os incidentes.',
+      'Do resultado à causa: os indicadores do período escolhido e, nas seções seguintes, onde e por que os incidentes acontecem e o que priorizar. Comparativo com o ' + esc(M.L.cmpName) + ' (' + esc(M.L.prev) + '). Clique nos cards e rankings para ver os incidentes.',
       '<button type="button" class="btn btn-accent" data-action="open-all">' + icon('list') + 'Ver incidentes (' + c.n + ')</button>') +
-      dispBanner + '<div class="ox-kpis" style="margin-top:12px">' + cards + '</div>' + insHtml + charts2;
+      scopeNotices() + dispBanner + '<div class="ox-kpis" style="margin-top:12px">' + cards + '</div>' + insHtml + charts2;
     drawTrend();
     drawMttr();
   }
@@ -1316,7 +1286,7 @@
       var ho = topOf(hot.list, KEYS.ofe, 2);
       push({ rule: 'hot', subject: hot.k, prio: hot.n >= 5 ? 'alta' : 'media', front: 'Operação', title: 'Deep-dive em ' + hot.k,
         ev: '<b>' + hot.n + '</b> incidentes em ' + esc(hot.k) + ' (MTTR ' + fmtHM(stats(hot.list).mttr) + ')' + (ho.length ? '; ofensores: ' + esc(ho.map(function (t) { return t.k + ' (' + t.n + ')'; }).join(', ')) : '') + '.',
-        action: 'Agenda específica com a operação da localidade e os times de aplicação/infra para um plano de estabilização.', ids: hot.list.map(function (I) { return I.id; }) });
+        action: 'Encontro específico com a operação da localidade e os times de aplicação/infra para um plano de estabilização.', ids: hot.list.map(function (I) { return I.id; }) });
     }
     // 11. Disponibilidade abaixo da Meta
     M.flows.forEach(function (f) {
@@ -1340,11 +1310,11 @@
         '<div class="tags"><span class="tag">' + esc(o.front) + '</span>' + (o.ids && o.ids.length ? '<button type="button" class="tag" style="cursor:pointer" data-action="open-ids" data-ids="' + esc(o.ids.join(',')) + '" data-title="' + esc(o.title) + '">' + o.ids.length + ' incidentes →</button>' : '') + '</div>' +
         '<div class="ev">' + o.ev + '</div><div class="ac"><b>Ação sugerida:</b> ' + esc(o.action) + '</div>' +
         '<div class="cap"><label><input type="checkbox" data-act="cap"' + (a.cap ? ' checked' : '') + '> Capturar ação</label><input type="text" data-act="owner" placeholder="Responsável" value="' + esc(a.owner || '') + '"><input type="date" data-act="due" value="' + esc(a.due || '') + '" aria-label="Prazo"></div>' +
-        '<textarea data-act="note" placeholder="Combinado na agenda / próximo passo">' + esc(a.note || '') + '</textarea></div>';
+        '<textarea data-act="note" placeholder="Combinado / próximo passo">' + esc(a.note || '') + '</textarea></div>';
     }).join('') + '</div>' : '<div class="empty">Nenhuma oportunidade identificada pelas regras para o período.</div>';
     var nCap = ops.filter(function (o) { return (acts[o.id] || {}).cap; }).length;
-    $('sec-acoes').innerHTML = sectionHead('target', 'Saída da agenda', 'Oportunidades e próximos passos',
-      'Sugestões geradas a partir dos dados do período (regras de monitoração, infraestrutura, recorrência, MTTR/OLA, mudanças, problemas e disponibilidade). Marque o que foi acordado, com responsável e prazo, e exporte a lista. As anotações ficam salvas neste navegador.',
+    $('sec-acoes').innerHTML = sectionHead('target', 'Plano de ação', 'Oportunidades e próximos passos',
+      'Sugestões geradas a partir dos dados do período (regras de monitoração, infraestrutura, recorrência, MTTR/OLA, mudanças, problemas e disponibilidade). Marque as ações priorizadas, com responsável e prazo, e exporte a lista. As anotações ficam salvas neste navegador.',
       '<button type="button" class="btn" data-action="export-ops">' + icon('sheet') + 'Exportar oportunidades</button><button type="button" class="btn btn-accent" data-action="export-acts">' + icon('sheet') + 'Exportar ações capturadas (' + nCap + ')</button>') + cards;
   }
   function onActInput(ev) {
