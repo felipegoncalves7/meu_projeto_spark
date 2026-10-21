@@ -250,10 +250,16 @@
     months.forEach(function (x) { set[x.y + '-' + x.m] = true; });
     var w = { key: key, label: label, group: group, months: months, cut: cut, set: set };
     var t = cut ? new Date(cut) : null;
-    var partial = months.filter(function (x) { var yd = ydOf(x.y); return yd && yd.statuses && yd.statuses[x.m - 1] === 'PARCIAL'; });
+    var stOf = function (x) { var yd = ydOf(x.y); return yd && yd.statuses ? yd.statuses[x.m - 1] : null; };
+    var partial = months.filter(function (x) { return stOf(x) === 'PARCIAL'; });
+    var notStarted = months.filter(function (x) { return stOf(x) === 'NAO_INICIADO'; });
+    var own = key !== 'yoy' && key !== 'pop';
+    var mlist = function (l) { return l.map(function (x) { return MABBR[x.m - 1]; }).join(', '); };
     w.range = rangeTxt(months) + (t && months.some(function (x) { return x.y === t.getFullYear() && x.m === t.getMonth() + 1; }) ? ' (até ' + pad2(t.getDate()) + '/' + pad2(t.getMonth() + 1) + ')' : '') +
-      (partial.length && key !== 'yoy' && key !== 'pop' ? ' · ' + partial.map(function (x) { return MABBR[x.m - 1]; }).join(', ') + ' parcial' : '');
+      (partial.length && own ? ' · ' + mlist(partial) + ' parcial' : '') +
+      (notStarted.length && own ? ' · ' + mlist(notStarted) + ' sem apuração' : '');
     w.partial = partial;
+    w.notStarted = notStarted;
     return w;
   }
   function periodDefs() {
@@ -264,6 +270,17 @@
     if (rp.partial && rp.closed > 0) { var l6f = monthsBack(y, rp.closed, 6); out.push(mkWin('l6f', 'Últimos 6 meses apurados', 'Janela móvel', l6f, null)); }
     var l3 = monthsBack(y, m, 3);
     out.push(mkWin('l3', 'Últimos 3 meses', 'Janela móvel', l3, inCut(l3)));
+    // "Até hoje": inclui os meses depois do último apurado/parcial (apuração não iniciada na Status_Apuracao), para
+    // ver os incidentes já registrados. A Disponibilidade continua considerando só os meses apurados.
+    var tNow = new Date(D.today), tm = D.year === tNow.getFullYear() ? tNow.getMonth() + 1 : 0;
+    if (tm && (rp.none || (rp.y === D.year && tm > m))) {
+      var G = 'Até hoje · inclui meses sem apuração', cutNow = endOfDay(D.today);
+      var open = monthsBack(D.year, tm, rp.none ? tm : tm - m);
+      out.push(mkWin('hm', open.length === 1 ? 'Mês sem apuração' : 'Meses sem apuração', G, open, cutNow));
+      out.push(mkWin('h6', 'Últimos 6 meses até hoje', G, monthsBack(D.year, tm, 6), cutNow));
+      out.push(mkWin('h3', 'Últimos 3 meses até hoje', G, monthsBack(D.year, tm, 3), cutNow));
+      out.push(mkWin('hytd', 'Acumulado do ano até hoje', G, monthsBack(D.year, tm, tm), cutNow));
+    }
     var ytd = monthsBack(y, m, m);
     out.push(mkWin('ytd', 'Acumulado do ano (YTD)', 'Ano', ytd, inCut(ytd)));
     var s1 = monthsBack(y, Math.min(6, m), Math.min(6, m));
@@ -485,8 +502,13 @@
     var rp = refPoint(), yd = D.current, st = yd && yd.statuses ? yd.statuses : [];
     var tNow = new Date(D.today), started = rp.y === tNow.getFullYear() ? tNow.getMonth() + 1 : 12;
     var next = rp.none ? null : (rp.m < started && st[rp.m] === 'NAO_INICIADO' ? MONTHS[rp.m] : null);
-    h += notice('info', 'clock', 'Períodos limitados aos meses com apuração iniciada na aba Status_Apuracao' + (D.statusSource === 'FALLBACK' ? ' (aba não encontrada: considerados os meses até o atual)' : '') +
-      ': até <b>' + MONTHS[rp.m - 1] + '/' + rp.y + '</b>' + (rp.partial ? ' (apuração parcial)' : '') + '.' + (next ? ' ' + next + ' ainda não teve a apuração iniciada e fica fora, mesmo com incidentes registrados.' : ''));
+    var lastTxt = '<b>' + MONTHS[rp.m - 1] + '/' + rp.y + '</b>' + (rp.partial ? ' (apuração parcial)' : '');
+    if (M.w.notStarted && M.w.notStarted.length) {
+      h += notice('out', 'clock', 'O período inclui <b>' + esc(M.w.notStarted.map(function (x) { return MONTHS[x.m - 1] + '/' + x.y; }).join(', ')) + '</b>, ainda sem apuração iniciada na aba Status_Apuracao: os incidentes já registrados entram nos números, mas a Disponibilidade considera só os meses apurados (até ' + lastTxt + ').');
+    } else {
+      h += notice('info', 'clock', 'Períodos limitados aos meses com apuração iniciada na aba Status_Apuracao' + (D.statusSource === 'FALLBACK' ? ' (aba não encontrada: considerados os meses até o atual)' : '') +
+        ': até ' + lastTxt + '.' + (next ? ' ' + next + ' ainda não teve a apuração iniciada. Para ver os incidentes já registrados nele, escolha um período do grupo <b>Até hoje</b> no filtro Período.' : ''));
+    }
     if (state.layer !== 'all') h += notice('out', 'server', 'Filtro de camada ativo: só incidentes de <b>' + LAYER_LABEL[state.layer] + '</b>. A seção Aplicação x Infraestrutura sempre mostra as duas camadas.');
     return h;
   }
