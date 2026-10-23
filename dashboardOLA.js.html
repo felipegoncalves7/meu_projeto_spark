@@ -1056,7 +1056,7 @@
       '<div class="seg" id="ox-eng-type"><button type="button" data-v="rca"' + (state.eng.type === 'rca' ? ' class="is-active"' : '') + '>Tarefas de RCA</button><button type="button" data-v="implementation"' + (state.eng.type === 'implementation' ? ' class="is-active"' : '') + '>Tarefas de Implementação</button></div></div></div>' +
       '<div id="ox-eng-body"></div></div>';
     $('sec-problemas').innerHTML = sectionHead('search', 'Gestão de Problemas', 'Problemas, causa raiz e engajamento das equipes',
-      'Problemas ligados aos incidentes do período (MajorProblems e Problem_ServiceNow). Causa do Problema e Processo de Origem conforme a classificação da tarefa de RCA (PTASK_RCA); tarefas e equipes pela RCATask_List, como na Visão Geral.') +
+      'Problemas ligados aos incidentes do período (MajorProblems e Problem_ServiceNow). Causa do Problema e Processo de Origem conforme a classificação da tarefa de RCA (PTASK_RCA); tarefas e equipes das abas PTASK, como na Visão Geral.') +
       kpis +
       '<div class="grid cols-2" style="margin-top:14px"><div class="panel"><div class="panel-head"><div class="sub-title">' + icon('search') + 'Causa do Problema</div></div>' + barsHtml(items(causas), null, { empty: 'Sem causa classificada nas tarefas de RCA.' }) + '</div>' +
       '<div class="panel"><div class="panel-head"><div class="sub-title">' + icon('layers') + 'Processo de origem</div></div>' + barsHtml(items(procs), null, { empty: 'Sem processo de origem classificado nas tarefas de RCA.' }) + '</div></div>' +
@@ -1073,9 +1073,7 @@
     M.cur.forEach(function (I) { inWin[I.id] = true; if ((I.prbs || []).length) base++; });
     M.problems.forEach(function (p) {
       (p.tasks || []).forEach(function (t) {
-        var tt = fold(t.taskType), k;
-        if (t.src === 'RCATask_List') k = tt === 'root cause analysis' ? 'rca' : (tt.indexOf('implement') !== -1 ? 'implementation' : '');
-        else k = t.type === 'RCA' ? 'rca' : 'implementation';
+        var k = t.type === 'RCA' ? 'rca' : 'implementation';
         if (k !== type || !t.num || seen[t.num]) return;
         seen[t.num] = true;
         var end = t.closed && isNum(t.closedAt) ? t.closedAt : D.today;
@@ -1125,7 +1123,7 @@
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:12px 0 4px"><span class="eyebrow">Ranking por equipe' + (state.eng.type === 'rca' ? ' <span class="info-i" data-tip="' + esc(covTip) + '">i</span>' : '') + '</span>' +
       (state.eng.type === 'rca' ? '<div class="seg sm" id="ox-eng-sort"><button type="button" data-v="volume"' + (state.eng.sort !== 'coverage' ? ' class="is-active"' : '') + '>Volume</button><button type="button" data-v="coverage"' + (state.eng.sort === 'coverage' ? ' class="is-active"' : '') + '>% Causa Raiz</button></div>' : '') + '</div>' +
       rank(res, true) + '</div></div>' +
-      (D.rcaTaskListFound === false ? '<div class="ox-note">Aba RCATask_List não encontrada: estado, datas e equipe vêm das abas PTASK_RCA / PTASK_IMP.</div>' : '');
+      '<div class="ox-note">Tarefas das abas PTASK_RCA e PTASK_IMP (equipe = Assignment group). As abas não têm data de fechamento: nas tarefas fechadas o aging usa a última atualização da tarefa.</div>';
     charts.engBack = drawEngScatter('ox-ch-eng-back', back, '#B54708', 'Tarefas em Backlog');
     charts.engRes = drawEngScatter('ox-ch-eng-res', res, '#045473', 'Tarefas Resolvidas');
   }
@@ -1408,7 +1406,7 @@
   /* ------------------------------------------------------------- Rodapé */
   function renderFoot() {
     var w = (D.warnings || []).slice();
-    $('ox-foot').innerHTML = 'Fontes: Major_Incidents_Impactos_' + D.year + '/' + D.prevYear + ' (Stream O&amp;L e Planejamento Logístico, origem Tecnologia) · MajorIncidentes (TTR oficial, Ofensor, Tecnologia impactada, SM) · Major_ServiceNow (Caller, Grupo, Service, Category) · MajorProblems, Problem_ServiceNow, PTASK_RCA/IMP e RCATask_List · Change_MI · Disponibilidade e apuracao. ' +
+    $('ox-foot').innerHTML = 'Fontes: Major_Incidents_Impactos_' + D.year + '/' + D.prevYear + ' (Stream O&amp;L e Planejamento Logístico, origem Tecnologia) · MajorIncidentes (TTR oficial, Ofensor, Tecnologia impactada, SM) · Major_ServiceNow (Caller, Grupo, Service, Category) · MajorProblems, Problem_ServiceNow, PTASK_RCA/IMP · Change_MI · Disponibilidade e apuracao. ' +
       'Metas: MTTR Sev 0 ≤ ' + fmtHM(T.mttrSev0) + ' · Sev 1 ≤ ' + fmtHM(T.mttrSev1) + ' · OLA Sev 0 ≤ ' + fmtHM(T.olaSev0) + ' · Sev 1 ≤ ' + fmtHM(T.olaSev1) + '.' +
       (w.length ? '<br>Avisos: ' + esc(w.join(' · ')) : '');
   }

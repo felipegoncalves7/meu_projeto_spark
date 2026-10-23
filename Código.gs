@@ -519,6 +519,23 @@ const PTASK_COL_SHORT_DESC = 4;       // E
 const PTASK_COL_TYPE = 6;             // G
 const PTASK_COL_STATE = 8;            // H
 const PTASK_COL_ASSIGNMENT_GROUP = 10; // K
+const PTASK_COL_CREATED = 19;         // T (abertura da tarefa)
+const PTASK_COL_UPDATED = 21;         // V (última atualização; usada como fechamento nas tarefas fechadas)
+
+/** Data de uma célula das abas PTASK: Date, "dd/mm/aaaa hh:mm" ou "aaaa-mm-dd hh:mm". null se não houver. */
+function ptaskParseDate(v) {
+  if (Object.prototype.toString.call(v) === '[object Date]') return isNaN(v.getTime()) ? null : v;
+  const t = incidentOpenTimestamp(v);
+  return t > 0 ? new Date(t) : null;
+}
+
+/** Estado da tarefa (State): 'closed' (Closed Complete/Incomplete...), 'cancelled' (Cancelled/Skipped) ou 'open'. */
+function ptaskStateKind(state) {
+  const f = olFold(state);
+  if (/cancel|skipp/.test(f)) return 'cancelled';
+  if (/^closed|complete|resolved/.test(f)) return 'closed';
+  return 'open';
+}
 
 /**
  * Drill-down completo (item 6): para cada Incidente, além dos dados já usados nos cards, busca o
@@ -2290,61 +2307,38 @@ function getMajorProblemsData(year) {
          }
      });
 
-      // Vínculo Tarefa de RCA -> Problema, via aba PTASK_RCA (cruzamento pelo nº da Tarefa),
-      // usado para calcular o % de Incidentes com Causa Raiz identificada por Equipe.
-      const ptaskToProblemMap = {};
-      const ptaskRcaSheet = ss.getSheetByName('PTASK_RCA');
-      if (ptaskRcaSheet) {
-          const ptaskRcaValues = ptaskRcaSheet.getDataRange().getValues();
-          for (let i = 1; i < ptaskRcaValues.length; i++) {
-              const taskNum = String(ptaskRcaValues[i][PTASK_COL_NUMBER] || '').trim();
-              const problemNum = String(ptaskRcaValues[i][PTASK_COL_PROBLEM] || '').trim();
-              if (taskNum && problemNum) ptaskToProblemMap[taskNum] = problemNum;
-          }
-      }
+      // --- Tarefas de RCA (aba PTASK_RCA) e de Implementação (aba PTASK_IMP) ---
+      // Base do Engajamento por Equipe, do MTTRC e dos TOP 5 de Backlog x Resolução. Cada tarefa vem direto das abas
+      // PTASK (sempre atualizadas): equipe = Assignment group, abertura = Created e estado = State. As abas PTASK não têm
+      // data de fechamento; nas tarefas fechadas usa-se a última atualização (Updated) como data de fechamento.
+      // Só entram as tarefas abertas (Created) no ano selecionado; sem data, vale a abertura do Problema.
+      const processedTasks = new Set();
+      [['PTASK_RCA', 'rca'], ['PTASK_IMP', 'implementation']].forEach(([taskSheetName, typeKey]) => {
+          const taskSheet = ss.getSheetByName(taskSheetName);
+          if (!taskSheet) return;
+          const taskRows = taskSheet.getDataRange().getValues().slice(1);
+          const isRCA = typeKey === 'rca';
 
-      // --- MTTRC and RANKING Calculation from RCATask_List Sheet ---
-      const taskSheet = ss.getSheetByName("RCATask_List");
-      if (taskSheet) {
-          const taskData = taskSheet.getDataRange().getValues();
-          const taskRows = taskData.slice(1);
-          
-          const parseDate = (val) => {
-              if (val instanceof Date) return val;
-              if (typeof val === 'string' && val.includes("/")) {
-                  // DD/MM/YYYY HH:MM:SS
-                  const parts = val.split(/[/\s:]/);
-                  if (parts.length >= 3) {
-                      return new Date(parts[2], parts[1] - 1, parts[0], parts[3] || 0, parts[4] || 0, parts[5] || 0);
-                  }
-              }
-              return null;
-          };
-
-          const today = new Date();
-
-          const processedTasks = new Set();
           taskRows.forEach(row => {
-              const taskNumber = String(row[0] || "").trim(); // Coluna A: Number
+              const taskNumber = String(row[PTASK_COL_NUMBER] || "").trim();
               if (!taskNumber || processedTasks.has(taskNumber)) return;
+              const stateKind = ptaskStateKind(row[PTASK_COL_STATE]);
+              if (stateKind === 'cancelled') return; // tarefa cancelada não é backlog nem entrega
               processedTasks.add(taskNumber);
 
-              const status = String(row[1] || "").trim().toLowerCase(); // Column B: state
-              const openedAt = parseDate(row[2]); // Column C: opened_at
-              const closedAt = parseDate(row[3]); // Column D: closed_at
-              const group = String(row[6] || "N/A").trim(); // Column G: assignment_group
-              const taskType = String(row[10] || "").trim().toLowerCase(); // Column K: problem_task_type
+              const isClosed = stateKind === 'closed';
+              const problemNum = String(row[PTASK_COL_PROBLEM] || "").trim();
+              const problemInfo = problemNum ? uniqueProblemData.get(problemNum) : null;
+              // Tarefa sem data de abertura usa a abertura do Problema (também para o ano e o aging)
+              const openedAt = ptaskParseDate(row[PTASK_COL_CREATED]) || (problemInfo && problemInfo.openDate) || null;
+              const closedAt = isClosed ? ptaskParseDate(row[PTASK_COL_UPDATED]) : null;
+              const group = String(row[PTASK_COL_ASSIGNMENT_GROUP] || "").trim() || "N/A";
 
-              const isRCA = taskType === 'root cause analysis';
-              const isImplementation = taskType.indexOf('implement') !== -1;
-              if (!isRCA && !isImplementation) return;
-              const typeKey = isRCA ? 'rca' : 'implementation';
+              // Ano selecionado: só tarefas abertas nesse ano
+              if (year && (!openedAt || openedAt.getFullYear() !== year)) return;
 
-               // Filter by year based on opened_at (or closed_at for resolved)
-               if (openedAt && year && openedAt.getFullYear() !== year) return;
-
-              // Logic for MTTRC (Mean Time To Root Cause: apenas tarefas de RCA)
-              if (isRCA && status === 'closed' && openedAt && closedAt) {
+              // MTTRC (Mean Time To Root Cause): apenas tarefas de RCA fechadas
+              if (isRCA && isClosed && openedAt && closedAt) {
                   const diffHours = (closedAt.getTime() - openedAt.getTime()) / (1000 * 60 * 60);
                   if (diffHours >= 0) {
                       metrics.sumMTTRC += diffHours;
@@ -2352,47 +2346,42 @@ function getMajorProblemsData(year) {
                   }
               }
 
-              // Logic for RANKINGS (Using Columns G, B, K, D, C)
-              // Calculation: aging = (closedAt || today) - openedAt
-              // User specifically asked for Column D - Column C for both.
-              // If not closed, Column D might be null. We'll fallback to today if null to avoid NaN.
-              const targetEndDate = (status === 'closed' && closedAt) ? closedAt : today;
+              // Aging = (fechamento ou hoje) - abertura
+              const targetEndDate = (isClosed && closedAt) ? closedAt : today;
               let agingDays = 0;
               if (openedAt) {
                   agingDays = Math.max(0, Math.floor((targetEndDate - openedAt) / (1000 * 60 * 60 * 24)));
               }
 
-                const bucket = status !== 'closed'
-                    ? metrics.taskAging[typeKey].backlog
-                    : metrics.taskAging[typeKey].resolved;
-                if (!bucket[group]) bucket[group] = { count: 0, totalAging: 0 };
-                bucket[group].count++;
-                bucket[group].totalAging += agingDays;
+              const bucket = !isClosed
+                  ? metrics.taskAging[typeKey].backlog
+                  : metrics.taskAging[typeKey].resolved;
+              if (!bucket[group]) bucket[group] = { count: 0, totalAging: 0 };
+              bucket[group].count++;
+              bucket[group].totalAging += agingDays;
 
-                if (isRCA) {
-                    if (status !== 'closed') {
-                        // TOP 5 Backlog - Qualquer status que não seja estritamente 'closed' entra no backlog
-                        if (!metrics.areaBacklog[group]) metrics.areaBacklog[group] = { count: 0, totalAging: 0 };
-                        metrics.areaBacklog[group].count++;
-                        metrics.areaBacklog[group].totalAging += agingDays;
-                    } else {
-                        // TOP 5 Resolved - Apenas status 'closed'
-                        if (!metrics.areaResolved[group]) metrics.areaResolved[group] = { count: 0, totalAging: 0 };
-                        metrics.areaResolved[group].count++;
-                        metrics.areaResolved[group].totalAging += agingDays;
+              if (isRCA) {
+                  if (!isClosed) {
+                      // TOP 5 Backlog: qualquer tarefa de RCA que ainda não foi fechada
+                      if (!metrics.areaBacklog[group]) metrics.areaBacklog[group] = { count: 0, totalAging: 0 };
+                      metrics.areaBacklog[group].count++;
+                      metrics.areaBacklog[group].totalAging += agingDays;
+                  } else {
+                      // TOP 5 Resolved: tarefas de RCA fechadas
+                      if (!metrics.areaResolved[group]) metrics.areaResolved[group] = { count: 0, totalAging: 0 };
+                      metrics.areaResolved[group].count++;
+                      metrics.areaResolved[group].totalAging += agingDays;
 
-                        // % de Causa Raiz por Equipe: união dos Incidentes dos Problemas cujas Tarefas de RCA
-                        // essa Equipe concluiu (1 Problema pode ter vários Incidentes e várias Tarefas).
-                        const problemNum = ptaskToProblemMap[taskNumber];
-                        const problemInfo = problemNum ? uniqueProblemData.get(problemNum) : null;
-                        if (problemInfo && problemInfo.incidents) {
-                            if (!metrics.teamRcaIncidentCoverage[group]) metrics.teamRcaIncidentCoverage[group] = new Set();
-                            problemInfo.incidents.forEach(incId => metrics.teamRcaIncidentCoverage[group].add(incId));
-                        }
-                    }
-                }
+                      // % de Causa Raiz por Equipe: união dos Incidentes dos Problemas cujas Tarefas de RCA
+                      // essa Equipe concluiu (1 Problema pode ter vários Incidentes e várias Tarefas).
+                      if (problemInfo && problemInfo.incidents) {
+                          if (!metrics.teamRcaIncidentCoverage[group]) metrics.teamRcaIncidentCoverage[group] = new Set();
+                          problemInfo.incidents.forEach(incId => metrics.teamRcaIncidentCoverage[group].add(incId));
+                      }
+                  }
+              }
           });
-      }
+      });
 
       // Final cleanup and averages
       for (let m in metrics.monthly) {

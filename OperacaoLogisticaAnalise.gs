@@ -12,7 +12,7 @@
 //  - Camada (Aplicação x Infraestrutura): aba opcional OL_Camada + regras por palavra-chave (olxClassifyLayer);
 //  - Problemas: MajorProblems / MajorProblems2026, Problem_ServiceNow, PTASK_RCA (Causa do Problema e
 //    Processo de Origem classificados na tarefa de RCA) e PTASK_IMP, com estado, datas e equipe das tarefas
-//    pela RCATask_List (mesma base do Engajamento por Equipe da Visão Geral);
+//    (mesma base do Engajamento por Equipe da Visão Geral);
 //  - Mudanças: Change_MI (Type, Service, Grupo, janela planejada).
 
 const OLX_LAYER_SHEET = 'OL_Camada';
@@ -75,11 +75,6 @@ function olxPrbList(raw) {
   String(raw === null || raw === undefined ? '' : raw).toUpperCase().replace(/PRB\d+/g, m => { if (out.indexOf(m) === -1) out.push(m); return m; });
   return out;
 }
-function olxIsClosedState(s) {
-  const f = olFold(s);
-  return /closed|complete|resolved|cancel|encerrad|fechad|concluid|finaliz/.test(f);
-}
-
 /** Aba opcional OL_Camada (A: Tipo = Incidente | Ofensor | Tecnologia | Grupo; B: Valor; C: Camada = Aplicação | Infraestrutura). */
 function olxReadLayerOverrides(ss) {
   const out = { found: false, incidente: {}, ofensor: {}, tecnologia: {}, grupo: {}, rows: 0 };
@@ -209,8 +204,8 @@ function olxReadServiceNow(ss, idSet) {
  * Problemas ligados aos incidentes de O&L: MajorProblems/MajorProblems2026 (status, área, datas, risco aceito),
  * Problem_ServiceNow (statement, estado, grupo, notas de causa/correção) e as tarefas PTASK_RCA / PTASK_IMP.
  * Causa do Problema e Processo de Origem vêm só da tarefa de RCA (PTASK_RCA: Cause Problem e Source process).
- * Estado, abertura, fechamento e equipe de cada tarefa vêm da RCATask_List quando a tarefa está lá (mesma regra
- * do Engajamento por Equipe da Visão Geral: fechada = state "closed"); senão, das próprias abas PTASK.
+ * Estado, abertura, fechamento e equipe de cada tarefa vêm das próprias abas PTASK (mesma regra do Engajamento por
+ * Equipe da Visão Geral).
  */
 function olxReadProblems(ss, incSet, prbSeed) {
   const prbSet = {};
@@ -272,24 +267,9 @@ function olxReadProblems(ss, incSet, prbSeed) {
     }
   }
 
-  // 3) RCATask_List: estado, abertura, fechamento e equipe de cada tarefa (base do Engajamento por Equipe)
-  const rtl = {};
-  const rtlValues = olxSheetValues(ss, 'RCATask_List');
-  const rtlDate = v => {
-    if (olIsDate(v)) return v.getTime();
-    const m = String(v || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-    return m ? new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)).getTime() : null;
-  };
-  if (rtlValues) {
-    for (let i = 1; i < rtlValues.length; i++) {
-      const r = rtlValues[i];
-      const num = String(r[0] || '').trim();
-      if (!num || rtl[num]) continue;
-      rtl[num] = { state: olxTxt(r[1]), opened: rtlDate(r[2]), closed: rtlDate(r[3]), group: olxTxt(r[6]) || 'N/A', taskType: olxTxt(r[10]) };
-    }
-  }
-
-  // 4) Tarefas do Problema
+  // 3) Tarefas do Problema (PTASK_RCA e PTASK_IMP): base do Engajamento por Equipe, igual à Visão Geral. Equipe =
+  // Assignment group, abertura = Created, estado = State. As abas PTASK não têm data de fechamento; nas tarefas
+  // fechadas usa-se a última atualização (Updated). Tarefas canceladas não entram.
   const readTasks = (name, type) => {
     const values = olxSheetValues(ss, name);
     if (!values) return;
@@ -299,14 +279,15 @@ function olxReadProblems(ss, incSet, prbSeed) {
       const inc = String(r[3] || '').trim();
       if (prb && incSet[inc]) link(inc, prb);
       if (!prb || !prbSet[prb]) continue;
-      const num = olxTxt(r[PTASK_COL_NUMBER]);
-      const L = rtl[num] || null;
-      const closed = L ? olFold(L.state) === 'closed' : olxIsClosedState(r[PTASK_COL_STATE]);
+      const kind = ptaskStateKind(r[PTASK_COL_STATE]);
+      if (kind === 'cancelled') continue;
+      const closed = kind === 'closed';
+      const opened = ptaskParseDate(r[PTASK_COL_CREATED]), upd = closed ? ptaskParseDate(r[PTASK_COL_UPDATED]) : null;
       P(prb).tasks.push({
-        num: num, type: type, desc: olxTxt(r[PTASK_COL_SHORT_DESC], 220), taskType: (L && L.taskType) || olxTxt(r[PTASK_COL_TYPE]),
-        state: (L && L.state) || olxTxt(r[PTASK_COL_STATE]), closed: closed, src: L ? 'RCATask_List' : name,
-        group: (L && L.group !== 'N/A' ? L.group : olxTxt(r[PTASK_COL_ASSIGNMENT_GROUP])) || 'N/A',
-        opened: L && L.opened ? L.opened : olxMs(r[19]), closedAt: L ? L.closed : (closed ? olxMs(r[21]) : null),
+        num: olxTxt(r[PTASK_COL_NUMBER]), type: type, desc: olxTxt(r[PTASK_COL_SHORT_DESC], 220), taskType: olxTxt(r[PTASK_COL_TYPE]),
+        state: olxTxt(r[PTASK_COL_STATE]), closed: closed, src: name,
+        group: olxTxt(r[PTASK_COL_ASSIGNMENT_GROUP]) || 'N/A',
+        opened: opened ? opened.getTime() : null, closedAt: upd ? upd.getTime() : null,
         causa: type === 'RCA' ? olxTxt(r[12]) : '', processo: type === 'RCA' ? olxTxt(r[13]) : '',
         plano: olxTxt(r[15], 500), due: olxMs(r[17])
       });
@@ -318,7 +299,7 @@ function olxReadProblems(ss, incSet, prbSeed) {
   Object.keys(byInc).forEach(inc => byInc[inc].forEach(prb => { const p = P(prb); if (p.incidents.indexOf(inc) === -1) p.incidents.push(inc); }));
   // Só os Problemas ligados a algum incidente de O&L
   Object.keys(problems).forEach(prb => { if (!problems[prb].incidents.some(inc => incSet[inc])) delete problems[prb]; });
-  return { byInc: byInc, problems: problems, rtlFound: !!rtlValues };
+  return { byInc: byInc, problems: problems };
 }
 
 /** Change_MI só para as Mudanças pedidas. */
@@ -480,7 +461,6 @@ function getOLAnaliseData(year) {
       problems: prob.problems,
       changes: changes,
       layerOverrides: { found: overrides.found, rows: overrides.rows, sheet: OLX_LAYER_SHEET },
-      rcaTaskListFound: prob.rtlFound,
       config: {
         flows: OL_FLOW_DISPLAY_ORDER.map(k => {
           const f = OL_FLOWS.find(x => x.key === k);
