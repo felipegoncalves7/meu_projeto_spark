@@ -202,12 +202,15 @@
         border-top-color: #ffffff;
     }
 
-    /* Metodologias de MTTR (cards Sev 0/Sev 1): o tooltip ocupa a largura da linha, para os textos longos não saírem do card */
-    .mttr-metodo { position: relative; }
-    .mttr-metodo .info-tooltip { position: static; }
-    .mttr-metodo .info-tooltip .tooltip-bubble { left: 0; right: 0; width: auto; bottom: calc(100% + 6px); }
-    .mttr-metodo .info-tooltip .tooltip-bubble::after { display: none; }
-    .mttr-metodo .info-tooltip .tooltip-bubble strong { font-weight: 800; }
+    /* Metodologias de MTTR (painel abaixo dos cards Sev 0/Sev 1): balão próprio em position:fixed */
+    .mttr-info { display: inline-flex; flex-shrink: 0; color: #cbd5e1; cursor: help; border-radius: 999px; }
+    .mttr-info:hover, .mttr-info:focus-visible { color: var(--natura-green-murumuru); outline: none; }
+    .mttr-tip { position: fixed; z-index: 60; width: min(340px, calc(100vw - 16px)); background: #fff; border: 1px solid #e2e8f0;
+        color: var(--natura-green-amazonia); font-size: 11px; line-height: 1.5; font-weight: 500; padding: 10px 12px; border-radius: 8px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15); text-align: left; white-space: normal; pointer-events: none;
+        display: none; }
+    .mttr-tip.is-open { display: block; }
+    .mttr-tip strong { font-weight: 800; }
     .mttr-bar { position: relative; height: 6px; border-radius: 999px; background: #e2e8f0; margin: 5px 0 4px; }
     .mttr-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; transition: width .4s ease; }
     .mttr-bar-meta { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 2px; background: #334155; }

@@ -428,14 +428,6 @@
                                 </div>
                             </div>
                         </div>
-                        <!-- Metodologias de MTTR: Corte Fixo x Média Aparada P95 x Percentil, comparadas à meta de OLA (render em dashboard.js) -->
-                        <div class="bg-slate-50/70 border-t border-dashed border-slate-200 px-5 py-3">
-                            <div class="flex items-center justify-between mb-2">
-                                <p class="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Metodologias de MTTR</p>
-                                <p class="text-[9px] text-slate-400">Meta OLA: <span class="font-bold" style="color:#e94839;">&le; 02:00</span></p>
-                            </div>
-                            <div id="mttr-metodos-sev0" class="space-y-3" aria-live="polite"></div>
-                        </div>
                         <!-- Aderência OLA -->
                         <div class="border-t border-slate-100 px-5 py-4" style="background-color: rgba(233,72,57,0.04);">
                             <div class="flex items-center justify-between mb-1">
@@ -509,14 +501,6 @@
                                 </div>
                             </div>
                         </div>
-                        <!-- Metodologias de MTTR: Corte Fixo x Média Aparada P95 x Percentil, comparadas à meta de OLA (render em dashboard.js) -->
-                        <div class="bg-slate-50/70 border-t border-dashed border-slate-200 px-5 py-3">
-                            <div class="flex items-center justify-between mb-2">
-                                <p class="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Metodologias de MTTR</p>
-                                <p class="text-[9px] text-slate-400">Meta OLA: <span class="font-bold text-natura-orange">&le; 06:00</span></p>
-                            </div>
-                            <div id="mttr-metodos-sev1" class="space-y-3" aria-live="polite"></div>
-                        </div>
                         <!-- Aderência OLA -->
                         <div class="border-t border-slate-100 px-5 py-4 bg-natura-orange/5">
                             <div class="flex items-center justify-between mb-1">
@@ -543,6 +527,43 @@
                         <div class="px-5 py-2.5 border-t border-slate-100 flex items-center justify-end">
                             <span class="text-[10px] text-slate-400 font-medium">Baseline 2025: <span
                                     class="text-slate-500 font-bold">09:29</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Metodologias de MTTR: Corte Fixo x Média Aparada P95 x Percentil, comparadas à meta de OLA (render em dashboard.js) -->
+                <div id="mttr-metodologias" class="rounded-2xl border border-slate-200 bg-white">
+                    <div class="px-5 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                        <div>
+                            <p class="text-[11px] font-black text-slate-500 uppercase tracking-[0.15em]">Metodologias de MTTR</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Mesma base de incidentes, três formas de medir o tempo de resolução. Passe o mouse no &#9432; para ver como cada uma é calculada.</p>
+                        </div>
+                        <div class="flex items-center gap-3 text-[10px] text-slate-400" aria-hidden="true">
+                            <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm" style="background:#1B472A;"></span>Dentro da meta</span>
+                            <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-sm" style="background:#e94839;"></span>Acima da meta</span>
+                            <span class="flex items-center gap-1"><span class="inline-block w-0.5 h-3 rounded-sm" style="background:#334155;"></span>Meta OLA</span>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
+                        <div class="p-5">
+                            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                                <span class="text-xs font-bold tracking-wider uppercase flex items-center gap-1.5" style="color:#e94839;"><span class="w-2 h-2 rounded-full" style="background-color:#e94839;"></span> SEV 0
+                                    <span class="text-[10px] font-semibold normal-case tracking-normal text-slate-400">&middot; Meta OLA <b style="color:#e94839;">&le; 02:00</b></span></span>
+                                <span class="mttr-pct-toggle" role="group" aria-label="Percentil exibido na Sev 0">
+                                    <button type="button" data-mttr-pct="sev0:p90" class="is-active" aria-pressed="true">P90</button><button type="button" data-mttr-pct="sev0:p95" aria-pressed="false">P95</button>
+                                </span>
+                            </div>
+                            <div id="mttr-metodos-sev0" class="space-y-4" aria-live="polite"><p class="text-[10px] text-slate-400">Carregando&hellip;</p></div>
+                        </div>
+                        <div class="p-5">
+                            <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                                <span class="text-xs font-bold tracking-wider uppercase flex items-center gap-1.5" style="color:#FF6600;"><span class="w-2 h-2 rounded-full" style="background-color:#FF6600;"></span> SEV 1
+                                    <span class="text-[10px] font-semibold normal-case tracking-normal text-slate-400">&middot; Meta OLA <b style="color:#FF6600;">&le; 06:00</b></span></span>
+                                <span class="mttr-pct-toggle" role="group" aria-label="Percentil exibido na Sev 1">
+                                    <button type="button" data-mttr-pct="sev1:p90" class="is-active" aria-pressed="true">P90</button><button type="button" data-mttr-pct="sev1:p95" aria-pressed="false">P95</button>
+                                </span>
+                            </div>
+                            <div id="mttr-metodos-sev1" class="space-y-4" aria-live="polite"><p class="text-[10px] text-slate-400">Carregando&hellip;</p></div>
                         </div>
                     </div>
                 </div>

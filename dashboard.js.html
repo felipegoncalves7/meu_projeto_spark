@@ -1907,7 +1907,7 @@
         return formatMinutesToHHMM(Math.round(val * 60));
     }
 
-    // --- Metodologias de MTTR (cards Sev 0/Sev 1) ---
+    // --- Metodologias de MTTR (painel abaixo dos cards Sev 0/Sev 1) ---
     const MTTR_METODO_TIPS = {
         corte: 'Calcula a média aritmética dos incidentes desconsiderando aqueles com tempo de resolução ≥ 06h (Sev 0) ou ≥ 18h (Sev 1). <strong>Fragilidade do modelo:</strong> Utiliza um corte temporal estático e arbitrário. Um incidente resolvido em 05h59m é incluído no cálculo, puxando a média severamente para cima, enquanto um incidente resolvido em 06h01m é totalmente descartado da média. Isso pode mascarar incidentes críticos ou penalizar o indicador de forma desproporcional.',
         aparada: 'Calcula a média aritmética após excluir matematicamente os 5% incidentes mais demorados do período, independentemente da duração em horas. <strong>Diferencial:</strong> Elimina a regra de corte fixo e adapta-se dinamicamente ao volume mensal. Protege o indicador contra distorções causadas por casos anômalos extremos, garantindo que exatamente 95% do volume operacional seja representado na média.',
@@ -1924,29 +1924,31 @@
 
     function mttrMetodoRow(opts, scaleMax, targetMin) {
         const r = opts.r;
-        const info = `<span class="info-tooltip" tabindex="0" aria-label="Como é calculado">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <span class="tooltip-bubble">${opts.tip}</span></span>`;
         const has = r && r.min != null;
         const ok = has && r.withinTarget;
         const color = !has ? '#94a3b8' : (ok ? '#1B472A' : '#e94839');
         const badge = !has ? '' : ok
-            ? `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style="background:rgba(27,71,42,0.1);color:#1B472A;">&#10003; &le; meta</span>`
-            : `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style="background:rgba(233,72,57,0.1);color:#e94839;">&#9650; +${mttrHHMM(r.min - targetMin)}</span>`;
+            ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap" style="background:rgba(27,71,42,0.1);color:#1B472A;">&#10003; &le; meta</span>`
+            : `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap" style="background:rgba(233,72,57,0.1);color:#e94839;">&#9650; +${mttrHHMM(r.min - targetMin)}</span>`;
         const fillPct = has ? Math.min(100, (r.min / scaleMax) * 100) : 0;
         const metaPct = Math.min(100, (targetMin / scaleMax) * 100);
-        return `<div class="mttr-metodo">
-            <div class="flex items-center justify-between gap-2">
-                <p class="text-[10px] font-bold text-slate-600 flex items-center gap-1 min-w-0">${opts.label}${info}${opts.extra || ''}</p>
+        return `<div>
+            <div class="flex items-center justify-between gap-3">
+                <p class="text-[11px] font-bold text-slate-600 flex items-center gap-1 min-w-0">
+                    <span class="leading-tight">${opts.label}</span>
+                    <button type="button" class="mttr-info" data-mttr-tip="${opts.tipKey}" aria-label="Como é calculado: ${opts.label}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </button>
+                </p>
                 <div class="flex items-center gap-1.5 shrink-0">
-                    <span class="text-base font-bold tabular-nums" style="color:${color};">${has ? r.hhmm : '—'}</span>${badge}
+                    <span class="text-lg font-bold tabular-nums leading-none" style="color:${color};">${has ? r.hhmm : '—'}</span>${badge}
                 </div>
             </div>
             <div class="mttr-bar" role="img" aria-label="${has ? r.hhmm : 'sem dados'} contra a meta de ${mttrHHMM(targetMin)}">
                 <span class="mttr-bar-fill" style="width:${fillPct}%;background:${color};"></span>
                 <span class="mttr-bar-meta" style="left:${metaPct}%;" title="Meta OLA ${mttrHHMM(targetMin)}"></span>
             </div>
-            <p class="text-[9px] text-slate-400 leading-snug">${opts.foot}</p>
+            <p class="text-[10px] text-slate-400 leading-snug">${opts.foot}</p>
         </div>`;
     }
 
@@ -1958,11 +1960,16 @@
             const el = document.getElementById(`mttr-metodos-${sev}`);
             const d = data[sev];
             if (!el || !d) return;
+            const pk = mttrPctChoice[sev];
+            document.querySelectorAll(`[data-mttr-pct^="${sev}:"]`).forEach((btn) => {
+                const on = btn.getAttribute('data-mttr-pct') === `${sev}:${pk}`;
+                btn.classList.toggle('is-active', on);
+                btn.setAttribute('aria-pressed', String(on));
+            });
             if (!d.n) {
                 el.innerHTML = '<p class="text-[10px] text-slate-400">Sem incidentes no período para comparar as metodologias.</p>';
                 return;
             }
-            const pk = mttrPctChoice[sev];
             const pr = d[pk];
             const pLabel = pk === 'p95' ? 'P95' : 'P90';
             const pShare = pk === 'p95' ? '95%' : '90%';
@@ -1970,20 +1977,17 @@
             const scaleMax = Math.max(...vals, 1) * 1.15;
             const cutLabel = mttrHHMM(d.cutMin).replace(':00', 'h');
             const outOfTarget = d.corte.discardedPct != null && d.corte.discardedPct > 5;
-            const toggle = `<span class="mttr-pct-toggle" role="group" aria-label="Percentil">
-                    <button type="button" data-mttr-pct="${sev}:p90" class="${pk === 'p90' ? 'is-active' : ''}" aria-pressed="${pk === 'p90'}">P90</button>
-                    <button type="button" data-mttr-pct="${sev}:p95" class="${pk === 'p95' ? 'is-active' : ''}" aria-pressed="${pk === 'p95'}">P95</button></span>`;
             el.innerHTML = [
                 mttrMetodoRow({
-                    r: d.corte, label: 'MTTR S/ Outliers (Corte Fixo)', tip: MTTR_METODO_TIPS.corte,
+                    r: d.corte, label: 'MTTR S/ Outliers (Corte Fixo)', tipKey: 'corte',
                     foot: `Considerados <b class="text-slate-600">${d.corte.considered}</b> · Descartados (&ge; ${cutLabel}) <b class="text-slate-600">${d.corte.discarded}</b> <span style="color:${outOfTarget ? '#e94839' : 'inherit'};font-weight:${outOfTarget ? 700 : 400};">(${fmtPctBR(d.corte.discardedPct)})</span> · meta &le; 5%`
                 }, scaleMax, d.targetMin),
                 mttrMetodoRow({
-                    r: d.aparada, label: 'MTTR Líquido (Média Aparada P95)', tip: MTTR_METODO_TIPS.aparada,
+                    r: d.aparada, label: 'MTTR Líquido (Média Aparada P95)', tipKey: 'aparada',
                     foot: `Considerados <b class="text-slate-600">${d.aparada.considered}</b> · Descartados (5% mais demorados) <b class="text-slate-600">${d.aparada.discarded}</b> (${fmtPctBR(d.aparada.discardedPct)})`
                 }, scaleMax, d.targetMin),
                 mttrMetodoRow({
-                    r: pr, label: `Resolução ${pLabel}`, tip: MTTR_METODO_TIPS.pct, extra: toggle,
+                    r: pr, label: `Resolução ${pLabel}`, tipKey: 'pct',
                     foot: `${pShare} resolvidos em até <b class="text-slate-600">${pr.hhmm}</b> · Considerados <b class="text-slate-600">${d.n}</b> · Descartados <b class="text-slate-600">0</b>`
                 }, scaleMax, d.targetMin)
             ].join('');
@@ -1998,6 +2002,35 @@
         mttrPctChoice[sev] = pk;
         renderMttrMetodologias();
     });
+
+    // Tooltip das metodologias: um único balão em position:fixed, ajustado à tela (não é cortado pelo card nem empurra o layout)
+    (function setupMttrTooltip() {
+        let tip = null, anchor = null;
+        const hide = () => { if (tip) tip.classList.remove('is-open'); anchor = null; };
+        const show = (btn) => {
+            const html = MTTR_METODO_TIPS[btn.getAttribute('data-mttr-tip')];
+            if (!html) return;
+            if (!tip) { tip = document.createElement('div'); tip.className = 'mttr-tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
+            tip.innerHTML = html;
+            anchor = btn;
+            tip.style.left = '0px'; tip.style.top = '0px';
+            tip.classList.add('is-open');
+            const r = btn.getBoundingClientRect();
+            const w = tip.offsetWidth, h = tip.offsetHeight, gap = 8;
+            const left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8);
+            const above = r.top - h - gap;
+            const top = above >= 8 ? above : Math.min(r.bottom + gap, window.innerHeight - h - 8);
+            tip.style.left = `${left}px`; tip.style.top = `${Math.max(8, top)}px`;
+        };
+        const target = (ev) => (ev.target && ev.target.closest ? ev.target.closest('.mttr-info') : null);
+        document.addEventListener('mouseover', (ev) => { const b = target(ev); if (b && b !== anchor) show(b); });
+        document.addEventListener('mouseout', (ev) => { const b = target(ev); if (b && !b.contains(ev.relatedTarget)) hide(); });
+        document.addEventListener('focusin', (ev) => { const b = target(ev); if (b) show(b); });
+        document.addEventListener('focusout', (ev) => { if (target(ev)) hide(); });
+        document.addEventListener('click', (ev) => { const b = target(ev); if (b) show(b); else hide(); });
+        window.addEventListener('scroll', hide, true);
+        window.addEventListener('resize', hide);
+    })();
 
     function renderKpiCards(kpis) {
         const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
