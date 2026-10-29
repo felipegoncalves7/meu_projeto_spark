@@ -41,11 +41,16 @@ function mttrFormatMinutes(min) {
     return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
 }
 
-function computeMttrMethodologies(durations, cutMin, targetMin) {
-    const sorted = (durations || []).filter(d => typeof d === 'number' && isFinite(d) && d >= 0).sort((a, b) => a - b);
+// Recebe os incidentes da Severidade ({ id, min, ttr, ... }); devolve também a lista ordenada por TTR crescente,
+// que é a ordem usada pela Média Aparada (k primeiros) e pelos percentis (posição p90Rank/p95Rank, base 1).
+function computeMttrMethodologies(items, cutMin, targetMin) {
+    const incidentes = (items || []).filter(it => it && typeof it.min === 'number' && isFinite(it.min) && it.min >= 0)
+        .slice().sort((a, b) => a.min - b.min);
+    const sorted = incidentes.map(it => it.min);
     const n = sorted.length;
+    const rank = p => n ? Math.min(n, Math.max(1, Math.ceil(n * p))) : 0;
     const mean = arr => arr.length ? arr.reduce((acc, v) => acc + v, 0) / arr.length : null;
-    const percentile = p => n ? sorted[Math.min(n, Math.max(1, Math.ceil(n * p))) - 1] : null;
+    const percentile = p => n ? sorted[rank(p) - 1] : null;
     const pack = (min, considered) => ({
         min: min == null ? null : Math.round(min),
         hhmm: mttrFormatMinutes(min),
@@ -57,7 +62,8 @@ function computeMttrMethodologies(durations, cutMin, targetMin) {
     const kept = sorted.filter(d => d < cutMin);
     const k = n ? Math.max(1, Math.floor(n * MTTR_TRIMMED_KEEP)) : 0;
     return {
-        n: n, targetMin: targetMin, cutMin: cutMin,
+        n: n, targetMin: targetMin, cutMin: cutMin, k: k, p90Rank: rank(0.90), p95Rank: rank(0.95),
+        incidentes: incidentes,
         bruto: pack(mean(sorted), n),
         corte: pack(mean(kept), kept.length),
         aparada: pack(mean(sorted.slice(0, k)), k),
@@ -1207,7 +1213,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         // Item 4: MTTR descontando outliers (TTR >= limiar da Severidade) + contagem de outliers
         sev0OutlierCount: 0, sev0DuracaoMinutosSemOutliers: 0, sev0IncidentesSemOutliers: 0,
         sev1OutlierCount: 0, sev1DuracaoMinutosSemOutliers: 0, sev1IncidentesSemOutliers: 0,
-        sev0Duracoes: [], sev1Duracoes: [],
+        sev0Itens: [], sev1Itens: [],
         monthlyMetrics: {},
         weeklyMetrics: {},
         quarterlyMetrics: {},
@@ -1354,7 +1360,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         if (isSev0) {
         metrics.sev0Incidentes++;
         metrics.sev0DuracaoMinutos += durMin;
-        metrics.sev0Duracoes.push(durMin);
+        metrics.sev0Itens.push({ id: ticketId, min: durMin, ttr: durRaw, dataDefinicao: formatIncidentOpenDate(row[COL_ABERTURA]), dataAberturaTimestamp: incidentOpenTimestamp(row[COL_ABERTURA]) });
         if (durMin >= MTTR_OUTLIER_SEV0_MIN) {
             metrics.sev0OutlierCount++;
         } else {
@@ -1375,7 +1381,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         } else if (isSev1) {
         metrics.sev1Incidentes++;
         metrics.sev1DuracaoMinutos += durMin;
-        metrics.sev1Duracoes.push(durMin);
+        metrics.sev1Itens.push({ id: ticketId, min: durMin, ttr: durRaw, dataDefinicao: formatIncidentOpenDate(row[COL_ABERTURA]), dataAberturaTimestamp: incidentOpenTimestamp(row[COL_ABERTURA]) });
         if (durMin >= MTTR_OUTLIER_SEV1_MIN) {
             metrics.sev1OutlierCount++;
         } else {
@@ -1913,8 +1919,8 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         sev1OutlierPct: metrics.sev1Incidentes > 0 ? Math.round((metrics.sev1OutlierCount / metrics.sev1Incidentes) * 1000) / 10 : null,
         // Comparativo de metodologias de MTTR (Corte Fixo x Média Aparada P95 x Percentil), contra a meta de OLA
         mttrMetodologias: {
-            sev0: computeMttrMethodologies(metrics.sev0Duracoes, MTTR_OUTLIER_SEV0_MIN, OLA_TARGET_SEV0_MIN),
-            sev1: computeMttrMethodologies(metrics.sev1Duracoes, MTTR_OUTLIER_SEV1_MIN, OLA_TARGET_SEV1_MIN)
+            sev0: computeMttrMethodologies(metrics.sev0Itens, MTTR_OUTLIER_SEV0_MIN, OLA_TARGET_SEV0_MIN),
+            sev1: computeMttrMethodologies(metrics.sev1Itens, MTTR_OUTLIER_SEV1_MIN, OLA_TARGET_SEV1_MIN)
         },
         // Visão Executiva
         aderenciaOLA: aderenciaOLA !== null ? Math.round(aderenciaOLA * 10) / 10 : null,

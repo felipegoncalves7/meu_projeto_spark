@@ -1908,10 +1908,15 @@
     }
 
     // --- Metodologias de MTTR (painel abaixo dos cards Sev 0/Sev 1) ---
+    // Percentil é o indicador principal (pedido da Diretoria); Corte Fixo e Média Aparada ficam como comparativo.
     const MTTR_METODO_TIPS = {
         corte: 'Calcula a média aritmética dos incidentes desconsiderando aqueles com tempo de resolução ≥ 06h (Sev 0) ou ≥ 18h (Sev 1). <strong>Fragilidade do modelo:</strong> Utiliza um corte temporal estático e arbitrário. Um incidente resolvido em 05h59m é incluído no cálculo, puxando a média severamente para cima, enquanto um incidente resolvido em 06h01m é totalmente descartado da média. Isso pode mascarar incidentes críticos ou penalizar o indicador de forma desproporcional.',
         aparada: 'Calcula a média aritmética após excluir matematicamente os 5% incidentes mais demorados do período, independentemente da duração em horas. <strong>Diferencial:</strong> Elimina a regra de corte fixo e adapta-se dinamicamente ao volume mensal. Protege o indicador contra distorções causadas por casos anômalos extremos, garantindo que exatamente 95% do volume operacional seja representado na média.',
         pct: 'Representa a marca de tempo na qual 90% (ou 95%) de todos os incidentes registrados foram efetivamente resolvidos. <strong>Padrão de Mercado (SRE / ITIL 4):</strong> Não utiliza médias aritméticas, sendo totalmente imune às distorções da cauda longa. Informa a previsibilidade real do serviço com a leitura direta: \'90% dos incidentes foram resolvidos em até [HH:MM]\'. Não descarta nenhum dado da base para gerar o número.'
+    };
+    const MTTR_PCT_INFO = {
+        p90: { label: 'P90', share: '90%', frac: '9 em cada 10', tail: '10%', p: 0.90, rankKey: 'p90Rank' },
+        p95: { label: 'P95', share: '95%', frac: '19 em cada 20', tail: '5%', p: 0.95, rankKey: 'p95Rank' }
     };
     const mttrPctChoice = { sev0: 'p90', sev1: 'p90' };
     let lastMttrMetodologias = null;
@@ -1921,36 +1926,35 @@
         return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
     }
     const fmtPctBR = (v) => (v == null ? '—' : String(v).replace('.', ',') + '%');
+    const fmtNumBR = (v) => String(Math.round(v * 100) / 100).replace('.', ',');
+    const mttrColor = (r) => (!r || r.min == null ? '#94a3b8' : (r.withinTarget ? '#1B472A' : '#e94839'));
 
-    function mttrMetodoRow(opts, scaleMax, targetMin) {
-        const r = opts.r;
+    function mttrBadge(r, targetMin) {
+        if (!r || r.min == null) return '';
+        return r.withinTarget
+            ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap" style="background:rgba(27,71,42,0.1);color:#1B472A;">&#10003; dentro da meta</span>`
+            : `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap" style="background:rgba(233,72,57,0.1);color:#e94839;">&#9650; +${mttrHHMM(r.min - targetMin)} acima</span>`;
+    }
+
+    // Faixa com rótulos: valor dentro (ou logo após) o preenchimento e a meta de OLA sobre o marcador
+    function mttrBar(r, targetMin, scaleMax, big) {
         const has = r && r.min != null;
-        const ok = has && r.withinTarget;
-        const color = !has ? '#94a3b8' : (ok ? '#1B472A' : '#e94839');
-        const badge = !has ? '' : ok
-            ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap" style="background:rgba(27,71,42,0.1);color:#1B472A;">&#10003; &le; meta</span>`
-            : `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap" style="background:rgba(233,72,57,0.1);color:#e94839;">&#9650; +${mttrHHMM(r.min - targetMin)}</span>`;
+        const color = mttrColor(r);
         const fillPct = has ? Math.min(100, (r.min / scaleMax) * 100) : 0;
         const metaPct = Math.min(100, (targetMin / scaleMax) * 100);
-        return `<div>
-            <div class="flex items-center justify-between gap-3">
-                <p class="text-[11px] font-bold text-slate-600 flex items-center gap-1 min-w-0">
-                    <span class="leading-tight">${opts.label}</span>
-                    <button type="button" class="mttr-info" data-mttr-tip="${opts.tipKey}" aria-label="Como é calculado: ${opts.label}">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                    </button>
-                </p>
-                <div class="flex items-center gap-1.5 shrink-0">
-                    <span class="text-lg font-bold tabular-nums leading-none" style="color:${color};">${has ? r.hhmm : '—'}</span>${badge}
-                </div>
-            </div>
-            <div class="mttr-bar" role="img" aria-label="${has ? r.hhmm : 'sem dados'} contra a meta de ${mttrHHMM(targetMin)}">
-                <span class="mttr-bar-fill" style="width:${fillPct}%;background:${color};"></span>
-                <span class="mttr-bar-meta" style="left:${metaPct}%;" title="Meta OLA ${mttrHHMM(targetMin)}"></span>
-            </div>
-            <p class="text-[10px] text-slate-400 leading-snug">${opts.foot}</p>
-        </div>`;
+        const inside = fillPct >= 22;
+        const metaShift = metaPct > 82 ? '-100%' : (metaPct < 18 ? '0%' : '-50%');
+        const valLabel = !has ? '' : inside
+            ? `<span class="mttr-bar-val" style="left:calc(${fillPct}% - 8px);transform:translate(-100%,-50%);color:#fff;">${r.hhmm}</span>`
+            : `<span class="mttr-bar-val" style="left:calc(${fillPct}% + 6px);color:${color};">${r.hhmm}</span>`;
+        return `<div class="mttr-bar${big ? ' is-big' : ''}" role="img" aria-label="${has ? r.hhmm : 'sem dados'} contra a meta de OLA de ${mttrHHMM(targetMin)}">
+                <span class="mttr-bar-fill" style="width:${fillPct}%;background:${color};"></span>${valLabel}
+                <span class="mttr-bar-meta" style="left:${metaPct}%;"><span class="mttr-bar-meta-lbl" style="transform:translateX(${metaShift});">Meta ${mttrHHMM(targetMin)}</span></span>
+            </div>`;
     }
+
+    const mttrDetailBtn = (sev, method) =>
+        `<button type="button" class="mttr-detail-btn" data-mttr-detail="${sev}:${method}">Ver cálculo e incidentes <span aria-hidden="true">&rarr;</span></button>`;
 
     function renderMttrMetodologias(data) {
         if (data) lastMttrMetodologias = data;
@@ -1960,77 +1964,214 @@
             const el = document.getElementById(`mttr-metodos-${sev}`);
             const d = data[sev];
             if (!el || !d) return;
-            const pk = mttrPctChoice[sev];
-            document.querySelectorAll(`[data-mttr-pct^="${sev}:"]`).forEach((btn) => {
-                const on = btn.getAttribute('data-mttr-pct') === `${sev}:${pk}`;
-                btn.classList.toggle('is-active', on);
-                btn.setAttribute('aria-pressed', String(on));
-            });
             if (!d.n) {
-                el.innerHTML = '<p class="text-[10px] text-slate-400">Sem incidentes no período para comparar as metodologias.</p>';
+                el.innerHTML = '<p class="text-[11px] text-slate-400">Sem incidentes no período para comparar as metodologias.</p>';
                 return;
             }
+            const sevLabel = sev === 'sev0' ? 'Sev 0' : 'Sev 1';
+            const pk = mttrPctChoice[sev];
+            const info = MTTR_PCT_INFO[pk];
             const pr = d[pk];
-            const pLabel = pk === 'p95' ? 'P95' : 'P90';
-            const pShare = pk === 'p95' ? '95%' : '90%';
-            const vals = [d.corte.min, d.aparada.min, pr.min, d.targetMin].filter(v => v != null);
-            const scaleMax = Math.max(...vals, 1) * 1.15;
+            const scaleMax = Math.max(d.corte.min || 0, d.aparada.min || 0, d.p90.min || 0, d.p95.min || 0, d.targetMin, 1) * 1.12;
+            const tail = (d.incidentes || []).filter(it => it.min > pr.min).length;
             const cutLabel = mttrHHMM(d.cutMin).replace(':00', 'h');
             const outOfTarget = d.corte.discardedPct != null && d.corte.discardedPct > 5;
-            el.innerHTML = [
-                mttrMetodoRow({
-                    r: d.corte, label: 'MTTR S/ Outliers (Corte Fixo)', tipKey: 'corte',
-                    foot: `Considerados <b class="text-slate-600">${d.corte.considered}</b> · Descartados (&ge; ${cutLabel}) <b class="text-slate-600">${d.corte.discarded}</b> <span style="color:${outOfTarget ? '#e94839' : 'inherit'};font-weight:${outOfTarget ? 700 : 400};">(${fmtPctBR(d.corte.discardedPct)})</span> · meta &le; 5%`
-                }, scaleMax, d.targetMin),
-                mttrMetodoRow({
-                    r: d.aparada, label: 'MTTR Líquido (Média Aparada P95)', tipKey: 'aparada',
-                    foot: `Considerados <b class="text-slate-600">${d.aparada.considered}</b> · Descartados (5% mais demorados) <b class="text-slate-600">${d.aparada.discarded}</b> (${fmtPctBR(d.aparada.discardedPct)})`
-                }, scaleMax, d.targetMin),
-                mttrMetodoRow({
-                    r: pr, label: `Resolução ${pLabel}`, tipKey: 'pct',
-                    foot: `${pShare} resolvidos em até <b class="text-slate-600">${pr.hhmm}</b> · Considerados <b class="text-slate-600">${d.n}</b> · Descartados <b class="text-slate-600">0</b>`
-                }, scaleMax, d.targetMin)
-            ].join('');
+
+            const toggle = ['p90', 'p95'].map((key) => {
+                const ki = MTTR_PCT_INFO[key], on = key === pk;
+                return `<button type="button" data-mttr-pct="${sev}:${key}" aria-pressed="${on}" class="mttr-pct-opt${on ? ' is-active' : ''}">
+                        <span class="mttr-pct-opt-title">${ki.label} &middot; ${ki.share} dos incidentes</span>
+                        <span class="mttr-pct-opt-sub">${ki.frac} resolvidos em até <b>${d[key].hhmm}</b></span>
+                    </button>`;
+            }).join('');
+
+            const feat = `<div class="mttr-feat">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <span class="mttr-feat-tag">&#9733; Indicador principal &middot; Percentil de resolução</span>
+                    </div>
+                    <div class="mttr-pct-toggle" role="group" aria-label="Escolha o percentil">${toggle}</div>
+                    <div class="flex items-end justify-between gap-3 mt-3">
+                        <div class="min-w-0">
+                            <p class="text-sm font-bold text-slate-800">Resolução ${info.label}</p>
+                            <p class="text-[11px] text-slate-600 leading-snug mt-0.5"><b>${info.frac}</b> incidentes ${sevLabel} (${info.share}) foram resolvidos em até <b>${pr.hhmm}</b>.</p>
+                        </div>
+                        <div class="text-right shrink-0">
+                            <p class="text-3xl font-extrabold tabular-nums leading-none" style="color:${mttrColor(pr)};">${pr.hhmm}</p>
+                            <div class="mt-1">${mttrBadge(pr, d.targetMin)}</div>
+                        </div>
+                    </div>
+                    ${mttrBar(pr, d.targetMin, scaleMax, true)}
+                    <p class="text-[11px] text-slate-500 leading-snug">Não é média: é o tempo do incidente que ocupa a posição ${info.share} da fila, do mais rápido ao mais demorado. Nenhum incidente é descartado.</p>
+                    <div class="flex flex-wrap items-center justify-between gap-2 mt-2">
+                        <p class="text-[10px] text-slate-400">Considerados <b class="text-slate-600">${d.n}</b> &middot; Desconsiderados <b class="text-slate-600">0</b> &middot; Acima do ${info.label} <b class="text-slate-600">${tail}</b></p>
+                        ${mttrDetailBtn(sev, 'pct')}
+                    </div>
+                </div>`;
+
+            const row = (r, method, title, desc, foot) => `<div class="mttr-row">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="text-xs font-bold text-slate-700">${title}</p>
+                            <p class="text-[11px] text-slate-500 leading-snug mt-0.5">${desc}</p>
+                        </div>
+                        <div class="text-right shrink-0">
+                            <p class="text-xl font-bold tabular-nums leading-none" style="color:${mttrColor(r)};">${r.min != null ? r.hhmm : '—'}</p>
+                            <div class="mt-1">${mttrBadge(r, d.targetMin)}</div>
+                        </div>
+                    </div>
+                    ${mttrBar(r, d.targetMin, scaleMax, false)}
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <p class="text-[10px] text-slate-400">${foot}</p>
+                        ${mttrDetailBtn(sev, method)}
+                    </div>
+                </div>`;
+
+            el.innerHTML = feat +
+                `<p class="mttr-sub-head">Comparativo &middot; médias aritméticas</p>` +
+                row(d.corte, 'corte', 'MTTR S/ Outliers (Corte Fixo)',
+                    `Média dos incidentes resolvidos em menos de ${cutLabel}; os de ${cutLabel} ou mais saem da conta.`,
+                    `Considerados <b class="text-slate-600">${d.corte.considered}</b> &middot; Desconsiderados (&ge; ${cutLabel}) <b class="text-slate-600">${d.corte.discarded}</b> <span style="color:${outOfTarget ? '#e94839' : 'inherit'};font-weight:${outOfTarget ? 700 : 400};">(${fmtPctBR(d.corte.discardedPct)})</span> &middot; meta &le; 5%`) +
+                row(d.aparada, 'aparada', 'MTTR Líquido (Média Aparada P95)',
+                    'Média depois de retirar os 5% incidentes mais demorados do período, qualquer que seja a duração.',
+                    `Considerados <b class="text-slate-600">${d.aparada.considered}</b> &middot; Desconsiderados (5% mais demorados) <b class="text-slate-600">${d.aparada.discarded}</b> (${fmtPctBR(d.aparada.discardedPct)})`);
         });
     }
 
-    document.addEventListener('click', (ev) => {
-        const btn = ev.target && ev.target.closest ? ev.target.closest('[data-mttr-pct]') : null;
-        if (!btn) return;
-        const [sev, pk] = btn.getAttribute('data-mttr-pct').split(':');
-        if (!mttrPctChoice[sev] || mttrPctChoice[sev] === pk) return;
-        mttrPctChoice[sev] = pk;
-        renderMttrMetodologias();
-    });
+    // Pop-up "Ver cálculo e incidentes": regra, conta do período e lista de incidentes considerados x desconsiderados
+    let mttrModalState = null;
 
-    // Tooltip das metodologias: um único balão em position:fixed, ajustado à tela (não é cortado pelo card nem empurra o layout)
-    (function setupMttrTooltip() {
-        let tip = null, anchor = null;
-        const hide = () => { if (tip) tip.classList.remove('is-open'); anchor = null; };
-        const show = (btn) => {
-            const html = MTTR_METODO_TIPS[btn.getAttribute('data-mttr-tip')];
-            if (!html) return;
-            if (!tip) { tip = document.createElement('div'); tip.className = 'mttr-tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
-            tip.innerHTML = html;
-            anchor = btn;
-            tip.style.left = '0px'; tip.style.top = '0px';
-            tip.classList.add('is-open');
-            const r = btn.getBoundingClientRect();
-            const w = tip.offsetWidth, h = tip.offsetHeight, gap = 8;
-            const left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8);
-            const above = r.top - h - gap;
-            const top = above >= 8 ? above : Math.min(r.bottom + gap, window.innerHeight - h - 8);
-            tip.style.left = `${left}px`; tip.style.top = `${Math.max(8, top)}px`;
-        };
-        const target = (ev) => (ev.target && ev.target.closest ? ev.target.closest('.mttr-info') : null);
-        document.addEventListener('mouseover', (ev) => { const b = target(ev); if (b && b !== anchor) show(b); });
-        document.addEventListener('mouseout', (ev) => { const b = target(ev); if (b && !b.contains(ev.relatedTarget)) hide(); });
-        document.addEventListener('focusin', (ev) => { const b = target(ev); if (b) show(b); });
-        document.addEventListener('focusout', (ev) => { if (target(ev)) hide(); });
-        document.addEventListener('click', (ev) => { const b = target(ev); if (b) show(b); else hide(); });
-        window.addEventListener('scroll', hide, true);
-        window.addEventListener('resize', hide);
-    })();
+    function mttrModalRows(sev, method) {
+        const d = lastMttrMetodologias && lastMttrMetodologias[sev];
+        if (!d) return null;
+        const byId = {};
+        (ALL_DATA.rawIncidents || []).forEach(inc => { byId[inc.id] = inc; });
+        const pk = mttrPctChoice[sev];
+        const pctMin = d[pk].min;
+        const rows = (d.incidentes || []).map((it, i) => {
+            let inBase, situacao;
+            if (method === 'corte') { inBase = it.min < d.cutMin; situacao = inBase ? 'Considerado' : 'Desconsiderado (outlier)'; }
+            else if (method === 'aparada') { inBase = i < d.k; situacao = inBase ? 'Considerado' : 'Desconsiderado (5% mais demorados)'; }
+            else { inBase = it.min <= pctMin; situacao = inBase ? `Até o ${MTTR_PCT_INFO[pk].label}` : `Acima do ${MTTR_PCT_INFO[pk].label} (mantido na base)`; }
+            const raw = byId[it.id] || {};
+            return {
+                posicao: i + 1, id: it.id, ttr: mttrHHMM(it.min), min: it.min, dataDefinicao: it.dataDefinicao,
+                dataAberturaTimestamp: it.dataAberturaTimestamp, tech: raw.tech || 'N/A', descImpacto: raw.descImpacto || 'N/A',
+                situacao, inBase
+            };
+        });
+        return { d, rows: rows.reverse() }; // mais demorados primeiro: a fronteira do cálculo fica no topo
+    }
+
+    function openMttrMetodoModal(sev, method, filter) {
+        const res = mttrModalRows(sev, method);
+        const modal = document.getElementById('mttr-metodo-modal');
+        const body = document.getElementById('mttr-metodo-body');
+        if (!res || !modal || !body) return;
+        mttrModalState = { sev, method, filter: filter || 'all' };
+        const { d, rows } = res;
+        const sevLabel = sev === 'sev0' ? 'Sev 0' : 'Sev 1';
+        const target = mttrHHMM(d.targetMin);
+        const cutLabel = mttrHHMM(d.cutMin).replace(':00', 'h');
+        const pi = MTTR_PCT_INFO[mttrPctChoice[sev]];
+        let title, result, steps, inLabel, outLabel;
+        if (method === 'corte') {
+            title = 'MTTR S/ Outliers (Corte Fixo)'; result = d.corte; inLabel = 'Considerados'; outLabel = 'Desconsiderados';
+            steps = [`Base do período: <b>${d.n}</b> incidentes ${sevLabel}.`,
+                `Saem da conta os incidentes com TTR &ge; ${cutLabel}: <b>${d.corte.discarded}</b> (${fmtPctBR(d.corte.discardedPct)}).`,
+                `Média aritmética dos <b>${d.corte.considered}</b> restantes = <b>${d.corte.hhmm}</b>.`];
+        } else if (method === 'aparada') {
+            title = 'MTTR Líquido (Média Aparada P95)'; result = d.aparada; inLabel = 'Considerados'; outLabel = 'Desconsiderados';
+            steps = [`Ordena os <b>${d.n}</b> incidentes ${sevLabel} do mais rápido ao mais demorado.`,
+                `k = piso(n &times; 0,95) = piso(${d.n} &times; 0,95) = piso(${fmtNumBR(d.n * 0.95)}) = <b>${d.k}</b> incidentes mantidos.`,
+                `Saem os <b>${d.n - d.k}</b> mais demorados; média aritmética dos ${d.k} primeiros = <b>${d.aparada.hhmm}</b>.`];
+        } else {
+            const rank = d[pi.rankKey];
+            title = `Resolução ${pi.label} (Percentil)`; result = d[mttrPctChoice[sev]]; inLabel = `Até o ${pi.label}`; outLabel = `Acima do ${pi.label}`;
+            steps = [`Ordena os <b>${d.n}</b> incidentes ${sevLabel} do mais rápido ao mais demorado.`,
+                `Posição = teto(n &times; ${fmtNumBR(pi.p)}) = teto(${d.n} &times; ${fmtNumBR(pi.p)}) = teto(${fmtNumBR(d.n * pi.p)}) = <b>${rank}&ordf;</b> posição.`,
+                `O TTR do incidente nessa posição é o ${pi.label}: <b>${result.hhmm}</b>. Ou seja, ${pi.frac} incidentes foram resolvidos em até ${result.hhmm}.`,
+                `Nenhum incidente é descartado: os que ficaram acima do ${pi.label} continuam na base, apenas não definem a marca.`];
+        }
+        const nIn = rows.filter(r => r.inBase).length, nOut = rows.length - nIn;
+        const shown = rows.filter(r => mttrModalState.filter === 'all' || (mttrModalState.filter === 'in' ? r.inBase : !r.inBase));
+        const verdict = result.min == null ? '' : result.withinTarget
+            ? `<span class="font-bold" style="color:#1B472A;">dentro da meta de OLA (&le; ${target})</span>`
+            : `<span class="font-bold" style="color:#e94839;">+${mttrHHMM(result.min - d.targetMin)} acima da meta de OLA (&le; ${target})</span>`;
+
+        document.getElementById('mttr-metodo-title').textContent = `${title} · ${sevLabel}`;
+        document.getElementById('mttr-metodo-subtitle').textContent = `Resultado ${result.min != null ? result.hhmm : '—'} · ${d.n} incidentes no período filtrado`;
+        const chip = (key, label, count) => `<button type="button" data-mttr-filter="${key}" class="mttr-chip${mttrModalState.filter === key ? ' is-active' : ''}">${label} <b>${count}</b></button>`;
+        let lastIn = null;
+        const tableRows = shown.map(r => {
+            const sep = (mttrModalState.filter === 'all' && lastIn === false && r.inBase)
+                ? `<tr><td colspan="7" class="mttr-sep">${method === 'pct' ? `Marca do ${pi.label}: ${result.hhmm}` : (method === 'corte' ? `Corte fixo: abaixo de ${cutLabel}` : `Limite da média aparada: ${d.k} mais rápidos`)}</td></tr>` : '';
+            lastIn = r.inBase;
+            const tag = r.inBase
+                ? `<span class="mttr-sit" style="background:rgba(27,71,42,0.1);color:#1B472A;">${escapeXml(r.situacao)}</span>`
+                : `<span class="mttr-sit" style="background:${method === 'pct' ? 'rgba(100,116,139,0.12);color:#475569' : 'rgba(233,72,57,0.1);color:#e94839'};">${escapeXml(r.situacao)}</span>`;
+            return `${sep}<tr class="hover:bg-slate-50${r.inBase ? '' : ' bg-slate-50/60'}">
+                    <td class="px-3 py-2 text-slate-400 tabular-nums">${r.posicao}&ordf;</td>
+                    <td class="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">${escapeXml(r.id)}</td>
+                    <td class="px-3 py-2 font-bold tabular-nums text-slate-700">${r.ttr}</td>
+                    <td class="px-3 py-2 text-slate-600 whitespace-nowrap">${escapeXml(r.dataDefinicao || 'N/A')}</td>
+                    <td class="px-3 py-2 text-slate-600 whitespace-nowrap">${escapeXml(r.tech)}</td>
+                    <td class="px-3 py-2 text-slate-600 max-w-[280px] truncate" title="${escapeXml(r.descImpacto)}">${escapeXml(r.descImpacto)}</td>
+                    <td class="px-3 py-2 whitespace-nowrap">${tag}</td>
+                </tr>`;
+        }).join('');
+
+        body.innerHTML = `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="rounded-xl border border-slate-200 p-4">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-[0.12em] mb-1.5">O que é</p>
+                    <p class="text-xs text-slate-600 leading-relaxed">${MTTR_METODO_TIPS[method]}</p>
+                </div>
+                <div class="rounded-xl border border-slate-200 p-4 bg-slate-50/60">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-[0.12em] mb-1.5">Como foi calculado neste período</p>
+                    <ol class="list-decimal pl-4 space-y-1 text-xs text-slate-600 leading-relaxed">${steps.map(s => `<li>${s}</li>`).join('')}</ol>
+                    <p class="text-xs text-slate-600 mt-2">Resultado: <b class="text-slate-800">${result.min != null ? result.hhmm : '—'}</b> &mdash; ${verdict}</p>
+                </div>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex flex-wrap gap-2">${chip('all', 'Todos', rows.length)}${chip('in', inLabel, nIn)}${chip('out', outLabel, nOut)}</div>
+                <p class="text-[10px] text-slate-400">Ordenado do maior para o menor TTR &middot; Posição = ordem do mais rápido (1&ordf;) ao mais demorado</p>
+            </div>
+            <div class="overflow-auto rounded-xl border border-slate-200">
+                <table class="w-full text-xs border-collapse">
+                    <thead class="sticky top-0 bg-white"><tr>${['Posição', 'Incidente', 'TTR', 'Data de Abertura', 'Tecnologia', 'Descrição do Impacto', 'Situação no cálculo']
+                        .map(h => `<th class="text-left font-bold text-slate-500 uppercase tracking-wider text-[10px] px-3 py-2 border-b border-slate-200 whitespace-nowrap">${h}</th>`).join('')}</tr></thead>
+                    <tbody class="divide-y divide-slate-100">${tableRows || '<tr><td colspan="7" class="text-center text-slate-300 italic py-6">Nenhum incidente nesta seleção.</td></tr>'}</tbody>
+                </table>
+            </div>`;
+
+        registerExport('mttr-metodo', shown, [
+            { key: 'posicao', label: 'Posição (mais rápido = 1)' }, { key: 'id', label: 'Incidente' }, { key: 'ttr', label: 'TTR' },
+            { key: 'dataDefinicao', label: 'Data de Abertura' }, { key: 'tech', label: 'Tecnologia' },
+            { key: 'descImpacto', label: 'Descrição do Impacto' }, { key: 'situacao', label: 'Situação no cálculo' }
+        ], `${title} - ${sevLabel}`);
+        modal.classList.remove('hidden');
+    }
+
+    document.addEventListener('click', (ev) => {
+        const t = ev.target && ev.target.closest ? ev.target : null;
+        if (!t) return;
+        const pctBtn = t.closest('[data-mttr-pct]');
+        if (pctBtn) {
+            const [sev, pk] = pctBtn.getAttribute('data-mttr-pct').split(':');
+            if (mttrPctChoice[sev] && mttrPctChoice[sev] !== pk) { mttrPctChoice[sev] = pk; renderMttrMetodologias(); }
+            return;
+        }
+        const det = t.closest('[data-mttr-detail]');
+        if (det) { const [sev, method] = det.getAttribute('data-mttr-detail').split(':'); openMttrMetodoModal(sev, method); return; }
+        const chip = t.closest('[data-mttr-filter]');
+        if (chip && mttrModalState) { openMttrMetodoModal(mttrModalState.sev, mttrModalState.method, chip.getAttribute('data-mttr-filter')); return; }
+        const modal = document.getElementById('mttr-metodo-modal');
+        if (modal && (t === modal || t.closest('#btn-close-mttr-metodo'))) modal.classList.add('hidden');
+    });
+    document.addEventListener('keydown', (ev) => {
+        const modal = document.getElementById('mttr-metodo-modal');
+        if (ev.key === 'Escape' && modal && !modal.classList.contains('hidden')) modal.classList.add('hidden');
+    });
 
     function renderKpiCards(kpis) {
         const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
