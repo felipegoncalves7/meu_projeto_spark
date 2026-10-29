@@ -428,43 +428,13 @@
                                 </div>
                             </div>
                         </div>
-                        <!-- MTTR descontando Outliers (item 4): mesmo card, separado por fundo tintado -->
+                        <!-- Metodologias de MTTR: Corte Fixo x Média Aparada P95 x Percentil, comparadas à meta de OLA (render em dashboard.js) -->
                         <div class="bg-slate-50/70 border-t border-dashed border-slate-200 px-5 py-3">
-                            <div class="grid grid-cols-2 gap-4 divide-x divide-slate-200">
-                                <div>
-                                    <p class="text-[9px] text-slate-500 uppercase tracking-wider font-bold flex items-center gap-1">MTTR
-                                        s/ Outliers
-                                        <span class="info-tooltip" tabindex="0">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-slate-300"
-                                                fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                            <span class="tooltip-bubble">MTTR médio desconsiderando Incidentes
-                                                Outliers (TTR &ge; 06:00). Meta: &le; 02:00.</span>
-                                        </span>
-                                    </p>
-                                    <p id="val-mttr-sev0-sem-outliers" class="text-base font-bold text-slate-700 mt-0.5">00:00</p>
-                                    <p class="text-[9px] text-slate-400">Meta: <span class="font-bold" style="color:#e94839;">&le; 02:00</span></p>
-                                </div>
-                                <div class="pl-4">
-                                    <p class="text-[9px] text-slate-500 uppercase tracking-wider font-bold flex items-center gap-1">Outliers
-                                        (&ge; 6h)
-                                        <span class="info-tooltip" tabindex="0">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-slate-300"
-                                                fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                            <span class="tooltip-bubble">Incidentes Sev0 com TTR &ge; 6h (3x a meta
-                                                de OLA). Meta: &le; 5% dos Incidentes Sev0.</span>
-                                        </span>
-                                    </p>
-                                    <p class="mt-0.5"><span id="val-sev0-outlier-count" class="text-base font-bold text-slate-700">0</span>
-                                        <span id="val-sev0-outlier-pct" class="text-[10px] text-slate-400 font-semibold ml-1"></span></p>
-                                    <p class="text-[9px] text-slate-400">Meta: <span class="font-bold" style="color:#e94839;">&le; 5%</span></p>
-                                </div>
+                            <div class="flex items-center justify-between mb-2">
+                                <p class="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Metodologias de MTTR</p>
+                                <p class="text-[9px] text-slate-400">Meta OLA: <span class="font-bold" style="color:#e94839;">&le; 02:00</span></p>
                             </div>
+                            <div id="mttr-metodos-sev0" class="space-y-3" aria-live="polite"></div>
                         </div>
                         <!-- Aderência OLA -->
                         <div class="border-t border-slate-100 px-5 py-4" style="background-color: rgba(233,72,57,0.04);">
@@ -539,43 +509,13 @@
                                 </div>
                             </div>
                         </div>
-                        <!-- MTTR descontando Outliers (item 4) -->
+                        <!-- Metodologias de MTTR: Corte Fixo x Média Aparada P95 x Percentil, comparadas à meta de OLA (render em dashboard.js) -->
                         <div class="bg-slate-50/70 border-t border-dashed border-slate-200 px-5 py-3">
-                            <div class="grid grid-cols-2 gap-4 divide-x divide-slate-200">
-                                <div>
-                                    <p class="text-[9px] text-slate-500 uppercase tracking-wider font-bold flex items-center gap-1">MTTR
-                                        s/ Outliers
-                                        <span class="info-tooltip" tabindex="0">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-slate-300"
-                                                fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                            <span class="tooltip-bubble">MTTR médio desconsiderando Incidentes
-                                                Outliers (TTR &ge; 18:00). Meta: &le; 06:00.</span>
-                                        </span>
-                                    </p>
-                                    <p id="val-mttr-sev1-sem-outliers" class="text-base font-bold text-slate-700 mt-0.5">00:00</p>
-                                    <p class="text-[9px] text-slate-400">Meta: <span class="font-bold text-natura-orange">&le; 06:00</span></p>
-                                </div>
-                                <div class="pl-4">
-                                    <p class="text-[9px] text-slate-500 uppercase tracking-wider font-bold flex items-center gap-1">Outliers
-                                        (&ge; 18h)
-                                        <span class="info-tooltip" tabindex="0">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-slate-300"
-                                                fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                            <span class="tooltip-bubble">Incidentes Sev1 com TTR &ge; 18h (3x a meta
-                                                de OLA). Meta: &le; 5% dos Incidentes Sev1.</span>
-                                        </span>
-                                    </p>
-                                    <p class="mt-0.5"><span id="val-sev1-outlier-count" class="text-base font-bold text-slate-700">0</span>
-                                        <span id="val-sev1-outlier-pct" class="text-[10px] text-slate-400 font-semibold ml-1"></span></p>
-                                    <p class="text-[9px] text-slate-400">Meta: <span class="font-bold text-natura-orange">&le; 5%</span></p>
-                                </div>
+                            <div class="flex items-center justify-between mb-2">
+                                <p class="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Metodologias de MTTR</p>
+                                <p class="text-[9px] text-slate-400">Meta OLA: <span class="font-bold text-natura-orange">&le; 06:00</span></p>
                             </div>
+                            <div id="mttr-metodos-sev1" class="space-y-3" aria-live="polite"></div>
                         </div>
                         <!-- Aderência OLA -->
                         <div class="border-t border-slate-100 px-5 py-4 bg-natura-orange/5">

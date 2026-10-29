@@ -1907,6 +1907,98 @@
         return formatMinutesToHHMM(Math.round(val * 60));
     }
 
+    // --- Metodologias de MTTR (cards Sev 0/Sev 1) ---
+    const MTTR_METODO_TIPS = {
+        corte: 'Calcula a média aritmética dos incidentes desconsiderando aqueles com tempo de resolução ≥ 06h (Sev 0) ou ≥ 18h (Sev 1). <strong>Fragilidade do modelo:</strong> Utiliza um corte temporal estático e arbitrário. Um incidente resolvido em 05h59m é incluído no cálculo, puxando a média severamente para cima, enquanto um incidente resolvido em 06h01m é totalmente descartado da média. Isso pode mascarar incidentes críticos ou penalizar o indicador de forma desproporcional.',
+        aparada: 'Calcula a média aritmética após excluir matematicamente os 5% incidentes mais demorados do período, independentemente da duração em horas. <strong>Diferencial:</strong> Elimina a regra de corte fixo e adapta-se dinamicamente ao volume mensal. Protege o indicador contra distorções causadas por casos anômalos extremos, garantindo que exatamente 95% do volume operacional seja representado na média.',
+        pct: 'Representa a marca de tempo na qual 90% (ou 95%) de todos os incidentes registrados foram efetivamente resolvidos. <strong>Padrão de Mercado (SRE / ITIL 4):</strong> Não utiliza médias aritméticas, sendo totalmente imune às distorções da cauda longa. Informa a previsibilidade real do serviço com a leitura direta: \'90% dos incidentes foram resolvidos em até [HH:MM]\'. Não descarta nenhum dado da base para gerar o número.'
+    };
+    const mttrPctChoice = { sev0: 'p90', sev1: 'p90' };
+    let lastMttrMetodologias = null;
+
+    function mttrHHMM(min) {
+        const t = Math.max(0, Math.round(min || 0));
+        return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+    }
+    const fmtPctBR = (v) => (v == null ? '—' : String(v).replace('.', ',') + '%');
+
+    function mttrMetodoRow(opts, scaleMax, targetMin) {
+        const r = opts.r;
+        const info = `<span class="info-tooltip" tabindex="0" aria-label="Como é calculado">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span class="tooltip-bubble">${opts.tip}</span></span>`;
+        const has = r && r.min != null;
+        const ok = has && r.withinTarget;
+        const color = !has ? '#94a3b8' : (ok ? '#1B472A' : '#e94839');
+        const badge = !has ? '' : ok
+            ? `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style="background:rgba(27,71,42,0.1);color:#1B472A;">&#10003; &le; meta</span>`
+            : `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style="background:rgba(233,72,57,0.1);color:#e94839;">&#9650; +${mttrHHMM(r.min - targetMin)}</span>`;
+        const fillPct = has ? Math.min(100, (r.min / scaleMax) * 100) : 0;
+        const metaPct = Math.min(100, (targetMin / scaleMax) * 100);
+        return `<div class="mttr-metodo">
+            <div class="flex items-center justify-between gap-2">
+                <p class="text-[10px] font-bold text-slate-600 flex items-center gap-1 min-w-0">${opts.label}${info}${opts.extra || ''}</p>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <span class="text-base font-bold tabular-nums" style="color:${color};">${has ? r.hhmm : '—'}</span>${badge}
+                </div>
+            </div>
+            <div class="mttr-bar" role="img" aria-label="${has ? r.hhmm : 'sem dados'} contra a meta de ${mttrHHMM(targetMin)}">
+                <span class="mttr-bar-fill" style="width:${fillPct}%;background:${color};"></span>
+                <span class="mttr-bar-meta" style="left:${metaPct}%;" title="Meta OLA ${mttrHHMM(targetMin)}"></span>
+            </div>
+            <p class="text-[9px] text-slate-400 leading-snug">${opts.foot}</p>
+        </div>`;
+    }
+
+    function renderMttrMetodologias(data) {
+        if (data) lastMttrMetodologias = data;
+        data = lastMttrMetodologias;
+        if (!data) return;
+        ['sev0', 'sev1'].forEach((sev) => {
+            const el = document.getElementById(`mttr-metodos-${sev}`);
+            const d = data[sev];
+            if (!el || !d) return;
+            if (!d.n) {
+                el.innerHTML = '<p class="text-[10px] text-slate-400">Sem incidentes no período para comparar as metodologias.</p>';
+                return;
+            }
+            const pk = mttrPctChoice[sev];
+            const pr = d[pk];
+            const pLabel = pk === 'p95' ? 'P95' : 'P90';
+            const pShare = pk === 'p95' ? '95%' : '90%';
+            const vals = [d.corte.min, d.aparada.min, pr.min, d.targetMin].filter(v => v != null);
+            const scaleMax = Math.max(...vals, 1) * 1.15;
+            const cutLabel = mttrHHMM(d.cutMin).replace(':00', 'h');
+            const outOfTarget = d.corte.discardedPct != null && d.corte.discardedPct > 5;
+            const toggle = `<span class="mttr-pct-toggle" role="group" aria-label="Percentil">
+                    <button type="button" data-mttr-pct="${sev}:p90" class="${pk === 'p90' ? 'is-active' : ''}" aria-pressed="${pk === 'p90'}">P90</button>
+                    <button type="button" data-mttr-pct="${sev}:p95" class="${pk === 'p95' ? 'is-active' : ''}" aria-pressed="${pk === 'p95'}">P95</button></span>`;
+            el.innerHTML = [
+                mttrMetodoRow({
+                    r: d.corte, label: 'MTTR S/ Outliers (Corte Fixo)', tip: MTTR_METODO_TIPS.corte,
+                    foot: `Considerados <b class="text-slate-600">${d.corte.considered}</b> · Descartados (&ge; ${cutLabel}) <b class="text-slate-600">${d.corte.discarded}</b> <span style="color:${outOfTarget ? '#e94839' : 'inherit'};font-weight:${outOfTarget ? 700 : 400};">(${fmtPctBR(d.corte.discardedPct)})</span> · meta &le; 5%`
+                }, scaleMax, d.targetMin),
+                mttrMetodoRow({
+                    r: d.aparada, label: 'MTTR Líquido (Média Aparada P95)', tip: MTTR_METODO_TIPS.aparada,
+                    foot: `Considerados <b class="text-slate-600">${d.aparada.considered}</b> · Descartados (5% mais demorados) <b class="text-slate-600">${d.aparada.discarded}</b> (${fmtPctBR(d.aparada.discardedPct)})`
+                }, scaleMax, d.targetMin),
+                mttrMetodoRow({
+                    r: pr, label: `Resolução ${pLabel}`, tip: MTTR_METODO_TIPS.pct, extra: toggle,
+                    foot: `${pShare} resolvidos em até <b class="text-slate-600">${pr.hhmm}</b> · Considerados <b class="text-slate-600">${d.n}</b> · Descartados <b class="text-slate-600">0</b>`
+                }, scaleMax, d.targetMin)
+            ].join('');
+        });
+    }
+
+    document.addEventListener('click', (ev) => {
+        const btn = ev.target && ev.target.closest ? ev.target.closest('[data-mttr-pct]') : null;
+        if (!btn) return;
+        const [sev, pk] = btn.getAttribute('data-mttr-pct').split(':');
+        if (!mttrPctChoice[sev] || mttrPctChoice[sev] === pk) return;
+        mttrPctChoice[sev] = pk;
+        renderMttrMetodologias();
+    });
+
     function renderKpiCards(kpis) {
         const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
         setText('val-total-incidents', kpis.incidentesTotal);
@@ -1916,13 +2008,8 @@
         setText('val-sev1-incidents', kpis.incidentesSev1);
         setText('val-mttr-sev1', kpis.mttrSev1);
 
-        // Item 4: MTTR descontando outliers + volumetria/% de outliers, por Severidade
-        setText('val-mttr-sev0-sem-outliers', kpis.mttrSev0SemOutliers);
-        setText('val-sev0-outlier-count', kpis.sev0OutlierCount);
-        setText('val-sev0-outlier-pct', kpis.sev0OutlierPct != null ? `(${kpis.sev0OutlierPct}%)` : '');
-        setText('val-mttr-sev1-sem-outliers', kpis.mttrSev1SemOutliers);
-        setText('val-sev1-outlier-count', kpis.sev1OutlierCount);
-        setText('val-sev1-outlier-pct', kpis.sev1OutlierPct != null ? `(${kpis.sev1OutlierPct}%)` : '');
+        // Comparativo de metodologias de MTTR (Corte Fixo x Média Aparada P95 x Percentil), por Severidade
+        renderMttrMetodologias(kpis.mttrMetodologias);
 
         // Percentages calculation
         const total = kpis.incidentesTotal || 0;
