@@ -308,7 +308,7 @@
                         Problemas, consolidados</span>
                 </div>
 
-<!-- Retrospecto da Semana (agenda executiva de sexta): semana sexta→quinta x média das N semanas anteriores; render em dashboard.js -->
+<!-- Retrospecto da Semana (agenda executiva): semana de segunda a domingo x média das N semanas anteriores; render em dashboard.js -->
                 <div id="retro-panel" class="hidden rounded-3xl border border-natura-green-cerrado/20 bg-white p-4 sm:p-6 space-y-5">
                     <div class="flex flex-wrap items-start justify-between gap-4">
                         <div class="min-w-0">
@@ -318,8 +318,8 @@
                         </div>
                         <div class="flex flex-wrap items-end gap-4">
                             <label class="flex flex-col gap-1">
-                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Agenda (sexta)</span>
-                                <select id="retro-agenda-select"
+                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Semana (segunda a domingo)</span>
+                                <select id="retro-week-select"
                                     class="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-natura-orange focus:border-natura-orange outline-none cursor-pointer"></select>
                             </label>
                             <div class="flex flex-col gap-1">
@@ -337,7 +337,7 @@
                                 <thead>
                                     <tr class="text-[10px] text-slate-400 uppercase tracking-wider">
                                         <th class="text-left font-bold px-2 py-2 border-b border-slate-200">Indicador</th>
-                                        <th class="text-right font-bold px-2 py-2 border-b border-slate-200">Semana da agenda</th>
+                                        <th class="text-right font-bold px-2 py-2 border-b border-slate-200">Semana selecionada</th>
                                         <th id="retro-th-avg" class="text-right font-bold px-2 py-2 border-b border-slate-200">Média 4 sem. anteriores</th>
                                         <th class="text-right font-bold px-2 py-2 border-b border-slate-200">Variação</th>
                                         <th class="text-left font-bold px-2 py-2 border-b border-slate-200">Leitura</th>
@@ -345,16 +345,16 @@
                                 </thead>
                                 <tbody id="retro-table-body" class="divide-y divide-slate-100"></tbody>
                             </table>
-                            <p class="text-[10px] text-slate-400 mt-2 leading-snug">Volume: média semanal das semanas anteriores. % dentro do OLA e MTTR: calculados sobre todos os incidentes dessas semanas.
-                                <b>Estável</b> = variação de até 10% (volume e MTTR, mínimo de 1 incidente) ou de até 5 pp (% dentro do OLA).</p>
+                            <p class="text-[10px] text-slate-400 mt-2 leading-snug">Volume: média semanal das semanas anteriores. % dentro do OLA de Resolução e MTTR: calculados sobre todos os incidentes dessas semanas.
+                                <b>Estável</b> = variação de até 10% (volume e MTTR, mínimo de 1 incidente) ou de até 5 pp (% dentro do OLA de Resolução).</p>
                         </div>
                         <div class="xl:col-span-2">
-                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Semana a semana (sexta a quinta)</p>
-                            <div class="relative h-64"><canvas id="retro-trend-chart" aria-label="Volume de incidentes Sev 0 e Sev 1 e % dentro do OLA por semana"></canvas></div>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Semana a semana (segunda a domingo)</p>
+                            <div class="relative h-64"><canvas id="retro-trend-chart" aria-label="Volume de incidentes Sev 0 e Sev 1 e % dentro do OLA de Resolução por semana"></canvas></div>
                         </div>
                     </div>
                     <div>
-                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Incidentes da semana da agenda</p>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Incidentes da semana selecionada</p>
                         <div class="overflow-x-auto rounded-xl border border-slate-200">
                             <table class="w-full text-xs border-collapse">
                                 <thead>
@@ -363,7 +363,7 @@
                                         <th class="text-left font-bold px-3 py-2">Sev</th>
                                         <th class="text-left font-bold px-3 py-2">Data de Abertura</th>
                                         <th class="text-left font-bold px-3 py-2">TTR</th>
-                                        <th class="text-left font-bold px-3 py-2">OLA</th>
+                                        <th class="text-left font-bold px-3 py-2">OLA de Resolução</th>
                                         <th class="text-left font-bold px-3 py-2">Tecnologia</th>
                                         <th class="text-left font-bold px-3 py-2">Descrição do Ofensor</th>
                                     </tr>
@@ -372,7 +372,7 @@
                             </table>
                         </div>
                     </div>
-                    <p class="text-[10px] text-slate-400">As seções <b>Qualidade de RCA &mdash; Deploy &amp; Tradicional</b> e <b>Problemas &amp; Qualidade</b> não seguem este filtro: continuam mostrando o ano selecionado.</p>
+                    <p class="text-[10px] text-slate-400">O painel <b>MTTR Líquido</b> e as seções <b>Qualidade de RCA &mdash; Deploy &amp; Tradicional</b> e <b>Problemas &amp; Qualidade</b> não seguem este filtro: continuam mostrando o ano selecionado.</p>
                 </div>
 
                 <!-- Bloco: Incidentes -->
@@ -429,7 +429,7 @@
                         <!-- Aderência OLA: mesmo card, visualmente separado por fundo tintado -->
                         <div class="bg-slate-50 border-t border-slate-100 px-5 py-4">
                             <div class="flex items-center justify-between mb-1">
-                                <p class="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Aderência OLA</p>
+                                <p class="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Aderência OLA de Resolução</p>
                                 <span class="info-tooltip" tabindex="0">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
                                         viewBox="0 0 24 24" stroke="currentColor">
@@ -500,7 +500,7 @@
                         <!-- Aderência OLA -->
                         <div class="border-t border-slate-100 px-5 py-4" style="background-color: rgba(233,72,57,0.04);">
                             <div class="flex items-center justify-between mb-1">
-                                <p class="text-[10px] uppercase tracking-wider font-bold" style="color:#e94839;">OLA
+                                <p class="text-[10px] uppercase tracking-wider font-bold" style="color:#e94839;">OLA de Resolução
                                     (Meta &le; 2h)</p>
                                 <span class="info-tooltip" tabindex="0">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
@@ -573,7 +573,7 @@
                         <!-- Aderência OLA -->
                         <div class="border-t border-slate-100 px-5 py-4 bg-natura-orange/5">
                             <div class="flex items-center justify-between mb-1">
-                                <p class="text-[10px] uppercase tracking-wider font-bold text-natura-orange">OLA
+                                <p class="text-[10px] uppercase tracking-wider font-bold text-natura-orange">OLA de Resolução
                                     (Meta &le; 6h)</p>
                                 <span class="info-tooltip" tabindex="0">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
@@ -600,21 +600,22 @@
                     </div>
                 </div>
 
-                <!-- Metodologias de MTTR: Média Aparada (P95/P90) · Percentil P90/P95 (sem meta) · Corte Fixo; render em dashboard.js -->
+                <!-- MTTR Líquido (Média Aparada P95/P98) contra a meta do OLA de Resolução; não segue o Retrospecto da Semana; render em dashboard.js -->
                 <div id="mttr-metodologias" class="rounded-2xl border border-slate-200 bg-white">
                     <div class="px-5 py-3 border-b border-slate-100">
-                        <p class="text-[11px] font-black text-slate-500 uppercase tracking-[0.15em]">Metodologias de MTTR</p>
-                        <p class="text-[11px] text-slate-500 mt-0.5">Mesma base de incidentes, três formas de medir o tempo de resolução. Em <b class="text-slate-700">Ver cálculo e incidentes</b>, cada metodologia mostra a regra, a conta do período e quais incidentes entraram ou ficaram de fora.</p>
+                        <p class="text-[11px] font-black text-slate-500 uppercase tracking-[0.15em]">MTTR Líquido</p>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Média do tempo de resolução depois de retirar os incidentes mais demorados do período: <b class="text-slate-700">P95</b> retira os 5% mais demorados e <b class="text-slate-700">P98</b>, os 2%. Em <b class="text-slate-700">Ver cálculo e incidentes</b>, veja a conta do período e quais incidentes entraram ou ficaram de fora.</p>
+                        <p class="retro-ignore-note hidden text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mt-2">Este painel não segue o filtro <b>Retrospecto da Semana</b>: mostra o ano <span class="retro-ignore-year"></span> completo.</p>
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
                         <div class="p-5">
                             <p class="text-xs font-bold tracking-wider uppercase flex items-center gap-1.5 mb-3" style="color:#e94839;"><span class="w-2 h-2 rounded-full" style="background-color:#e94839;"></span> SEV 0
-                                <span class="text-[10px] font-semibold normal-case tracking-normal text-slate-400">&middot; Meta OLA <b style="color:#e94839;">&le; 02:00</b></span></p>
+                                <span class="text-[10px] font-semibold normal-case tracking-normal text-slate-400">&middot; Meta OLA de Resolução <b style="color:#e94839;">&le; 02:00</b></span></p>
                             <div id="mttr-metodos-sev0" aria-live="polite"><p class="text-[10px] text-slate-400">Carregando&hellip;</p></div>
                         </div>
                         <div class="p-5">
                             <p class="text-xs font-bold tracking-wider uppercase flex items-center gap-1.5 mb-3" style="color:#FF6600;"><span class="w-2 h-2 rounded-full" style="background-color:#FF6600;"></span> SEV 1
-                                <span class="text-[10px] font-semibold normal-case tracking-normal text-slate-400">&middot; Meta OLA <b style="color:#FF6600;">&le; 06:00</b></span></p>
+                                <span class="text-[10px] font-semibold normal-case tracking-normal text-slate-400">&middot; Meta OLA de Resolução <b style="color:#FF6600;">&le; 06:00</b></span></p>
                             <div id="mttr-metodos-sev1" aria-live="polite"><p class="text-[10px] text-slate-400">Carregando&hellip;</p></div>
                         </div>
                     </div>
@@ -628,7 +629,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        Ver Incidentes Fora do OLA (<span id="val-fora-ola-count">0</span>)
+                        Ver Incidentes Fora do OLA de Resolução (<span id="val-fora-ola-count">0</span>)
                     </button>
                 </div>
 
@@ -842,6 +843,61 @@
                     </div>
                     <div id="pais-cards-grid" class="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2 no-scrollbar scroll-smooth"></div>
                 </div>
+
+                <!-- Semana a semana por Jornada e País: mesmas semanas (segunda a domingo) do Retrospecto da Semana; render em dashboard.js -->
+                <div id="jp-weekly" class="pt-2">
+                    <div class="flex items-center gap-2 mb-1">
+                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Semana a semana por Jornada e País</h2>
+                    </div>
+                    <p id="jp-weekly-period" class="text-[11px] text-slate-500 leading-relaxed mb-3">Carregando&hellip;</p>
+                    <div class="kpi-card rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+                        <div class="flex flex-wrap items-end gap-4">
+                            <div class="flex flex-col gap-1">
+                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ver por</span>
+                                <div id="jp-weekly-dim" class="retro-seg" role="group" aria-label="Ver por Jornada ou País">
+                                    <button type="button" data-jp-dim="jornada" class="is-active">Jornada</button><button type="button" data-jp-dim="pais">País</button>
+                                </div>
+                            </div>
+                            <label class="flex flex-col gap-1 min-w-[220px]">
+                                <span id="jp-weekly-item-label" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Jornada</span>
+                                <select id="jp-weekly-item"
+                                    class="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-natura-orange focus:border-natura-orange outline-none cursor-pointer"></select>
+                            </label>
+                            <div class="flex flex-col gap-1">
+                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Comparar com as semanas anteriores</span>
+                                <div class="retro-seg" role="group" aria-label="Quantidade de semanas anteriores na comparação">
+                                    <button type="button" data-retro-weeks="2">2</button><button type="button" data-retro-weeks="4" class="is-active">4</button><button type="button" data-retro-weeks="6">6</button><button type="button" data-retro-weeks="8">8</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 xl:grid-cols-5 gap-5">
+                            <div class="xl:col-span-2">
+                                <p id="jp-weekly-chart-title" class="text-xs font-bold text-slate-700 mb-2">&nbsp;</p>
+                                <div class="relative h-64"><canvas id="jp-weekly-chart" aria-label="Volume de incidentes Sev 0 e Sev 1 e % dentro do OLA de Resolução por semana"></canvas></div>
+                            </div>
+                            <div class="xl:col-span-3">
+                                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2"><span id="jp-weekly-table-title">Todas as Jornadas</span> &middot; clique numa linha para ver o gráfico</p>
+                                <div class="overflow-auto max-h-72 rounded-xl border border-slate-200">
+                                    <table class="w-full text-xs border-collapse">
+                                        <thead class="sticky top-0 bg-slate-50">
+                                            <tr class="text-[10px] text-slate-500 uppercase tracking-wider">
+                                                <th id="jp-weekly-th-item" class="text-left font-bold px-3 py-2">Jornada</th>
+                                                <th class="text-right font-bold px-3 py-2">Incid. na semana</th>
+                                                <th id="jp-weekly-th-avg" class="text-right font-bold px-3 py-2">Média 4 sem.</th>
+                                                <th class="text-left font-bold px-3 py-2">Leitura</th>
+                                                <th class="text-right font-bold px-3 py-2">OLA de Resolução na semana</th>
+                                                <th id="jp-weekly-th-avg-ola" class="text-right font-bold px-3 py-2">Média 4 sem.</th>
+                                                <th class="text-left font-bold px-3 py-2">Leitura</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="jp-weekly-body" class="divide-y divide-slate-100"></tbody>
+                                    </table>
+                                </div>
+                                <p id="jp-weekly-note" class="text-[10px] text-slate-400 mt-2 leading-snug">Um incidente pode impactar mais de uma Jornada/País e entra em cada um deles. <b>Estável</b> = variação de até 10% no volume (mínimo de 1 incidente) ou de até 5 pp no OLA de Resolução.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 </section>
                 <!-- ============ FIM SEÇÃO: JORNADAS & PAÍSES ============ -->
 
@@ -900,18 +956,9 @@
                                 data-group="quarterly">Trimestral</button>
                         </div>
                     </div>
-                    <!-- Item 1: só visível na Evolução Semanal -->
+                    <!-- Nota da Evolução Semanal (só visível no agrupamento Semanal) -->
                     <div class="flex flex-wrap items-center justify-end gap-2 -mt-2 mb-2">
                         <p id="evolution-week-note" class="hidden mr-auto text-[11px] text-slate-500 italic">Semana de segunda a domingo: cada incidente é contado na semana da sua data de abertura. Clique na barra para ver o período e os incidentes da semana.</p>
-                        <button type="button" id="btn-open-mttr-outliers"
-                            class="hidden inline-flex items-center gap-2 text-xs font-bold text-natura-red-buriti hover:text-natura-red-boca transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
-                            Ver Incidentes com MTTR &gt; 18h (<span id="val-mttr-outliers-count">0</span>)
-                        </button>
                     </div>
                     <div class="flex items-center gap-2 mb-6">
                         <label for="evolution-dimension-select"
@@ -1096,7 +1143,7 @@
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
-                            <span class="tooltip-bubble">Volume, MTTR, Aderência ao OLA por Severidade e Origem da
+                            <span class="tooltip-bubble">Volume, MTTR, Aderência ao OLA de Resolução por Severidade e Origem da
                                 Detecção dos Incidentes causados por Mudança — total Geral e por Tipo de Mudança
                                 (Deploy/CI-CD vs Tradicional).</span>
                         </span>
@@ -1977,15 +2024,15 @@
                                         HH:MM. Meta de MTTR bruto: Sev0 ≤ 02:00, Sev1 ≤ 06:00.</dd>
                                 </div>
                                 <div>
-                                    <dt class="font-bold text-slate-700">MTTR s/ Outliers e % de Outliers (Sev0 /
-                                        Sev1)</dt>
-                                    <dd class="text-slate-500">Outlier = Incidente com TTR ≥ 3x a meta de OLA da
-                                        Severidade (Sev0 ≥ 06:00, Sev1 ≥ 18:00). MTTR s/ Outliers recalcula a média
-                                        excluindo esses casos. Metas: MTTR s/ Outliers Sev0 ≤ 02:00, Sev1 ≤ 06:00;
-                                        % de Outliers ≤ 5% dos Incidentes da Severidade.</dd>
+                                    <dt class="font-bold text-slate-700">MTTR Líquido (Sev0 / Sev1)</dt>
+                                    <dd class="text-slate-500">Média Aparada do TTR: ordena os Incidentes da Severidade
+                                        do mais rápido ao mais demorado e calcula a média dos k primeiros, com
+                                        k = piso(n × 0,95) no P95 (retira os 5% mais demorados) ou k = piso(n × 0,98)
+                                        no P98 (retira os 2%). Metas: as do OLA de Resolução (Sev0 ≤ 02:00,
+                                        Sev1 ≤ 06:00). Não segue o filtro Retrospecto da Semana.</dd>
                                 </div>
                                 <div>
-                                    <dt class="font-bold text-slate-700">Aderência OLA (Geral / Sev0 / Sev1)</dt>
+                                    <dt class="font-bold text-slate-700">Aderência OLA de Resolução (Geral / Sev0 / Sev1)</dt>
                                     <dd class="text-slate-500">% de incidentes restaurados dentro da meta de tempo:
                                         Sev0 ≤ 2h e Sev1 ≤ 6h (enquanto a aba Task_SLA não é alimentada), medida pela
                                         Definição do Incidente (NCC) até o Fim do Impacto — não o Open/Resolved time
@@ -2190,7 +2237,7 @@
                 </div>
             </div>
 
-            <!-- Metodologias de MTTR: detalhe do cálculo + incidentes considerados x desconsiderados -->
+            <!-- MTTR Líquido: detalhe do cálculo + incidentes considerados x desconsiderados -->
             <div id="mttr-metodo-modal"
                 class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
                 <div class="bg-white rounded-2xl shadow-xl w-full max-w-5xl max-h-[88vh] overflow-hidden flex flex-col">

@@ -31,11 +31,11 @@ const MTTR_TARGET_SEM_OUTLIERS_SEV1_MIN = 360; // 06:00 descontando outliers
 const MTTR_OUTLIER_SEV0_MIN = 360;        // 06:00 — limiar de outlier Sev0
 const MTTR_OUTLIER_SEV1_MIN = 1080;       // 18:00 — limiar de outlier Sev1
 const MTTR_OUTLIER_TARGET_PCT = 5;        // meta: outliers <= 5% dos Incidentes da Severidade
-const MTTR_TRIMMED_KEEP = 0.95;           // Média Aparada P95: mantém os 95% mais rápidos (k = floor(n × 0,95))
-const MTTR_TRIMMED_KEEP_P90 = 0.90;       // Média Aparada P90: mantém os 90% mais rápidos (k = floor(n × 0,90))
+const MTTR_TRIMMED_KEEP_P95 = 0.95;       // MTTR Líquido P95: mantém os 95% mais rápidos (k = floor(n × 0,95))
+const MTTR_TRIMMED_KEEP_P98 = 0.98;       // MTTR Líquido P98: mantém os 98% mais rápidos (k = floor(n × 0,98))
 
-// MTTR por metodologia (cards Sev 0/Sev 1 da Visão Geral): Bruto, Corte Fixo, Média Aparada P95 e Percentis P90/P95.
-// Percentil pelo método nearest-rank: posição = teto(n × p) na lista ordenada, ou seja, um tempo real de algum incidente.
+// MTTR Líquido (Média Aparada) dos cards Sev 0/Sev 1 da Visão Geral: média dos k incidentes mais rápidos, comparada à meta
+// do OLA de Resolução da Severidade.
 function mttrFormatMinutes(min) {
     if (min == null || !isFinite(min)) return '00:00';
     const t = Math.max(0, Math.round(min));
@@ -43,36 +43,35 @@ function mttrFormatMinutes(min) {
 }
 
 // Recebe os incidentes da Severidade ({ id, min, ttr, ... }); devolve também a lista ordenada por TTR crescente,
-// que é a ordem usada pela Média Aparada (k primeiros) e pelos percentis (posição p90Rank/p95Rank, base 1).
-function computeMttrMethodologies(items, cutMin, targetMin) {
+// que é a ordem usada pela Média Aparada (os k primeiros entram na média).
+function computeMttrLiquido(items, targetMin) {
     const incidentes = (items || []).filter(it => it && typeof it.min === 'number' && isFinite(it.min) && it.min >= 0)
         .slice().sort((a, b) => a.min - b.min);
     const sorted = incidentes.map(it => it.min);
     const n = sorted.length;
-    const rank = p => n ? Math.min(n, Math.max(1, Math.ceil(n * p))) : 0;
     const mean = arr => arr.length ? arr.reduce((acc, v) => acc + v, 0) / arr.length : null;
-    const percentile = p => n ? sorted[rank(p) - 1] : null;
-    const pack = (min, considered) => ({
-        min: min == null ? null : Math.round(min),
-        hhmm: mttrFormatMinutes(min),
-        considered: considered,
-        discarded: n - considered,
-        discardedPct: n ? Math.round(((n - considered) / n) * 1000) / 10 : null,
-        withinTarget: min == null ? null : Math.round(min) <= targetMin
-    });
-    const kept = sorted.filter(d => d < cutMin);
     const keep = frac => (n ? Math.max(1, Math.floor(n * frac)) : 0);
-    const k = keep(MTTR_TRIMMED_KEEP), k90 = keep(MTTR_TRIMMED_KEEP_P90);
+    const pack = (k) => {
+        const min = mean(sorted.slice(0, k));
+        return {
+            min: min == null ? null : Math.round(min),
+            hhmm: mttrFormatMinutes(min),
+            considered: k,
+            discarded: n - k,
+            discardedPct: n ? Math.round(((n - k) / n) * 1000) / 10 : null,
+            withinTarget: min == null ? null : Math.round(min) <= targetMin
+        };
+    };
+    const k95 = keep(MTTR_TRIMMED_KEEP_P95), k98 = keep(MTTR_TRIMMED_KEEP_P98);
+    return { n: n, targetMin: targetMin, k95: k95, k98: k98, incidentes: incidentes, p95: pack(k95), p98: pack(k98) };
+}
+
+// Item da lista do MTTR Líquido (pop-up "Ver cálculo e incidentes")
+function mttrLiquidoItem(row, ticketId, durMin, durRaw) {
     return {
-        n: n, targetMin: targetMin, cutMin: cutMin, k: k, k90: k90, p90Rank: rank(0.90), p95Rank: rank(0.95),
-        withinTarget: sorted.filter(d => d <= targetMin).length,
-        incidentes: incidentes,
-        bruto: pack(mean(sorted), n),
-        corte: pack(mean(kept), kept.length),
-        aparada: pack(mean(sorted.slice(0, k)), k),
-        aparada90: pack(mean(sorted.slice(0, k90)), k90),
-        p90: pack(percentile(0.90), n),
-        p95: pack(percentile(0.95), n)
+        id: ticketId, min: durMin, ttr: durRaw,
+        dataDefinicao: formatIncidentOpenDate(row[COL_ABERTURA]), dataAberturaTimestamp: incidentOpenTimestamp(row[COL_ABERTURA]),
+        descOfensor: String(row[10] || '').trim() || 'N/A', solucao: String(row[11] || '').trim() || 'N/A'
     };
 }
 
@@ -1375,7 +1374,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         if (isSev0) {
         metrics.sev0Incidentes++;
         metrics.sev0DuracaoMinutos += durMin;
-        metrics.sev0Itens.push({ id: ticketId, min: durMin, ttr: durRaw, dataDefinicao: formatIncidentOpenDate(row[COL_ABERTURA]), dataAberturaTimestamp: incidentOpenTimestamp(row[COL_ABERTURA]) });
+        metrics.sev0Itens.push(mttrLiquidoItem(row, ticketId, durMin, durRaw));
         if (durMin >= MTTR_OUTLIER_SEV0_MIN) {
             metrics.sev0OutlierCount++;
         } else {
@@ -1396,7 +1395,7 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         } else if (isSev1) {
         metrics.sev1Incidentes++;
         metrics.sev1DuracaoMinutos += durMin;
-        metrics.sev1Itens.push({ id: ticketId, min: durMin, ttr: durRaw, dataDefinicao: formatIncidentOpenDate(row[COL_ABERTURA]), dataAberturaTimestamp: incidentOpenTimestamp(row[COL_ABERTURA]) });
+        metrics.sev1Itens.push(mttrLiquidoItem(row, ticketId, durMin, durRaw));
         if (durMin >= MTTR_OUTLIER_SEV1_MIN) {
             metrics.sev1OutlierCount++;
         } else {
@@ -1932,10 +1931,10 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
         mttrSev1SemOutliers: calculateMTTR(metrics.sev1DuracaoMinutosSemOutliers, metrics.sev1IncidentesSemOutliers),
         sev1OutlierCount: metrics.sev1OutlierCount,
         sev1OutlierPct: metrics.sev1Incidentes > 0 ? Math.round((metrics.sev1OutlierCount / metrics.sev1Incidentes) * 1000) / 10 : null,
-        // Comparativo de metodologias de MTTR (Corte Fixo x Média Aparada P95 x Percentil), contra a meta de OLA
-        mttrMetodologias: {
-            sev0: computeMttrMethodologies(metrics.sev0Itens, MTTR_OUTLIER_SEV0_MIN, OLA_TARGET_SEV0_MIN),
-            sev1: computeMttrMethodologies(metrics.sev1Itens, MTTR_OUTLIER_SEV1_MIN, OLA_TARGET_SEV1_MIN)
+        // MTTR Líquido (Média Aparada P95/P98), contra a meta do OLA de Resolução
+        mttrLiquido: {
+            sev0: computeMttrLiquido(metrics.sev0Itens, OLA_TARGET_SEV0_MIN),
+            sev1: computeMttrLiquido(metrics.sev1Itens, OLA_TARGET_SEV1_MIN)
         },
         // Visão Executiva
         aderenciaOLA: aderenciaOLA !== null ? Math.round(aderenciaOLA * 10) / 10 : null,
@@ -2174,26 +2173,69 @@ function getComparisonData(year, periodKey, startDate, endDate) {
 }
 
 /**
- * Retrospecto da Semana (agenda executiva às sextas): a semana da agenda vai da sexta anterior até a quinta véspera
- * da agenda. Devolve essa semana e as RETRO_MAX_WEEKS semanas anteriores no mesmo recorte (sexta a quinta), para o
- * front comparar com a média das últimas 2, 4, 6 ou 8 semanas sem novas chamadas ao servidor.
- * agendaIso: 'AAAA-MM-DD' da sexta da agenda.
+ * MTTR Líquido do ano completo (Período Completo), com os filtros de Tecnologia/Ofensor. Usado quando o Retrospecto da
+ * Semana está ativo: os cards de MTTR Líquido não seguem a semana (amostra semanal pequena demais para a média aparada).
+ */
+function getMttrLiquido(year, techFilter, ofensorFilter) {
+    try {
+        const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+        const sheet = ss.getSheetByName(`MajorIncidentes${year}`);
+        if (!sheet) return { error: `Dados para o ano ${year} não encontrados.` };
+        const rows = sheet.getDataRange().getValues().slice(1);
+        const techSet = (techFilter && techFilter.length) ? new Set(techFilter) : null;
+        const ofensorSet = (ofensorFilter && ofensorFilter.length) ? new Set(ofensorFilter) : null;
+        const itens = { sev0: [], sev1: [] };
+        if (rows.length) {
+            const durs = sheet.getRange(2, COL_DURACAO + 1, rows.length, 1).getDisplayValues();
+            rows.forEach((row, i) => {
+                if (String(row[COL_TECNOLOGIA]).trim().toUpperCase() !== 'SIM') return;
+                if (techSet && !techSet.has(String(row[COL_TECH_IMPACTADA]).trim() || 'N/A')) return;
+                if (ofensorSet && !ofensorSet.has(String(row[COL_OFENSOR]).trim() || 'N/A')) return;
+                const sev = String(row[COL_SEVERIDADE]).trim();
+                const key = sev.startsWith('0') ? 'sev0' : (sev.startsWith('1') ? 'sev1' : null);
+                if (!key) return;
+                const durRaw = durs[i] ? durs[i][0] : '00:00';
+                itens[key].push(mttrLiquidoItem(row, String(row[0] || '').trim(), parseDurationString(durRaw), durRaw));
+            });
+        }
+        return {
+            year: String(year),
+            sev0: computeMttrLiquido(itens.sev0, OLA_TARGET_SEV0_MIN),
+            sev1: computeMttrLiquido(itens.sev1, OLA_TARGET_SEV1_MIN)
+        };
+    } catch (e) {
+        return { error: e.toString() };
+    }
+}
+
+/**
+ * Retrospecto da Semana (agenda executiva): semanas de segunda a domingo, o mesmo padrão da Visão Semanal.
+ * Devolve a semana escolhida e as RETRO_MAX_WEEKS semanas anteriores, para o front comparar com a média das últimas
+ * 2, 4, 6 ou 8 semanas sem novas chamadas ao servidor. Inclui a quebra por Jornada e por País (gráfico semana a semana).
+ * weekStartIso: 'AAAA-MM-DD' da segunda-feira da semana escolhida.
  */
 const RETRO_MAX_WEEKS = 8;
-function getRetrospectoSemana(agendaIso) {
+function getRetrospectoSemana(weekStartIso) {
     try {
-        const p = String(agendaIso || '').split('-').map(Number);
-        if (p.length !== 3 || p.some(isNaN)) return { error: 'Data da agenda inválida.' };
+        const p = String(weekStartIso || '').split('-').map(Number);
+        if (p.length !== 3 || p.some(isNaN)) return { error: 'Semana inválida.' };
         const weeks = [];
         for (let i = 0; i <= RETRO_MAX_WEEKS; i++) {
             weeks.push({
-                start: new Date(p[0], p[1] - 1, p[2] - 7 - 7 * i, 0, 0, 0, 0),
-                end: new Date(p[0], p[1] - 1, p[2] - 1 - 7 * i, 23, 59, 59, 999),
+                start: new Date(p[0], p[1] - 1, p[2] - 7 * i, 0, 0, 0, 0),
+                end: new Date(p[0], p[1] - 1, p[2] + 6 - 7 * i, 23, 59, 59, 999),
                 total: 0, totalDur: 0, sev0: 0, sev1: 0, sev0Dur: 0, sev1Dur: 0, sev0DentroOLA: 0, sev1DentroOLA: 0,
-                sev0Min: [], sev1Min: []
+                byJornada: {}, byPais: {}
             });
         }
         const oldest = weeks[weeks.length - 1].start, newest = weeks[0].end;
+        // Mesma regra dos cards de Jornada/País: uma célula pode ter mais de um valor, separados por vírgula
+        const bump = (bucket, name, isSev0, isSev1, dentro) => {
+            const b = bucket[name] || (bucket[name] = { total: 0, sev0: 0, sev1: 0, sev0DentroOLA: 0, sev1DentroOLA: 0 });
+            b.total++;
+            if (isSev0) { b.sev0++; if (dentro) b.sev0DentroOLA++; }
+            else if (isSev1) { b.sev1++; if (dentro) b.sev1DentroOLA++; }
+        };
 
         const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
         for (let y = oldest.getFullYear(); y <= newest.getFullYear(); y++) {
@@ -2209,20 +2251,21 @@ function getRetrospectoSemana(agendaIso) {
                 const w = weeks.find(wk => openDate >= wk.start && openDate <= wk.end);
                 if (!w) return;
                 const sev = String(row[COL_SEVERIDADE]).trim();
+                const isSev0 = sev.startsWith('0'), isSev1 = sev.startsWith('1');
                 const durMin = parseDurationString(durs[i] ? durs[i][0] : '00:00');
+                const dentro = isSev0 ? durMin <= OLA_TARGET_SEV0_MIN : (isSev1 ? durMin <= OLA_TARGET_SEV1_MIN : false);
                 w.total++; w.totalDur += durMin;
-                if (sev.startsWith('0')) {
-                    w.sev0++; w.sev0Dur += durMin; w.sev0Min.push(durMin);
-                    if (durMin <= OLA_TARGET_SEV0_MIN) w.sev0DentroOLA++;
-                } else if (sev.startsWith('1')) {
-                    w.sev1++; w.sev1Dur += durMin; w.sev1Min.push(durMin);
-                    if (durMin <= OLA_TARGET_SEV1_MIN) w.sev1DentroOLA++;
-                }
+                if (isSev0) { w.sev0++; w.sev0Dur += durMin; if (dentro) w.sev0DentroOLA++; }
+                else if (isSev1) { w.sev1++; w.sev1Dur += durMin; if (dentro) w.sev1DentroOLA++; }
+                String(row[COL_JORNADA] || '').split(',').map(j => j.trim()).filter(Boolean)
+                    .forEach(j => bump(w.byJornada, j, isSev0, isSev1, dentro));
+                String(row[COL_ABRANGENCIA] || '').split(',').map(c => c.trim().toUpperCase()).filter(Boolean)
+                    .forEach(c => bump(w.byPais, c, isSev0, isSev1, dentro));
             });
         }
 
         return {
-            agenda: agendaIso,
+            weekStart: weekStartIso,
             olaTargets: { sev0: OLA_TARGET_SEV0_MIN, sev1: OLA_TARGET_SEV1_MIN },
             weeks: weeks.map(w => Object.assign({}, w, { start: w.start.getTime(), end: w.end.getTime() }))
         };

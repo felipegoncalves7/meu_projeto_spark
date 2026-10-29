@@ -63,7 +63,6 @@
         setupSectionNav();
         setupFiltersToggle();
         setupTabularIncidentsButtons();
-        setupMttrOutliersButton();
         renderProductSubjectiveEvaluations();
         setupOrigemDrillModal();
         setupImpactoMultiploModal();
@@ -120,7 +119,7 @@
         if (foraOlaBtn) {
             foraOlaBtn.addEventListener('click', () => {
                 openTabularIncidentsModal({
-                    title: 'Incidentes Fora do OLA',
+                    title: 'Incidentes Fora do OLA de Resolução',
                     subtitle: `${(ALL_DATA.incidentesForaOLA || []).length} incidente(s) acima da meta de restauração (Sev0 > 2h, Sev1 > 6h)`,
                     items: ALL_DATA.incidentesForaOLA || [],
                     columns: [
@@ -296,6 +295,7 @@
         setupCustomRangeFilter();
         setupComparisonFilter();
         setupRetrospectoControls();
+        loadRetrospecto();
         setupTechOfensorFilterDropdowns();
         setupEvolutionToggle();
         setupEvolutionDimensionSelect();
@@ -862,7 +862,6 @@
         updateComparisonDisplay();
         ALL_DATA.rawIncidents = data.rawIncidents || [];
         renderJornadaTechOrigemAnalysis();
-        updateMttrOutliersButton();
         renderRetroIncidents();
         renderRetroComparison();
         ALL_DATA.evolutionData = {
@@ -974,12 +973,12 @@
             else dropdownContainer.appendChild(btn);
         });
 
-        // Retrospecto da Semana: ao lado do Período Completo (agenda executiva de sexta)
+        // Retrospecto da Semana: ao lado do Período Completo (agenda executiva; semana de segunda a domingo)
         const retroBtn = document.createElement('button');
         retroBtn.type = 'button';
         retroBtn.dataset.key = 'Retrospecto';
         retroBtn.textContent = 'Retrospecto da Semana';
-        retroBtn.title = 'Semana da agenda executiva: da sexta anterior até a quinta véspera da agenda, comparada à média das semanas anteriores';
+        retroBtn.title = 'Semana de segunda a domingo (padrão: última semana fechada), comparada à média das semanas anteriores';
         retroBtn.className = getBtnClass(CURRENT_FILTERS.periodKey === 'Retrospecto');
         retroBtn.onclick = () => activateRetrospecto();
         defaultContainer.appendChild(retroBtn);
@@ -1377,10 +1376,13 @@
             : ['bg-natura-red-buriti/10', 'text-natura-red-buriti']));
     }
 
-    // --- Retrospecto da Semana (agenda executiva às sextas) ---
-    // Semana da agenda = sexta anterior até a quinta véspera da agenda. Comparação com a média das N semanas anteriores
-    // (2, 4, 6 ou 8), no mesmo recorte sexta→quinta. Os dados das semanas vêm de getRetrospectoSemana (uma chamada só).
-    const RETRO = { agendaIso: null, weeks: 4, data: null, chart: null };
+    // --- Retrospecto da Semana (agenda executiva) ---
+    // Semanas de segunda a domingo, o mesmo padrão da Visão Semanal. Padrão: última semana fechada; a semana atual também
+    // pode ser escolhida (parcial até domingo). Comparação com a média das N semanas anteriores (2, 4, 6 ou 8).
+    // Os dados das semanas vêm de getRetrospectoSemana (uma chamada por semana escolhida, guardada em cache) e também
+    // alimentam o gráfico "Semana a semana por Jornada e País".
+    const RETRO = { weekIso: null, weeks: 4, cache: {}, chart: null };
+    const JP_WEEKLY = { dim: 'jornada', item: null, chart: null };
     const RETRO_WEEKDAY = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
     const retroPad = n => String(n).padStart(2, '0');
     const retroIso = d => `${d.getFullYear()}-${retroPad(d.getMonth() + 1)}-${retroPad(d.getDate())}`;
@@ -1388,60 +1390,66 @@
     const retroDMY = d => `${retroDM(d)}/${d.getFullYear()}`;
     const retroFromIso = iso => { const p = iso.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
     const retroNum = (v, dec) => (v == null ? '—' : (Math.round(v * Math.pow(10, dec)) / Math.pow(10, dec)).toFixed(dec).replace('.', ','));
+    const retroCount = v => retroNum(v, Number.isInteger(v) ? 0 : 1);
 
-    // Próxima agenda: a própria sexta, se hoje for sexta; senão, a sexta seguinte
-    function retroUpcomingFriday(today) {
-        const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7));
+    function retroMonday(date) {
+        const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
         return d;
     }
-    function retroWindow(agendaIso) {
-        const a = retroFromIso(agendaIso);
-        return {
-            start: new Date(a.getFullYear(), a.getMonth(), a.getDate() - 7, 0, 0, 0),
-            end: new Date(a.getFullYear(), a.getMonth(), a.getDate() - 1, 23, 59, 59)
-        };
+    const retroCurrentWeekIso = () => retroIso(retroMonday(new Date()));
+    function retroLastClosedWeekIso() {
+        const m = retroMonday(new Date());
+        return retroIso(new Date(m.getFullYear(), m.getMonth(), m.getDate() - 7));
     }
+    function retroWindow(weekIso) {
+        const m = retroFromIso(weekIso);
+        return { start: new Date(m.getFullYear(), m.getMonth(), m.getDate(), 0, 0, 0), end: new Date(m.getFullYear(), m.getMonth(), m.getDate() + 6, 23, 59, 59) };
+    }
+    const retroIsPartial = weekIso => weekIso === retroCurrentWeekIso();
+    const retroRangeTxt = weekIso => { const w = retroWindow(weekIso); return `seg ${retroDM(w.start)} a dom ${retroDMY(w.end)}`; };
+    const retroKindTxt = weekIso => (retroIsPartial(weekIso) ? 'semana atual, parcial' : (weekIso === retroLastClosedWeekIso() ? 'última semana fechada' : 'semana fechada'));
+    const retroData = () => RETRO.cache[RETRO.weekIso] || null;
 
     function setupRetrospectoControls() {
-        const select = document.getElementById('retro-agenda-select');
+        if (!RETRO.weekIso) RETRO.weekIso = retroLastClosedWeekIso();
+        const select = document.getElementById('retro-week-select');
         if (select && !select.dataset.wired) {
             select.dataset.wired = 'true';
-            const upcoming = retroUpcomingFriday(new Date());
-            const isToday = retroIso(upcoming) === retroIso(new Date());
+            const cur = retroMonday(new Date());
             const opts = [];
             for (let i = 0; i <= 12; i++) {
-                const f = new Date(upcoming.getFullYear(), upcoming.getMonth(), upcoming.getDate() - 7 * i);
-                const tag = i === 0 ? (isToday ? ' · hoje' : ' · próxima') : '';
-                opts.push(`<option value="${retroIso(f)}">sex ${retroDMY(f)}${tag}</option>`);
+                const m = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() - 7 * i);
+                const iso = retroIso(m);
+                const prefix = i === 0 ? 'Semana atual (parcial) · ' : (i === 1 ? 'Última semana fechada · ' : '');
+                opts.push(`<option value="${iso}">${prefix}${retroRangeTxt(iso)}</option>`);
             }
             select.innerHTML = opts.join('');
+            select.value = RETRO.weekIso;
             select.addEventListener('change', () => activateRetrospecto(select.value));
-        }
-        const toggle = document.getElementById('retro-weeks-toggle');
-        if (toggle && !toggle.dataset.wired) {
-            toggle.dataset.wired = 'true';
-            toggle.addEventListener('click', (ev) => {
-                const btn = ev.target.closest('[data-retro-weeks]');
-                if (!btn) return;
-                RETRO.weeks = parseInt(btn.getAttribute('data-retro-weeks'), 10);
-                toggle.querySelectorAll('[data-retro-weeks]').forEach(b => b.classList.toggle('is-active', b === btn));
-                renderRetroComparison();
-                updateComparisonDisplay();
-            });
         }
     }
 
-    function activateRetrospecto(agendaIso) {
-        RETRO.agendaIso = agendaIso || RETRO.agendaIso || retroIso(retroUpcomingFriday(new Date()));
-        const select = document.getElementById('retro-agenda-select');
-        if (select) select.value = RETRO.agendaIso;
-        const w = retroWindow(RETRO.agendaIso);
+    // Botões 2/4/6/8 (painel do Retrospecto e bloco de Jornada/País compartilham a mesma escolha)
+    document.addEventListener('click', (ev) => {
+        const btn = ev.target && ev.target.closest ? ev.target.closest('[data-retro-weeks]') : null;
+        if (!btn) return;
+        RETRO.weeks = parseInt(btn.getAttribute('data-retro-weeks'), 10);
+        document.querySelectorAll('[data-retro-weeks]').forEach(b => b.classList.toggle('is-active', parseInt(b.getAttribute('data-retro-weeks'), 10) === RETRO.weeks));
+        renderRetroComparison();
+        renderJpWeekly();
+        updateComparisonDisplay();
+    });
+
+    function activateRetrospecto(weekIso) {
+        RETRO.weekIso = weekIso || RETRO.weekIso || retroLastClosedWeekIso();
+        const select = document.getElementById('retro-week-select');
+        if (select) select.value = RETRO.weekIso;
+        const w = retroWindow(RETRO.weekIso);
         CURRENT_FILTERS.periodKey = 'Retrospecto';
         CURRENT_FILTERS.startDate = w.start.getTime();
         CURRENT_FILTERS.endDate = w.end.getTime();
-        LABEL_MAP['Retrospecto'] = `Retrospecto da Semana (sex ${retroDM(w.start)} a qui ${retroDMY(w.end)})`;
-        RETRO.data = null;
+        LABEL_MAP['Retrospecto'] = `Retrospecto da Semana (${retroDM(w.start)} a ${retroDMY(w.end)}${retroIsPartial(RETRO.weekIso) ? ', parcial' : ''})`;
         resetSpecificFilterSelects();
         updateAllPeriodButtonsUI('Retrospecto');
         refreshActiveFilterText();
@@ -1451,17 +1459,19 @@
     }
 
     function loadRetrospecto() {
-        const agenda = RETRO.agendaIso;
+        const iso = RETRO.weekIso;
+        if (RETRO.cache[iso]) { renderRetroComparison(); renderJpWeekly(); updateComparisonDisplay(); return; }
         google.script.run
             .withSuccessHandler((data) => {
-                if (agenda !== RETRO.agendaIso) return; // usuário trocou a agenda antes da resposta
                 if (!data || data.error) { logDebug('getRetrospectoSemana: ' + (data ? data.error : 'sem resposta')); return; }
-                RETRO.data = data;
+                RETRO.cache[iso] = data;
+                if (iso !== RETRO.weekIso) return; // usuário trocou a semana antes da resposta
                 renderRetroComparison();
+                renderJpWeekly();
                 updateComparisonDisplay();
             })
             .withFailureHandler((e) => logDebug('getRetrospectoSemana FAILED: ' + e.message))
-            .getRetrospectoSemana(agenda);
+            .getRetrospectoSemana(iso);
     }
 
     // Mostra/esconde o painel, o informativo do período no filtro e os avisos das seções que não seguem o Retrospecto
@@ -1479,36 +1489,34 @@
         if (hint) {
             hint.classList.toggle('hidden', !on);
             if (on) {
-                const w = retroWindow(RETRO.agendaIso);
-                hint.textContent = `Agenda de sex ${retroDMY(retroFromIso(RETRO.agendaIso))} · incidentes de sex ${retroDM(w.start)} a qui ${retroDMY(w.end)}`;
+                const kind = retroKindTxt(RETRO.weekIso);
+                hint.textContent = `${kind.charAt(0).toUpperCase() + kind.slice(1)}: ${retroRangeTxt(RETRO.weekIso)}${retroIsPartial(RETRO.weekIso) ? ' · dados até hoje' : ''}`;
             }
         }
         if (!on && RETRO.chart) { RETRO.chart.destroy(); RETRO.chart = null; }
+        renderJpWeekly(); // o texto do bloco Jornada/País muda conforme o Retrospecto está ou não ativo
     }
 
-    // Soma das semanas anteriores escolhidas (N) — volume vira média semanal; % OLA e MTTR, cálculo sobre o conjunto
-    function retroAggregate() {
-        if (!RETRO.data || !RETRO.data.weeks) return null;
-        const weeks = RETRO.data.weeks;
-        const prev = weeks.slice(1, RETRO.weeks + 1);
-        const sum = k => prev.reduce((acc, w) => acc + (w[k] || 0), 0);
-        const n = prev.length || 1;
+    // Agrega um conjunto de semanas — volume vira média semanal; % OLA de Resolução e MTTR, cálculo sobre o conjunto
+    function retroBuild(list, isAvg) {
+        const sum = k => list.reduce((acc, w) => acc + ((w && w[k]) || 0), 0);
+        const d = isAvg ? (list.length || 1) : 1;
         const pct = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : null);
         const avgMin = (dur, cnt) => (cnt > 0 ? dur / cnt : null);
-        const cur = weeks[0];
-        const build = (w, isAvg) => {
-            const g = k => (isAvg ? sum(k) : (w[k] || 0));
-            const d = isAvg ? n : 1;
-            const sev0 = g('sev0'), sev1 = g('sev1'), in0 = g('sev0DentroOLA'), in1 = g('sev1DentroOLA');
-            return {
-                total: g('total') / d, sev0: sev0 / d, sev1: sev1 / d,
-                foraOla: ((sev0 - in0) + (sev1 - in1)) / d,
-                olaSev0: pct(in0, sev0), olaSev1: pct(in1, sev1), ola: pct(in0 + in1, sev0 + sev1),
-                mttrTotal: avgMin(g('totalDur'), g('total')), mttrSev0: avgMin(g('sev0Dur'), sev0), mttrSev1: avgMin(g('sev1Dur'), sev1),
-                dentroOla: in0 + in1, base: sev0 + sev1
-            };
+        const sev0 = sum('sev0'), sev1 = sum('sev1'), in0 = sum('sev0DentroOLA'), in1 = sum('sev1DentroOLA');
+        return {
+            total: sum('total') / d, sev0: sev0 / d, sev1: sev1 / d,
+            foraOla: ((sev0 - in0) + (sev1 - in1)) / d,
+            olaSev0: pct(in0, sev0), olaSev1: pct(in1, sev1), ola: pct(in0 + in1, sev0 + sev1),
+            mttrTotal: avgMin(sum('totalDur'), sum('total')), mttrSev0: avgMin(sum('sev0Dur'), sev0), mttrSev1: avgMin(sum('sev1Dur'), sev1),
+            dentroOla: in0 + in1, base: sev0 + sev1
         };
-        return { cur: build(cur, false), avg: build(null, true), prev, weeks, n };
+    }
+    function retroAggregate() {
+        const data = retroData();
+        if (!data || !data.weeks) return null;
+        const prev = data.weeks.slice(1, RETRO.weeks + 1);
+        return { cur: retroBuild([data.weeks[0]], false), avg: retroBuild(prev, true), prev, weeks: data.weeks, n: prev.length };
     }
 
     // Melhor / Estável / Pior com faixa de tolerância (evita discutir ruído de semanas com poucos incidentes)
@@ -1532,15 +1540,16 @@
         if (kind === 'time') return `${sign}${mttrHHMM(Math.abs(diff))}${rel}`;
         return `${sign}${retroNum(Math.abs(diff), 1)}${rel}`;
     }
+    const retroStatusPill = st => `<span class="retro-status ${st.cls}">${st.label}</span>`;
 
     function renderRetroComparison() {
         if (CURRENT_FILTERS.periodKey !== 'Retrospecto') return;
-        const w = retroWindow(RETRO.agendaIso);
         const setHtml = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+        const partial = retroIsPartial(RETRO.weekIso);
         const today = new Date();
-        const partial = today <= w.end;
-        setHtml('retro-period', `Agenda de sexta, ${retroDMY(retroFromIso(RETRO.agendaIso))} &middot; incidentes de <span class="whitespace-nowrap">sex ${retroDM(w.start)}</span> a <span class="whitespace-nowrap">qui ${retroDMY(w.end)}</span>`
-            + (partial ? ` <span class="ml-1 text-[11px] font-bold text-natura-orange">&middot; semana em andamento: dados até hoje (${RETRO_WEEKDAY[today.getDay()]} ${retroDM(today)})</span>` : ''));
+        const w = retroWindow(RETRO.weekIso);
+        setHtml('retro-period', `Semana de <span class="whitespace-nowrap">seg ${retroDM(w.start)}</span> a <span class="whitespace-nowrap">dom ${retroDMY(w.end)}</span> &middot; ${retroKindTxt(RETRO.weekIso)}`
+            + (partial ? ` <span class="ml-1 text-[11px] font-bold text-natura-orange">&middot; dados até hoje (${RETRO_WEEKDAY[today.getDay()]} ${retroDM(today)}); a semana fecha no domingo</span>` : ''));
         const th = document.getElementById('retro-th-avg');
         if (th) th.textContent = `Média ${RETRO.weeks} sem. anteriores`;
 
@@ -1552,17 +1561,17 @@
             return;
         }
         const oldest = new Date(agg.prev[agg.prev.length - 1].start), latest = new Date(agg.prev[0].end);
-        setHtml('retro-period-cmp', `Comparação: média das <b>${RETRO.weeks} semanas anteriores</b>, de sex ${retroDMY(oldest)} a qui ${retroDMY(latest)} (sempre de sexta a quinta).`);
+        setHtml('retro-period-cmp', `Comparação: média das <b>${RETRO.weeks} semanas anteriores</b>, de seg ${retroDMY(oldest)} a dom ${retroDMY(latest)} (sempre de segunda a domingo).`);
 
         const c = agg.cur, a = agg.avg;
         const pctTxt = v => (v == null ? '—' : `${retroNum(v, 1)}%`);
         const rows = [
-            { label: 'Incidentes críticos (Sev 0 + Sev 1)', kind: 'count', cur: c.total, avg: a.total, fmt: v => retroNum(v, Number.isInteger(v) ? 0 : 1) },
-            { label: 'Sev 0', kind: 'count', cur: c.sev0, avg: a.sev0, fmt: v => retroNum(v, Number.isInteger(v) ? 0 : 1), indent: true },
-            { label: 'Sev 1', kind: 'count', cur: c.sev1, avg: a.sev1, fmt: v => retroNum(v, Number.isInteger(v) ? 0 : 1), indent: true },
-            { label: 'Fora do OLA', kind: 'count', cur: c.foraOla, avg: a.foraOla, fmt: v => retroNum(v, Number.isInteger(v) ? 0 : 1) },
-            { label: '% dentro do OLA · Sev 0 (≤ 02:00)', kind: 'pct', cur: c.olaSev0, avg: a.olaSev0, fmt: pctTxt },
-            { label: '% dentro do OLA · Sev 1 (≤ 06:00)', kind: 'pct', cur: c.olaSev1, avg: a.olaSev1, fmt: pctTxt },
+            { label: 'Incidentes críticos (Sev 0 + Sev 1)', kind: 'count', cur: c.total, avg: a.total, fmt: retroCount },
+            { label: 'Sev 0', kind: 'count', cur: c.sev0, avg: a.sev0, fmt: retroCount, indent: true },
+            { label: 'Sev 1', kind: 'count', cur: c.sev1, avg: a.sev1, fmt: retroCount, indent: true },
+            { label: 'Fora do OLA de Resolução', kind: 'count', cur: c.foraOla, avg: a.foraOla, fmt: retroCount },
+            { label: '% dentro do OLA de Resolução · Sev 0 (≤ 02:00)', kind: 'pct', cur: c.olaSev0, avg: a.olaSev0, fmt: pctTxt },
+            { label: '% dentro do OLA de Resolução · Sev 1 (≤ 06:00)', kind: 'pct', cur: c.olaSev1, avg: a.olaSev1, fmt: pctTxt },
             { label: 'MTTR Bruto · Sev 0 (meta ≤ 02:00)', kind: 'time', cur: c.mttrSev0, avg: a.mttrSev0, fmt: v => (v == null ? '—' : mttrHHMM(v)) },
             { label: 'MTTR Bruto · Sev 1 (meta ≤ 06:00)', kind: 'time', cur: c.mttrSev1, avg: a.mttrSev1, fmt: v => (v == null ? '—' : mttrHHMM(v)) }
         ];
@@ -1575,40 +1584,44 @@
                     <td class="px-2 py-2 text-right font-bold tabular-nums text-slate-800">${r.fmt(r.cur)}</td>
                     <td class="px-2 py-2 text-right tabular-nums text-slate-500">${r.fmt(r.avg)}</td>
                     <td class="px-2 py-2 text-right tabular-nums text-slate-500 whitespace-nowrap">${retroDiffText(r.kind, r.cur, r.avg)}</td>
-                    <td class="px-2 py-2"><span class="retro-status ${st.cls}">${st.label}</span></td>
+                    <td class="px-2 py-2">${retroStatusPill(st)}</td>
                 </tr>`;
         }).join(''));
 
         const filtersOn = (CURRENT_FILTERS.techFilter || []).length || (CURRENT_FILTERS.ofensorFilter || []).length;
         setHtml('retro-headline',
-            `<b>Semana da agenda:</b> ${c.total} ${c.total === 1 ? 'incidente crítico' : 'incidentes críticos'} (${c.sev0} Sev 0 e ${c.sev1} Sev 1), `
-            + `${c.dentroOla} de ${c.base} dentro do OLA${c.ola != null ? ` (${pctTxt(c.ola)})` : ''}. `
-            + `<b>Média das ${RETRO.weeks} semanas anteriores:</b> ${retroNum(a.total, 1)} incidentes por semana${a.ola != null ? `, ${pctTxt(a.ola)} dentro do OLA` : ''}. `
+            `<b>Semana selecionada:</b> ${c.total} ${c.total === 1 ? 'incidente crítico' : 'incidentes críticos'} (${c.sev0} Sev 0 e ${c.sev1} Sev 1), `
+            + `${c.dentroOla} de ${c.base} dentro do OLA de Resolução${c.ola != null ? ` (${pctTxt(c.ola)})` : ''}. `
+            + `<b>Média das ${RETRO.weeks} semanas anteriores:</b> ${retroNum(a.total, 1)} incidentes por semana${a.ola != null ? `, ${pctTxt(a.ola)} dentro do OLA de Resolução` : ''}. `
             + `<span><b>Leitura:</b> ${tally.good} ${tally.good === 1 ? 'indicador melhor' : 'indicadores melhores'}, ${tally.flat} ${tally.flat === 1 ? 'estável' : 'estáveis'}, ${tally.bad} ${tally.bad === 1 ? 'pior' : 'piores'}.</span>`
+            + (partial ? '<br><span class="text-[11px] font-semibold text-natura-orange">Semana parcial: o volume ainda pode crescer até domingo; compare com cautela.</span>' : '')
             + (filtersOn ? '<br><span class="text-[11px] text-slate-500">O comparativo do Retrospecto considera todos os incidentes (não aplica os filtros de Tecnologia/Ofensor).</span>' : ''));
 
-        renderRetroTrendChart(agg);
+        RETRO.chart = drawWeeklyTrendChart('retro-trend-chart', RETRO.chart, agg.weeks.slice(0, RETRO.weeks + 1));
     }
 
-    function renderRetroTrendChart(agg) {
-        const canvas = document.getElementById('retro-trend-chart');
-        if (!canvas || typeof Chart === 'undefined') return;
-        const weeks = agg.weeks.slice(0, RETRO.weeks + 1).reverse(); // mais antiga → semana da agenda
+    // Gráfico semana a semana (barras Sev 0/Sev 1 + linha do % dentro do OLA de Resolução); a semana escolhida em destaque.
+    // weeks: da semana escolhida (índice 0) para as anteriores; cada item com sev0, sev1, sev0DentroOLA, sev1DentroOLA, start, end.
+    function drawWeeklyTrendChart(canvasId, previousChart, weeksDesc) {
+        const canvas = document.getElementById(canvasId);
+        if (previousChart) previousChart.destroy();
+        if (!canvas || typeof Chart === 'undefined') return null;
+        const weeks = weeksDesc.slice().reverse(); // mais antiga → semana escolhida
         const last = weeks.length - 1;
-        const labels = weeks.map((w, i) => (i === last ? ['Semana da agenda', `${retroDM(new Date(w.start))}–${retroDM(new Date(w.end))}`] : `${retroDM(new Date(w.start))}–${retroDM(new Date(w.end))}`));
+        const range = w => `${retroDM(new Date(w.start))}–${retroDM(new Date(w.end))}`;
+        const lastTitle = retroIsPartial(RETRO.weekIso) ? 'Semana atual (parcial)' : 'Semana selecionada';
+        const labels = weeks.map((w, i) => (i === last ? [lastTitle, range(w)] : range(w)));
         const alpha = (hex, i) => (i === last ? hex : hex + '66');
-        const olaPct = weeks.map(w => { const b = w.sev0 + w.sev1; return b > 0 ? Math.round(((w.sev0DentroOLA + w.sev1DentroOLA) / b) * 1000) / 10 : null; });
-        if (RETRO.chart) RETRO.chart.destroy();
-        RETRO.chart = new Chart(canvas, {
+        const olaPct = weeks.map(w => { const b = (w.sev0 || 0) + (w.sev1 || 0); return b > 0 ? Math.round((((w.sev0DentroOLA || 0) + (w.sev1DentroOLA || 0)) / b) * 1000) / 10 : null; });
+        const barLabels = { color: '#fff', font: { weight: 'bold', size: 10 }, display: ctx => ctx.dataset.data[ctx.dataIndex] > 0 };
+        return new Chart(canvas, {
             type: 'bar',
             data: {
                 labels,
                 datasets: [
-                    { type: 'bar', label: 'Sev 0', data: weeks.map(w => w.sev0), backgroundColor: weeks.map((w, i) => alpha('#e94839', i)), stack: 'v', yAxisID: 'y', order: 2,
-                        datalabels: { color: '#fff', font: { weight: 'bold', size: 10 }, display: ctx => ctx.dataset.data[ctx.dataIndex] > 0 } },
-                    { type: 'bar', label: 'Sev 1', data: weeks.map(w => w.sev1), backgroundColor: weeks.map((w, i) => alpha('#FF6600', i)), stack: 'v', yAxisID: 'y', order: 2,
-                        datalabels: { color: '#fff', font: { weight: 'bold', size: 10 }, display: ctx => ctx.dataset.data[ctx.dataIndex] > 0 } },
-                    { type: 'line', label: '% dentro do OLA', data: olaPct, borderColor: '#1B472A', backgroundColor: '#1B472A', pointRadius: 3, tension: 0.25, yAxisID: 'y1', order: 1, spanGaps: true,
+                    { type: 'bar', label: 'Sev 0', data: weeks.map(w => w.sev0 || 0), backgroundColor: weeks.map((w, i) => alpha('#e94839', i)), stack: 'v', yAxisID: 'y', order: 2, datalabels: barLabels },
+                    { type: 'bar', label: 'Sev 1', data: weeks.map(w => w.sev1 || 0), backgroundColor: weeks.map((w, i) => alpha('#FF6600', i)), stack: 'v', yAxisID: 'y', order: 2, datalabels: barLabels },
+                    { type: 'line', label: '% dentro do OLA de Resolução', data: olaPct, borderColor: '#1B472A', backgroundColor: '#1B472A', pointRadius: 3, tension: 0.25, yAxisID: 'y1', order: 1, spanGaps: true,
                         datalabels: { align: 'top', anchor: 'end', color: '#1B472A', font: { weight: 'bold', size: 9 }, formatter: v => (v == null ? '' : `${Math.round(v)}%`) } }
                 ]
             },
@@ -1616,24 +1629,110 @@
                 responsive: true, maintainAspectRatio: false,
                 plugins: {
                     legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
-                    tooltip: { callbacks: { label: ctx => (ctx.dataset.yAxisID === 'y1' ? `% dentro do OLA: ${ctx.parsed.y}%` : `${ctx.dataset.label}: ${ctx.parsed.y}`) } }
+                    tooltip: { callbacks: { label: ctx => (ctx.dataset.yAxisID === 'y1' ? `% dentro do OLA de Resolução: ${ctx.parsed.y}%` : `${ctx.dataset.label}: ${ctx.parsed.y}`) } }
                 },
                 scales: {
                     x: { stacked: true, grid: { display: false }, ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: false } },
                     y: { stacked: true, beginAtZero: true, ticks: { precision: 0, font: { size: 9 } }, title: { display: true, text: 'Incidentes', font: { size: 9 } } },
-                    y1: { position: 'right', min: 0, max: 110, grid: { display: false }, ticks: { font: { size: 9 }, callback: v => (v <= 100 ? `${v}%` : '') } }
+                    y1: { position: 'right', min: 0, max: 115, grid: { display: false }, ticks: { font: { size: 9 }, callback: v => (v <= 100 ? `${v}%` : '') } }
                 }
             }
         });
     }
 
-    // Lista nominal dos incidentes da semana da agenda (vem do getFilteredData do mesmo recorte)
+    // Semana a semana por Jornada e País (seção Jornadas & Países): mesmas semanas do Retrospecto da Semana
+    // (por padrão, a última semana fechada), com a tabela de todos os itens e o gráfico do item escolhido.
+    function renderJpWeekly() {
+        const periodEl = document.getElementById('jp-weekly-period');
+        const body = document.getElementById('jp-weekly-body');
+        if (!periodEl || !body) return;
+        if (!RETRO.weekIso) RETRO.weekIso = retroLastClosedWeekIso();
+        const data = retroData();
+        const on = CURRENT_FILTERS.periodKey === 'Retrospecto';
+        const isPais = JP_WEEKLY.dim === 'pais';
+        const dimLabel = isPais ? 'País' : 'Jornada';
+        periodEl.innerHTML = `<b class="text-slate-700">${retroKindTxt(RETRO.weekIso).replace(/^./, ch => ch.toUpperCase())}</b> (${retroRangeTxt(RETRO.weekIso)}) comparada à média das <b class="text-slate-700">${RETRO.weeks} semanas anteriores</b>, sempre de segunda a domingo. `
+            + (on ? 'Segue a semana escolhida no Retrospecto da Semana.' : 'Este bloco não segue o filtro de período; para escolher outra semana, use o filtro <b>Retrospecto da Semana</b>.');
+        const setText = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+        setText('jp-weekly-item-label', dimLabel);
+        setText('jp-weekly-th-item', dimLabel);
+        setText('jp-weekly-table-title', isPais ? 'Todos os Países' : 'Todas as Jornadas');
+        setText('jp-weekly-th-avg', `Média ${RETRO.weeks} sem.`);
+        setText('jp-weekly-th-avg-ola', `Média ${RETRO.weeks} sem.`);
+        document.querySelectorAll('[data-jp-dim]').forEach(b => b.classList.toggle('is-active', b.getAttribute('data-jp-dim') === JP_WEEKLY.dim));
+        if (!data) { body.innerHTML = '<tr><td colspan="7" class="text-center text-slate-400 italic py-5">Carregando&hellip;</td></tr>'; return; }
+
+        const key = isPais ? 'byPais' : 'byJornada';
+        const weeks = data.weeks.slice(0, RETRO.weeks + 1);
+        const names = new Set();
+        weeks.forEach(w => Object.keys(w[key] || {}).forEach(n => names.add(n)));
+        const items = Array.from(names).map(name => {
+            const series = weeks.map(w => Object.assign({ start: w.start, end: w.end }, (w[key] || {})[name] || {}));
+            const cur = retroBuild([series[0]], false), avg = retroBuild(series.slice(1), true);
+            const windowTotal = series.reduce((acc, s) => acc + (s.total || 0), 0);
+            return { name, series, cur, avg, windowTotal };
+        }).sort((x, y) => (y.cur.total - x.cur.total) || (y.windowTotal - x.windowTotal) || x.name.localeCompare(y.name));
+
+        if (!items.length) {
+            body.innerHTML = `<tr><td colspan="7" class="text-center text-slate-400 italic py-5">Nenhum incidente nessas semanas.</td></tr>`;
+            if (JP_WEEKLY.chart) { JP_WEEKLY.chart.destroy(); JP_WEEKLY.chart = null; }
+            setText('jp-weekly-chart-title', '');
+            return;
+        }
+        if (!JP_WEEKLY.item || !items.some(it => it.name === JP_WEEKLY.item)) JP_WEEKLY.item = items[0].name;
+
+        const select = document.getElementById('jp-weekly-item');
+        if (select) {
+            select.innerHTML = items.map(it => `<option value="${escapeXml(it.name)}">${escapeXml(it.name)} (${it.windowTotal} ${it.windowTotal === 1 ? 'incidente' : 'incidentes'} nas ${RETRO.weeks + 1} semanas)</option>`).join('');
+            select.value = JP_WEEKLY.item;
+        }
+        const pctTxt = v => (v == null ? '—' : `${retroNum(v, 1)}%`);
+        const label = name => (isPais ? `<span class="inline-flex items-center gap-1.5">${buildFlagSvg(name, 18, 12)}<span>${escapeXml(name)}</span></span>` : escapeXml(name));
+        body.innerHTML = items.map(it => {
+            const sel = it.name === JP_WEEKLY.item;
+            return `<tr data-jp-item="${escapeXml(it.name)}" class="cursor-pointer ${sel ? 'bg-natura-green-cerrado/[0.06]' : 'hover:bg-slate-50'}">
+                    <td class="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">${sel ? '<span class="text-natura-green-cerrado">&#9654;</span> ' : ''}${label(it.name)}</td>
+                    <td class="px-3 py-2 text-right font-bold tabular-nums text-slate-800">${retroCount(it.cur.total)}</td>
+                    <td class="px-3 py-2 text-right tabular-nums text-slate-500">${retroCount(it.avg.total)}</td>
+                    <td class="px-3 py-2">${retroStatusPill(retroStatus('count', it.cur.total, it.avg.total))}</td>
+                    <td class="px-3 py-2 text-right font-bold tabular-nums text-slate-800">${pctTxt(it.cur.ola)}</td>
+                    <td class="px-3 py-2 text-right tabular-nums text-slate-500">${pctTxt(it.avg.ola)}</td>
+                    <td class="px-3 py-2">${retroStatusPill(retroStatus('pct', it.cur.ola, it.avg.ola))}</td>
+                </tr>`;
+        }).join('');
+
+        const chosen = items.find(it => it.name === JP_WEEKLY.item);
+        setText('jp-weekly-chart-title', `${dimLabel}: ${chosen.name} · ${retroCount(chosen.cur.total)} na semana x média de ${retroCount(chosen.avg.total)}`);
+        JP_WEEKLY.chart = drawWeeklyTrendChart('jp-weekly-chart', JP_WEEKLY.chart, chosen.series);
+        const filtersOn = (CURRENT_FILTERS.techFilter || []).length || (CURRENT_FILTERS.ofensorFilter || []).length;
+        const note = document.getElementById('jp-weekly-note');
+        if (note) note.innerHTML = `Um incidente pode impactar mais de uma Jornada/País e entra em cada um deles. <b>Estável</b> = variação de até 10% no volume (mínimo de 1 incidente) ou de até 5 pp no OLA de Resolução.`
+            + (filtersOn ? ' Este bloco considera todos os incidentes (não aplica os filtros de Tecnologia/Ofensor).' : '');
+    }
+
+    document.addEventListener('click', (ev) => {
+        const t = ev.target && ev.target.closest ? ev.target : null;
+        if (!t) return;
+        const dimBtn = t.closest('[data-jp-dim]');
+        if (dimBtn) {
+            const dim = dimBtn.getAttribute('data-jp-dim');
+            if (dim !== JP_WEEKLY.dim) { JP_WEEKLY.dim = dim; JP_WEEKLY.item = null; renderJpWeekly(); }
+            return;
+        }
+        const row = t.closest('[data-jp-item]');
+        if (row) { JP_WEEKLY.item = row.getAttribute('data-jp-item'); renderJpWeekly(); }
+    });
+    document.addEventListener('change', (ev) => {
+        if (ev.target && ev.target.id === 'jp-weekly-item') { JP_WEEKLY.item = ev.target.value; renderJpWeekly(); }
+    });
+
+    // Lista nominal dos incidentes da semana selecionada (vem do getFilteredData do mesmo recorte)
     function renderRetroIncidents() {
         const body = document.getElementById('retro-incidents-body');
         if (!body || CURRENT_FILTERS.periodKey !== 'Retrospecto') return;
         const items = sortByAberturaDesc(ALL_DATA.rawIncidents || []);
         if (!items.length) {
-            body.innerHTML = '<tr><td colspan="7" class="text-center text-slate-400 italic py-5">Nenhum incidente crítico na semana da agenda.</td></tr>';
+            body.innerHTML = '<tr><td colspan="7" class="text-center text-slate-400 italic py-5">Nenhum incidente crítico na semana selecionada.</td></tr>';
             return;
         }
         body.innerHTML = items.map(inc => {
@@ -2226,26 +2325,19 @@
         return formatMinutesToHHMM(Math.round(val * 60));
     }
 
-    // --- Metodologias de MTTR (painel abaixo dos cards Sev 0/Sev 1) ---
-    // Ordem: Média Aparada (P95/P90, em destaque) · Percentil de resolução (P90/P95, sem meta) · Corte Fixo.
-    const MTTR_METODO_TIPS = {
-        corte: 'Calcula a média aritmética dos incidentes desconsiderando aqueles com tempo de resolução ≥ 06h (Sev 0) ou ≥ 18h (Sev 1). <strong>Fragilidade do modelo:</strong> Utiliza um corte temporal estático e arbitrário. Um incidente resolvido em 05h59m é incluído no cálculo, puxando a média severamente para cima, enquanto um incidente resolvido em 06h01m é totalmente descartado da média. Isso pode mascarar incidentes críticos ou penalizar o indicador de forma desproporcional.',
-        aparada: 'Calcula a média aritmética após excluir matematicamente os 5% incidentes mais demorados do período, independentemente da duração em horas. <strong>Diferencial:</strong> Elimina a regra de corte fixo e adapta-se dinamicamente ao volume mensal. Protege o indicador contra distorções causadas por casos anômalos extremos, garantindo que exatamente 95% do volume operacional seja representado na média.',
-        aparada90: 'Calcula a média aritmética após excluir matematicamente os 10% incidentes mais demorados do período, independentemente da duração em horas. <strong>Diferencial:</strong> Elimina a regra de corte fixo e adapta-se dinamicamente ao volume mensal. Protege o indicador contra distorções causadas por casos anômalos extremos, garantindo que exatamente 90% do volume operacional seja representado na média.',
-        pct: 'Representa a marca de tempo na qual 90% (ou 95%) de todos os incidentes registrados foram efetivamente resolvidos. <strong>Padrão de Mercado (SRE / ITIL 4):</strong> Não utiliza médias aritméticas, sendo totalmente imune às distorções da cauda longa. Informa a previsibilidade real do serviço com a leitura direta: \'90% dos incidentes foram resolvidos em até [HH:MM]\'. Não descarta nenhum dado da base para gerar o número.'
+    // --- MTTR Líquido (painel abaixo dos cards Sev 0/Sev 1) ---
+    // Média Aparada P95 (retira os 5% mais demorados) ou P98 (retira os 2%), contra a meta do OLA de Resolução.
+    // Com o Retrospecto da Semana ativo, o painel não segue a semana: mostra o ano selecionado completo (getMttrLiquido).
+    const MTTR_LIQ_TIPS = {
+        p95: 'Calcula a média aritmética após excluir matematicamente os 5% incidentes mais demorados do período, independentemente da duração em horas. <strong>Diferencial:</strong> Elimina a regra de corte fixo e adapta-se dinamicamente ao volume mensal. Protege o indicador contra distorções causadas por casos anômalos extremos, garantindo que exatamente 95% do volume operacional seja representado na média.',
+        p98: 'Calcula a média aritmética após excluir matematicamente os 2% incidentes mais demorados do período, independentemente da duração em horas. <strong>Diferencial:</strong> Elimina a regra de corte fixo e adapta-se dinamicamente ao volume mensal. Protege o indicador contra distorções causadas por casos anômalos extremos, garantindo que exatamente 98% do volume operacional seja representado na média.'
     };
-    const MTTR_PCT_INFO = {
-        p90: { label: 'P90', share: '90%', pctNum: 90, frac: '9 em cada 10', p: 0.90, rankKey: 'p90Rank' },
-        p95: { label: 'P95', share: '95%', pctNum: 95, frac: '19 em cada 20', p: 0.95, rankKey: 'p95Rank' }
-    };
-    // Média Aparada: P95 descarta os 5% mais demorados; P90 descarta os 10% mais demorados
     const MTTR_TRIM_INFO = {
-        p95: { label: 'P95', keepShare: '95%', cutShare: '5%', keep: 0.95, resKey: 'aparada', kKey: 'k', tipKey: 'aparada' },
-        p90: { label: 'P90', keepShare: '90%', cutShare: '10%', keep: 0.90, resKey: 'aparada90', kKey: 'k90', tipKey: 'aparada90' }
+        p95: { label: 'P95', keepShare: '95%', cutShare: '5%', keep: 0.95, kKey: 'k95' },
+        p98: { label: 'P98', keepShare: '98%', cutShare: '2%', keep: 0.98, kKey: 'k98' }
     };
-    const mttrPctChoice = { sev0: 'p90', sev1: 'p90' };
     const mttrTrimChoice = { sev0: 'p95', sev1: 'p95' };
-    let lastMttrMetodologias = null;
+    let lastMttrLiquido = null;
 
     function mttrHHMM(min) {
         const t = Math.max(0, Math.round(min || 0));
@@ -2254,7 +2346,6 @@
     const fmtPctBR = (v) => (v == null ? '—' : String(v).replace('.', ',') + '%');
     const fmtNumBR = (v) => String(Math.round(v * 100) / 100).replace('.', ',');
     const mttrColor = (r) => (!r || r.min == null ? '#94a3b8' : (r.withinTarget ? '#1B472A' : '#e94839'));
-    const MTTR_NEUTRAL = '#334155';
 
     function mttrBadge(r, targetMin) {
         if (!r || r.min == null) return '';
@@ -2263,236 +2354,135 @@
             : `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap" style="background:rgba(233,72,57,0.1);color:#e94839;">&#9650; +${mttrHHMM(r.min - targetMin)} acima</span>`;
     }
 
-    // Faixa com rótulos: texto dentro (ou logo após) o preenchimento e um marcador de referência com rótulo próprio
-    function mttrBarHtml(o) {
-        const fill = Math.max(0, Math.min(100, o.fillPct || 0));
-        const mark = Math.max(0, Math.min(100, o.markPct));
-        const inside = fill >= (o.insideMin || 22);
+    // Faixa com rótulos: valor dentro (ou logo após) o preenchimento e a meta do OLA de Resolução sobre o marcador
+    function mttrTimeBar(r, targetMin, scaleMax) {
+        const has = r && r.min != null;
+        const fill = has ? Math.max(0, Math.min(100, (r.min / scaleMax) * 100)) : 0;
+        const mark = Math.max(0, Math.min(100, (targetMin / scaleMax) * 100));
+        const color = mttrColor(r);
         const markShift = mark > 82 ? '-100%' : (mark < 18 ? '0%' : '-50%');
-        const val = !o.fillLabel ? '' : inside
-            ? `<span class="mttr-bar-val" style="left:calc(${fill}% - 8px);transform:translate(-100%,-50%);color:#fff;">${o.fillLabel}</span>`
-            : `<span class="mttr-bar-val" style="left:calc(${fill}% + 6px);color:${o.color};">${o.fillLabel}</span>`;
-        return `<div class="mttr-bar${o.big ? ' is-big' : ''}" role="img" aria-label="${o.aria}">
-                <span class="mttr-bar-fill" style="width:${fill}%;background:${o.color};"></span>${val}
-                <span class="mttr-bar-meta" style="left:${mark}%;"><span class="mttr-bar-meta-lbl" style="transform:translateX(${markShift});">${o.markLabel}</span></span>
+        const val = !has ? '' : fill >= 22
+            ? `<span class="mttr-bar-val" style="left:calc(${fill}% - 8px);transform:translate(-100%,-50%);color:#fff;">${r.hhmm}</span>`
+            : `<span class="mttr-bar-val" style="left:calc(${fill}% + 6px);color:${color};">${r.hhmm}</span>`;
+        return `<div class="mttr-bar is-big" role="img" aria-label="${has ? r.hhmm : 'sem dados'} contra a meta do OLA de Resolução de ${mttrHHMM(targetMin)}">
+                <span class="mttr-bar-fill" style="width:${fill}%;background:${color};"></span>${val}
+                <span class="mttr-bar-meta" style="left:${mark}%;"><span class="mttr-bar-meta-lbl" style="transform:translateX(${markShift});">Meta ${mttrHHMM(targetMin)}</span></span>
             </div>`;
     }
-    // Faixa de tempo (médias): valor x meta de OLA
-    const mttrTimeBar = (r, targetMin, scaleMax, big) => mttrBarHtml({
-        fillPct: r && r.min != null ? (r.min / scaleMax) * 100 : 0, fillLabel: r && r.min != null ? r.hhmm : '', color: mttrColor(r),
-        markPct: (targetMin / scaleMax) * 100, markLabel: `Meta ${mttrHHMM(targetMin)}`, big,
-        aria: `${r && r.min != null ? r.hhmm : 'sem dados'} contra a meta de OLA de ${mttrHHMM(targetMin)}`
-    });
 
-    const mttrDetailBtn = (sev, method) =>
-        `<button type="button" class="mttr-detail-btn" data-mttr-detail="${sev}:${method}">Ver cálculo e incidentes <span aria-hidden="true">&rarr;</span></button>`;
-
-    function mttrToggle(attr, sev, current, opts) {
-        return `<div class="mttr-pct-toggle" role="group" aria-label="${opts.aria}">${opts.items.map(it => {
-            const on = it.key === current;
-            return `<button type="button" ${attr}="${sev}:${it.key}" aria-pressed="${on}" class="mttr-pct-opt${on ? ' is-active' : ''}">
-                    <span class="mttr-pct-opt-title">${it.title}</span><span class="mttr-pct-opt-sub">${it.sub}</span></button>`;
-        }).join('')}</div>`;
+    // Origem dos dados do painel: o mesmo período dos cards, ou o ano completo quando o Retrospecto da Semana está ativo
+    function loadMttrLiquido(kpis) {
+        if (CURRENT_FILTERS.periodKey !== 'Retrospecto') { renderMttrLiquido(kpis && kpis.mttrLiquido); return; }
+        ['sev0', 'sev1'].forEach(sev => { const el = document.getElementById(`mttr-metodos-${sev}`); if (el) el.innerHTML = '<p class="text-[11px] text-slate-400">Carregando o ano completo&hellip;</p>'; });
+        const year = CURRENT_FILTERS.year;
+        google.script.run
+            .withSuccessHandler((d) => {
+                if (CURRENT_FILTERS.periodKey !== 'Retrospecto' || String(CURRENT_FILTERS.year) !== String(year)) return;
+                if (!d || d.error) { logDebug('getMttrLiquido: ' + (d ? d.error : 'sem resposta')); return; }
+                renderMttrLiquido(d);
+            })
+            .withFailureHandler((e) => logDebug('getMttrLiquido FAILED: ' + e.message))
+            .getMttrLiquido(year, CURRENT_FILTERS.techFilter, CURRENT_FILTERS.ofensorFilter);
     }
 
-    function renderMttrMetodologias(data) {
-        if (data) lastMttrMetodologias = data;
-        data = lastMttrMetodologias;
+    function renderMttrLiquido(data) {
+        if (data) lastMttrLiquido = data;
+        data = lastMttrLiquido;
         if (!data) return;
         ['sev0', 'sev1'].forEach((sev) => {
             const el = document.getElementById(`mttr-metodos-${sev}`);
             const d = data[sev];
             if (!el || !d) return;
             if (!d.n) {
-                el.innerHTML = '<p class="text-[11px] text-slate-400">Sem incidentes no período para comparar as metodologias.</p>';
+                el.innerHTML = '<p class="text-[11px] text-slate-400">Sem incidentes no período para calcular o MTTR Líquido.</p>';
                 return;
             }
-            const sevLabel = sev === 'sev0' ? 'Sev 0' : 'Sev 1';
-            const target = mttrHHMM(d.targetMin);
             const ti = MTTR_TRIM_INFO[mttrTrimChoice[sev]];
-            const ap = d[ti.resKey];
-            const pi = MTTR_PCT_INFO[mttrPctChoice[sev]];
-            const pr = d[mttrPctChoice[sev]];
-            const scaleMax = Math.max(d.corte.min || 0, d.aparada.min || 0, d.aparada90.min || 0, d.targetMin, 1) * 1.12;
-            const withinPct = d.n ? Math.round((d.withinTarget / d.n) * 1000) / 10 : 0;
-            const cutLabel = mttrHHMM(d.cutMin).replace(':00', 'h');
-            const outOfTarget = d.corte.discardedPct != null && d.corte.discardedPct > 5;
-
-            // 1. MTTR Líquido (Média Aparada P95/P90) — em destaque
-            const trimToggle = mttrToggle('data-mttr-trim', sev, mttrTrimChoice[sev], {
-                aria: 'Quantos incidentes mais demorados saem da média',
-                items: ['p95', 'p90'].map(key => {
-                    const t = MTTR_TRIM_INFO[key], r = d[t.resKey];
-                    return { key, title: `${t.label} · descarta os ${t.cutShare} mais demorados`, sub: `Média dos ${t.keepShare} mais rápidos: <b>${r.hhmm}</b>` };
-                })
-            });
-            const feat = `<div class="mttr-feat">
+            const r = d[mttrTrimChoice[sev]];
+            const scaleMax = Math.max(d.p95.min || 0, d.p98.min || 0, d.targetMin, 1) * 1.12;
+            const toggle = `<div class="mttr-pct-toggle" role="group" aria-label="Quantos incidentes mais demorados saem da média">${['p95', 'p98'].map(key => {
+                const t = MTTR_TRIM_INFO[key], on = key === mttrTrimChoice[sev];
+                return `<button type="button" data-mttr-trim="${sev}:${key}" aria-pressed="${on}" class="mttr-pct-opt${on ? ' is-active' : ''}">
+                        <span class="mttr-pct-opt-title">${t.label} · retira os ${t.cutShare} mais demorados</span>
+                        <span class="mttr-pct-opt-sub">Média dos ${t.keepShare} mais rápidos: <b>${d[key].hhmm}</b></span></button>`;
+            }).join('')}</div>`;
+            const smallSample = d.n < 10
+                ? `<p class="text-[11px] text-slate-600 bg-natura-yellow-balsamo/10 border border-natura-yellow-balsamo/40 rounded-lg px-3 py-2 mb-3"><b>Amostra pequena (${d.n} ${d.n === 1 ? 'incidente' : 'incidentes'}):</b> com poucos incidentes, a média aparada retira sempre o mais demorado. Para ver tendência, use um período maior.</p>`
+                : '';
+            el.innerHTML = smallSample + `<div class="mttr-feat">
                     <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
                             <p class="text-sm font-bold text-slate-800">MTTR Líquido (Média Aparada ${ti.label})</p>
                             <p class="text-[11px] text-slate-600 leading-snug mt-0.5">Média depois de retirar os <b>${ti.cutShare} incidentes mais demorados</b> do período, qualquer que seja a duração.</p>
                         </div>
                         <div class="text-right shrink-0">
-                            <p class="text-3xl font-extrabold tabular-nums leading-none" style="color:${mttrColor(ap)};">${ap.min != null ? ap.hhmm : '—'}</p>
-                            <div class="mt-1">${mttrBadge(ap, d.targetMin)}</div>
+                            <p class="text-3xl font-extrabold tabular-nums leading-none" style="color:${mttrColor(r)};">${r.min != null ? r.hhmm : '—'}</p>
+                            <div class="mt-1">${mttrBadge(r, d.targetMin)}</div>
                         </div>
                     </div>
-                    ${trimToggle}
-                    ${mttrTimeBar(ap, d.targetMin, scaleMax, true)}
+                    ${toggle}
+                    ${mttrTimeBar(r, d.targetMin, scaleMax)}
                     <div class="flex flex-wrap items-center justify-between gap-2 mt-1">
-                        <p class="text-[10px] text-slate-400">Considerados <b class="text-slate-600">${ap.considered}</b> &middot; Desconsiderados (${ti.cutShare} mais demorados) <b class="text-slate-600">${ap.discarded}</b> (${fmtPctBR(ap.discardedPct)})</p>
-                        ${mttrDetailBtn(sev, 'aparada')}
+                        <p class="text-[10px] text-slate-400">Considerados <b class="text-slate-600">${r.considered}</b> &middot; Desconsiderados (${ti.cutShare} mais demorados) <b class="text-slate-600">${r.discarded}</b> (${fmtPctBR(r.discardedPct)})</p>
+                        <button type="button" class="mttr-detail-btn" data-mttr-detail="${sev}">Ver cálculo e incidentes <span aria-hidden="true">&rarr;</span></button>
                     </div>
                 </div>`;
-
-            // 2. Resolução P90/P95 — sem meta; a faixa mostra o % de incidentes dentro do OLA x a marca do percentil
-            const pctToggle = mttrToggle('data-mttr-pct', sev, mttrPctChoice[sev], {
-                aria: 'Escolha o percentil',
-                items: ['p90', 'p95'].map(key => {
-                    const k = MTTR_PCT_INFO[key];
-                    return { key, title: `${k.label} · ${k.share} dos incidentes`, sub: `${k.frac} resolvidos em até <b>${d[key].hhmm}</b>` };
-                })
-            });
-            const pctBar = mttrBarHtml({
-                fillPct: withinPct, fillLabel: `${fmtPctBR(withinPct)} dentro do OLA`, color: '#1B472A', insideMin: 40,
-                markPct: pi.pctNum, markLabel: `${pi.share} (${pi.label})`,
-                aria: `${fmtPctBR(withinPct)} dos incidentes dentro do OLA de ${target}; marca do ${pi.label} em ${pi.share}`
-            });
-            const pctRow = `<div class="mttr-row">
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="min-w-0">
-                            <p class="text-xs font-bold text-slate-700">Resolução ${pi.label} (Percentil)</p>
-                            <p class="text-[11px] text-slate-500 leading-snug mt-0.5"><b class="text-slate-700">${pi.frac}</b> incidentes ${sevLabel} (${pi.share}) foram resolvidos em até <b class="text-slate-700">${pr.hhmm}</b>. Não é média e não descarta nenhum incidente.</p>
-                        </div>
-                        <div class="text-right shrink-0">
-                            <p class="text-xl font-bold tabular-nums leading-none" style="color:${MTTR_NEUTRAL};">${pr.hhmm}</p>
-                            <div class="mt-1"><span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap" style="background:#f1f5f9;color:#64748b;">Sem meta definida</span></div>
-                        </div>
-                    </div>
-                    ${pctToggle}
-                    ${pctBar}
-                    <p class="text-[10px] text-slate-400 leading-snug">A faixa mostra o % de incidentes resolvidos dentro do OLA (&le; ${target}): <b class="text-slate-600">${d.withinTarget} de ${d.n}</b>. O marcador indica os ${pi.share} do ${pi.label}: enquanto a faixa não alcança o marcador, o ${pi.label} fica acima do OLA.</p>
-                    <div class="flex flex-wrap items-center justify-between gap-2 mt-1">
-                        <p class="text-[10px] text-slate-400">Considerados <b class="text-slate-600">${d.n}</b> &middot; Desconsiderados <b class="text-slate-600">0</b></p>
-                        ${mttrDetailBtn(sev, 'pct')}
-                    </div>
-                </div>`;
-
-            // 3. MTTR S/ Outliers (Corte Fixo)
-            const corteRow = `<div class="mttr-row">
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="min-w-0">
-                            <p class="text-xs font-bold text-slate-700">MTTR S/ Outliers (Corte Fixo)</p>
-                            <p class="text-[11px] text-slate-500 leading-snug mt-0.5">Média dos incidentes resolvidos em menos de ${cutLabel}; os de ${cutLabel} ou mais saem da conta.</p>
-                        </div>
-                        <div class="text-right shrink-0">
-                            <p class="text-xl font-bold tabular-nums leading-none" style="color:${mttrColor(d.corte)};">${d.corte.min != null ? d.corte.hhmm : '—'}</p>
-                            <div class="mt-1">${mttrBadge(d.corte, d.targetMin)}</div>
-                        </div>
-                    </div>
-                    ${mttrTimeBar(d.corte, d.targetMin, scaleMax, false)}
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <p class="text-[10px] text-slate-400">Considerados <b class="text-slate-600">${d.corte.considered}</b> &middot; Desconsiderados (&ge; ${cutLabel}) <b class="text-slate-600">${d.corte.discarded}</b> <span style="color:${outOfTarget ? '#e94839' : 'inherit'};font-weight:${outOfTarget ? 700 : 400};">(${fmtPctBR(d.corte.discardedPct)})</span> &middot; meta &le; 5%</p>
-                        ${mttrDetailBtn(sev, 'corte')}
-                    </div>
-                </div>`;
-
-            const smallSample = d.n < 10
-                ? `<p class="text-[11px] text-slate-600 bg-natura-yellow-balsamo/10 border border-natura-yellow-balsamo/40 rounded-lg px-3 py-2 mb-3"><b>Amostra pequena (${d.n} ${d.n === 1 ? 'incidente' : 'incidentes'}):</b> com poucos incidentes, a Média Aparada sempre retira o mais demorado e o percentil fica próximo do maior tempo. Para ver tendência, use um período maior.</p>`
-                : '';
-            el.innerHTML = smallSample + feat + `<p class="mttr-sub-head">Outras metodologias</p>` + pctRow + corteRow;
         });
     }
 
     // Pop-up "Ver cálculo e incidentes": regra, conta do período e lista de incidentes considerados x desconsiderados
     let mttrModalState = null;
 
-    function mttrModalRows(sev, method) {
-        const d = lastMttrMetodologias && lastMttrMetodologias[sev];
-        if (!d) return null;
-        const byId = {};
-        (ALL_DATA.rawIncidents || []).forEach(inc => { byId[inc.id] = inc; });
-        const pk = mttrPctChoice[sev];
-        const pctMin = d[pk].min;
-        const ti = MTTR_TRIM_INFO[mttrTrimChoice[sev]];
-        const kKeep = d[ti.kKey];
-        const rows = (d.incidentes || []).map((it, i) => {
-            let inBase, situacao;
-            if (method === 'corte') { inBase = it.min < d.cutMin; situacao = inBase ? 'Considerado' : 'Desconsiderado (outlier)'; }
-            else if (method === 'aparada') { inBase = i < kKeep; situacao = inBase ? 'Considerado' : `Desconsiderado (${ti.cutShare} mais demorados)`; }
-            else { inBase = it.min <= pctMin; situacao = inBase ? `Até o ${MTTR_PCT_INFO[pk].label}` : `Acima do ${MTTR_PCT_INFO[pk].label} (mantido na base)`; }
-            const raw = byId[it.id] || {};
-            return {
-                posicao: i + 1, id: it.id, ttr: mttrHHMM(it.min), min: it.min, dataDefinicao: it.dataDefinicao,
-                dataAberturaTimestamp: it.dataAberturaTimestamp, descOfensor: raw.descOfensor || 'N/A', solucao: raw.solucao || 'N/A',
-                dentroOla: it.min <= d.targetMin ? 'Sim' : 'Não', situacao, inBase
-            };
-        });
-        return { d, rows: rows.reverse() }; // mais demorados primeiro: a fronteira do cálculo fica no topo
-    }
-
-    function openMttrMetodoModal(sev, method, filter) {
-        const res = mttrModalRows(sev, method);
+    function openMttrMetodoModal(sev, filter) {
+        const d = lastMttrLiquido && lastMttrLiquido[sev];
         const modal = document.getElementById('mttr-metodo-modal');
         const body = document.getElementById('mttr-metodo-body');
-        if (!res || !modal || !body) return;
-        mttrModalState = { sev, method, filter: filter || 'all' };
-        const { d, rows } = res;
+        if (!d || !modal || !body) return;
+        mttrModalState = { sev, filter: filter || 'all' };
         const sevLabel = sev === 'sev0' ? 'Sev 0' : 'Sev 1';
         const target = mttrHHMM(d.targetMin);
-        const cutLabel = mttrHHMM(d.cutMin).replace(':00', 'h');
-        const pi = MTTR_PCT_INFO[mttrPctChoice[sev]];
-        const ti = MTTR_TRIM_INFO[mttrTrimChoice[sev]];
-        const withinPct = d.n ? Math.round((d.withinTarget / d.n) * 1000) / 10 : 0;
-        let title, result, steps, inLabel, outLabel, tipKey = method, sepLabel;
-        if (method === 'corte') {
-            title = 'MTTR S/ Outliers (Corte Fixo)'; result = d.corte; inLabel = 'Considerados'; outLabel = 'Desconsiderados';
-            sepLabel = `Corte fixo: abaixo de ${cutLabel}`;
-            steps = [`Base do período: <b>${d.n}</b> incidentes ${sevLabel}.`,
-                `Saem da conta os incidentes com TTR &ge; ${cutLabel}: <b>${d.corte.discarded}</b> (${fmtPctBR(d.corte.discardedPct)}).`,
-                `Média aritmética dos <b>${d.corte.considered}</b> restantes = <b>${d.corte.hhmm}</b>.`];
-        } else if (method === 'aparada') {
-            const k = d[ti.kKey];
-            title = `MTTR Líquido (Média Aparada ${ti.label})`; result = d[ti.resKey]; inLabel = 'Considerados'; outLabel = 'Desconsiderados'; tipKey = ti.tipKey;
-            sepLabel = `Limite da média aparada: ${k} mais rápidos`;
-            steps = [`Ordena os <b>${d.n}</b> incidentes ${sevLabel} do mais rápido ao mais demorado.`,
-                `k = piso(n &times; ${fmtNumBR(ti.keep)}) = piso(${d.n} &times; ${fmtNumBR(ti.keep)}) = piso(${fmtNumBR(d.n * ti.keep)}) = <b>${k}</b> incidentes mantidos.`,
-                `Saem os <b>${d.n - k}</b> mais demorados (${ti.cutShare}); média aritmética dos ${k} primeiros = <b>${result.hhmm}</b>.`];
-        } else {
-            const rank = d[pi.rankKey];
-            title = `Resolução ${pi.label} (Percentil)`; result = d[mttrPctChoice[sev]]; inLabel = `Até o ${pi.label}`; outLabel = `Acima do ${pi.label}`;
-            sepLabel = `Marca do ${pi.label}: ${result.hhmm}`;
-            steps = [`Ordena os <b>${d.n}</b> incidentes ${sevLabel} do mais rápido ao mais demorado.`,
-                `Posição = teto(n &times; ${fmtNumBR(pi.p)}) = teto(${d.n} &times; ${fmtNumBR(pi.p)}) = teto(${fmtNumBR(d.n * pi.p)}) = <b>${rank}&ordf;</b> posição.`,
-                `O TTR do incidente nessa posição é o ${pi.label}: <b>${result.hhmm}</b>. Ou seja, ${pi.frac} incidentes foram resolvidos em até ${result.hhmm}.`,
-                `Nenhum incidente é descartado: os que ficaram acima do ${pi.label} continuam na base, apenas não definem a marca.`];
-        }
+        const trimKey = mttrTrimChoice[sev];
+        const ti = MTTR_TRIM_INFO[trimKey];
+        const result = d[trimKey];
+        const k = d[ti.kKey];
+        const title = `MTTR Líquido (Média Aparada ${ti.label})`;
+        // mais demorados primeiro: a fronteira do cálculo fica no topo
+        const rows = (d.incidentes || []).map((it, i) => ({
+            posicao: i + 1, id: it.id, ttr: mttrHHMM(it.min), dataDefinicao: it.dataDefinicao, dataAberturaTimestamp: it.dataAberturaTimestamp,
+            descOfensor: it.descOfensor || 'N/A', solucao: it.solucao || 'N/A',
+            dentroOla: it.min <= d.targetMin ? 'Sim' : 'Não', inBase: i < k,
+            situacao: i < k ? 'Considerado' : `Desconsiderado (${ti.cutShare} mais demorados)`
+        })).reverse();
+        const steps = [`Ordena os <b>${d.n}</b> incidentes ${sevLabel} do mais rápido ao mais demorado.`,
+            `k = piso(n &times; ${fmtNumBR(ti.keep)}) = piso(${d.n} &times; ${fmtNumBR(ti.keep)}) = piso(${fmtNumBR(d.n * ti.keep)}) = <b>${k}</b> incidentes mantidos.`,
+            `Saem os <b>${d.n - k}</b> mais demorados (${ti.cutShare}); média aritmética dos ${k} primeiros = <b>${result.hhmm}</b>.`];
         const nIn = rows.filter(r => r.inBase).length, nOut = rows.length - nIn;
         const shown = rows.filter(r => mttrModalState.filter === 'all' || (mttrModalState.filter === 'in' ? r.inBase : !r.inBase));
-        const verdict = method === 'pct'
-            ? `<span class="font-bold text-slate-600">sem meta definida</span>. Referência: <b>${fmtPctBR(withinPct)}</b> dos incidentes (${d.withinTarget} de ${d.n}) foram resolvidos dentro do OLA (&le; ${target}).`
-            : (result.min == null ? '' : result.withinTarget
-                ? `<span class="font-bold" style="color:#1B472A;">dentro da meta de OLA (&le; ${target})</span>`
-                : `<span class="font-bold" style="color:#e94839;">+${mttrHHMM(result.min - d.targetMin)} acima da meta de OLA (&le; ${target})</span>`);
+        const verdict = result.min == null ? '' : result.withinTarget
+            ? `<span class="font-bold" style="color:#1B472A;">dentro da meta do OLA de Resolução (&le; ${target})</span>`
+            : `<span class="font-bold" style="color:#e94839;">+${mttrHHMM(result.min - d.targetMin)} acima da meta do OLA de Resolução (&le; ${target})</span>`;
+        const scope = lastMttrLiquido.year ? `ano ${lastMttrLiquido.year} completo` : 'período filtrado';
 
         document.getElementById('mttr-metodo-title').textContent = `${title} · ${sevLabel}`;
-        document.getElementById('mttr-metodo-subtitle').textContent = `Resultado ${result.min != null ? result.hhmm : '—'} · ${d.n} incidentes no período filtrado`;
+        document.getElementById('mttr-metodo-subtitle').textContent = `Resultado ${result.min != null ? result.hhmm : '—'} · ${d.n} incidentes no ${scope}`;
         const chip = (key, label, count) => `<button type="button" data-mttr-filter="${key}" class="mttr-chip${mttrModalState.filter === key ? ' is-active' : ''}">${label} <b>${count}</b></button>`;
         let lastIn = null;
         const tableRows = shown.map(r => {
             const sep = (mttrModalState.filter === 'all' && lastIn === false && r.inBase)
-                ? `<tr><td colspan="6" class="mttr-sep">${sepLabel}</td></tr>` : '';
+                ? `<tr><td colspan="8" class="mttr-sep">Limite da média aparada: ${k} mais rápidos</td></tr>` : '';
             lastIn = r.inBase;
             const tag = r.inBase
                 ? `<span class="mttr-sit" style="background:rgba(27,71,42,0.1);color:#1B472A;">${escapeXml(r.situacao)}</span>`
-                : `<span class="mttr-sit" style="background:${method === 'pct' ? 'rgba(100,116,139,0.12);color:#475569' : 'rgba(233,72,57,0.1);color:#e94839'};">${escapeXml(r.situacao)}</span>`;
+                : `<span class="mttr-sit" style="background:rgba(233,72,57,0.1);color:#e94839;">${escapeXml(r.situacao)}</span>`;
             return `${sep}<tr class="hover:bg-slate-50 align-top${r.inBase ? '' : ' bg-slate-50/60'}">
                     <td class="px-3 py-2 text-slate-400 tabular-nums">${r.posicao}&ordf;</td>
+                    <td class="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">${escapeXml(r.id)}</td>
+                    <td class="px-3 py-2 font-bold tabular-nums text-slate-700">${r.ttr}</td>
                     <td class="px-3 py-2 whitespace-nowrap">${tag}</td>
                     <td class="px-3 py-2 whitespace-nowrap font-semibold" style="color:${r.dentroOla === 'Sim' ? '#1B472A' : '#e94839'};">${r.dentroOla}</td>
                     <td class="px-3 py-2 text-slate-600 whitespace-nowrap">${escapeXml(r.dataDefinicao || 'N/A')}</td>
-                    <td class="px-3 py-2 text-slate-600 min-w-[200px]"><span class="line-clamp-3" title="${escapeXml(r.descOfensor)}">${escapeXml(r.descOfensor)}</span></td>
-                    <td class="px-3 py-2 text-slate-600 min-w-[200px]"><span class="line-clamp-3" title="${escapeXml(r.solucao)}">${escapeXml(r.solucao)}</span></td>
+                    <td class="px-3 py-2 text-slate-600 min-w-[190px]"><span class="line-clamp-3" title="${escapeXml(r.descOfensor)}">${escapeXml(r.descOfensor)}</span></td>
+                    <td class="px-3 py-2 text-slate-600 min-w-[190px]"><span class="line-clamp-3" title="${escapeXml(r.solucao)}">${escapeXml(r.solucao)}</span></td>
                 </tr>`;
         }).join('');
 
@@ -2500,30 +2490,30 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="rounded-xl border border-slate-200 p-4">
                     <p class="text-[10px] font-black text-slate-400 uppercase tracking-[0.12em] mb-1.5">O que é</p>
-                    <p class="text-xs text-slate-600 leading-relaxed">${MTTR_METODO_TIPS[tipKey]}</p>
+                    <p class="text-xs text-slate-600 leading-relaxed">${MTTR_LIQ_TIPS[trimKey]}</p>
                 </div>
                 <div class="rounded-xl border border-slate-200 p-4 bg-slate-50/60">
-                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-[0.12em] mb-1.5">Como foi calculado neste período</p>
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-[0.12em] mb-1.5">Como foi calculado (${scope})</p>
                     <ol class="list-decimal pl-4 space-y-1 text-xs text-slate-600 leading-relaxed">${steps.map(s => `<li>${s}</li>`).join('')}</ol>
                     <p class="text-xs text-slate-600 mt-2">Resultado: <b class="text-slate-800">${result.min != null ? result.hhmm : '—'}</b> &mdash; ${verdict}</p>
                 </div>
             </div>
             <div class="flex flex-wrap items-center justify-between gap-2">
-                <div class="flex flex-wrap gap-2">${chip('all', 'Todos', rows.length)}${chip('in', inLabel, nIn)}${chip('out', outLabel, nOut)}</div>
+                <div class="flex flex-wrap gap-2">${chip('all', 'Todos', rows.length)}${chip('in', 'Considerados', nIn)}${chip('out', 'Desconsiderados', nOut)}</div>
                 <p class="text-[10px] text-slate-400">Ordenado do maior para o menor TTR &middot; Posição = ordem do mais rápido (1&ordf;) ao mais demorado</p>
             </div>
             <div class="overflow-auto rounded-xl border border-slate-200">
                 <table class="w-full text-xs border-collapse">
-                    <thead class="sticky top-0 bg-white"><tr>${['Posição', 'Situação no Cálculo', `Dentro do OLA (&le; ${target})`, 'Data de Abertura', 'Descrição do Ofensor', 'Solução Aplicada']
+                    <thead class="sticky top-0 bg-white"><tr>${['Posição', 'Incidente', 'TTR', 'Situação no Cálculo', `Dentro do OLA de Resolução (&le; ${target})`, 'Data de Abertura', 'Descrição do Ofensor', 'Solução Aplicada']
                         .map(h => `<th class="text-left font-bold text-slate-500 uppercase tracking-wider text-[10px] px-3 py-2 border-b border-slate-200 whitespace-nowrap">${h}</th>`).join('')}</tr></thead>
-                    <tbody class="divide-y divide-slate-100">${tableRows || '<tr><td colspan="6" class="text-center text-slate-300 italic py-6">Nenhum incidente nesta seleção.</td></tr>'}</tbody>
+                    <tbody class="divide-y divide-slate-100">${tableRows || '<tr><td colspan="8" class="text-center text-slate-300 italic py-6">Nenhum incidente nesta seleção.</td></tr>'}</tbody>
                 </table>
             </div>`;
 
         registerExport('mttr-metodo', shown, [
-            { key: 'posicao', label: 'Posição (mais rápido = 1)' }, { key: 'situacao', label: 'Situação no Cálculo' },
-            { key: 'dentroOla', label: `Dentro do OLA (≤ ${target})` }, { key: 'dataDefinicao', label: 'Data de Abertura' },
-            { key: 'descOfensor', label: 'Descrição do Ofensor' }, { key: 'solucao', label: 'Solução Aplicada' }
+            { key: 'posicao', label: 'Posição (mais rápido = 1)' }, { key: 'id', label: 'Incidente' }, { key: 'ttr', label: 'TTR' },
+            { key: 'situacao', label: 'Situação no Cálculo' }, { key: 'dentroOla', label: `Dentro do OLA de Resolução (≤ ${target})` },
+            { key: 'dataDefinicao', label: 'Data de Abertura' }, { key: 'descOfensor', label: 'Descrição do Ofensor' }, { key: 'solucao', label: 'Solução Aplicada' }
         ], `${title} - ${sevLabel}`);
         modal.classList.remove('hidden');
     }
@@ -2531,22 +2521,16 @@
     document.addEventListener('click', (ev) => {
         const t = ev.target && ev.target.closest ? ev.target : null;
         if (!t) return;
-        const pctBtn = t.closest('[data-mttr-pct]');
-        if (pctBtn) {
-            const [sev, pk] = pctBtn.getAttribute('data-mttr-pct').split(':');
-            if (mttrPctChoice[sev] && mttrPctChoice[sev] !== pk) { mttrPctChoice[sev] = pk; renderMttrMetodologias(); }
-            return;
-        }
         const trimBtn = t.closest('[data-mttr-trim]');
         if (trimBtn) {
             const [sev, key] = trimBtn.getAttribute('data-mttr-trim').split(':');
-            if (mttrTrimChoice[sev] && mttrTrimChoice[sev] !== key) { mttrTrimChoice[sev] = key; renderMttrMetodologias(); }
+            if (mttrTrimChoice[sev] && mttrTrimChoice[sev] !== key) { mttrTrimChoice[sev] = key; renderMttrLiquido(); }
             return;
         }
         const det = t.closest('[data-mttr-detail]');
-        if (det) { const [sev, method] = det.getAttribute('data-mttr-detail').split(':'); openMttrMetodoModal(sev, method); return; }
+        if (det) { openMttrMetodoModal(det.getAttribute('data-mttr-detail')); return; }
         const chip = t.closest('[data-mttr-filter]');
-        if (chip && mttrModalState) { openMttrMetodoModal(mttrModalState.sev, mttrModalState.method, chip.getAttribute('data-mttr-filter')); return; }
+        if (chip && mttrModalState) { openMttrMetodoModal(mttrModalState.sev, chip.getAttribute('data-mttr-filter')); return; }
         const modal = document.getElementById('mttr-metodo-modal');
         if (modal && (t === modal || t.closest('#btn-close-mttr-metodo'))) modal.classList.add('hidden');
     });
@@ -2564,8 +2548,8 @@
         setText('val-sev1-incidents', kpis.incidentesSev1);
         setText('val-mttr-sev1', kpis.mttrSev1);
 
-        // Comparativo de metodologias de MTTR (Corte Fixo x Média Aparada P95 x Percentil), por Severidade
-        renderMttrMetodologias(kpis.mttrMetodologias);
+        // MTTR Líquido (Média Aparada P95/P98), por Severidade
+        loadMttrLiquido(kpis);
 
         // Percentages calculation
         const total = kpis.incidentesTotal || 0;
@@ -3467,7 +3451,7 @@
         // se aplica a Sev0 (>= 70%) e Sev1 (>= 80%) individualmente, abaixo.
         return `
             <div class="flex items-center justify-between pt-3 mt-3 border-t border-slate-100">
-                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">OLA Geral (Sev0+Sev1)</span>
+                <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">OLA de Resolução Geral (Sev0+Sev1)</span>
                 <span class="text-xs font-extrabold text-slate-700">${olaGeralTotal > 0 ? olaGeralPct + '%' : '—'}</span>
             </div>
             <div class="grid grid-cols-2 gap-2 mt-2">
@@ -3475,13 +3459,13 @@
                     <p class="text-[9px] font-black text-natura-red-buriti uppercase tracking-wider">Sev0</p>
                     <p class="text-sm font-extrabold text-slate-800 leading-tight">${sev0Count} <span class="text-[9px] font-semibold text-slate-400">(${sev0Pct}%)</span></p>
                     <p class="text-[9px] text-slate-400">MTTR ${formatMinutesToHHMM(sev0MTTR)}</p>
-                    <div class="mt-1">${sev0Count > 0 ? `<span class="text-[9px] font-bold text-slate-600 mr-1">${sev0OLA}% OLA</span>${buildMetaBadge(sev0OLA >= 70)}` : '<span class="text-[9px] text-slate-300">—</span>'}</div>
+                    <div class="mt-1">${sev0Count > 0 ? `<span class="text-[9px] font-bold text-slate-600 mr-1">${sev0OLA}% OLA de Resolução</span>${buildMetaBadge(sev0OLA >= 70)}` : '<span class="text-[9px] text-slate-300">—</span>'}</div>
                 </div>
                 <div class="bg-natura-orange/5 rounded-lg p-2">
                     <p class="text-[9px] font-black text-natura-orange uppercase tracking-wider">Sev1</p>
                     <p class="text-sm font-extrabold text-slate-800 leading-tight">${sev1Count} <span class="text-[9px] font-semibold text-slate-400">(${sev1Pct}%)</span></p>
                     <p class="text-[9px] text-slate-400">MTTR ${formatMinutesToHHMM(sev1MTTR)}</p>
-                    <div class="mt-1">${sev1Count > 0 ? `<span class="text-[9px] font-bold text-slate-600 mr-1">${sev1OLA}% OLA</span>${buildMetaBadge(sev1OLA >= 80)}` : '<span class="text-[9px] text-slate-300">—</span>'}</div>
+                    <div class="mt-1">${sev1Count > 0 ? `<span class="text-[9px] font-bold text-slate-600 mr-1">${sev1OLA}% OLA de Resolução</span>${buildMetaBadge(sev1OLA >= 80)}` : '<span class="text-[9px] text-slate-300">—</span>'}</div>
                 </div>
             </div>
         `;
@@ -4028,50 +4012,11 @@
                 btn.classList.remove('text-slate-500', 'hover:text-natura-green-cerrado', 'hover:bg-white');
                 btn.classList.add('bg-white', 'text-natura-green-cerrado', 'shadow-sm', 'border', 'border-slate-200');
 
-                // Item 1: o botão de Incidentes com MTTR > 18h só aparece na Evolução Semanal
-                const mttrOutliersBtn = document.getElementById('btn-open-mttr-outliers');
-                if (mttrOutliersBtn) mttrOutliersBtn.classList.toggle('hidden', group !== 'weekly');
+                // Nota "segunda a domingo" só aparece na Evolução Semanal
                 const weekNote = document.getElementById('evolution-week-note');
                 if (weekNote) weekNote.classList.toggle('hidden', group !== 'weekly');
 
                 renderEvolutionByCurrentDimension();
-            });
-        });
-    }
-
-    // Item 1: lista de Incidentes com MTTR acima de 18h, calculada a partir de ALL_DATA.rawIncidents
-    // (já carregado para o período/filtro atual), sem round-trip ao servidor
-    function getMttrOutlierIncidents() {
-        const incidents = ALL_DATA.rawIncidents || [];
-        return sortByAberturaDesc(incidents.filter(inc => parseHHMMToMinutes(inc.ttr) > 1080));
-    }
-
-    function updateMttrOutliersButton() {
-        const btn = document.getElementById('btn-open-mttr-outliers');
-        const countEl = document.getElementById('val-mttr-outliers-count');
-        if (!btn) return;
-        const count = getMttrOutlierIncidents().length;
-        if (countEl) countEl.textContent = count;
-    }
-
-    function setupMttrOutliersButton() {
-        const btn = document.getElementById('btn-open-mttr-outliers');
-        if (!btn || btn.dataset.wired) return;
-        btn.dataset.wired = 'true';
-        btn.addEventListener('click', () => {
-            const items = getMttrOutlierIncidents();
-            openTabularIncidentsModal({
-                title: 'Incidentes com MTTR > 18h',
-                subtitle: `${items.length} incidente(s) com MTTR acima de 18 horas`,
-                items: items,
-                columns: [
-                    { key: 'id', label: 'Incidente' },
-                    { key: 'severidade', label: 'Severidade' },
-                    { key: 'ttr', label: 'TTR' },
-                    { key: 'dataDefinicao', label: 'Data de Abertura' },
-                    { key: 'tech', label: 'Tecnologia' },
-                    { key: 'origem', label: 'Origem da Detecção' }
-                ]
             });
         });
     }
