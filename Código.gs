@@ -1205,6 +1205,17 @@ function getFilteredData(year, selectedPeriodKey, startDate, endDate, selectedCa
     const end = endDate ? new Date(endDate) : null;
     if (end) end.setHours(23, 59, 59, 999);
 
+    // Retrospecto da Semana: a janela (sexta a quinta) pode cruzar a virada do ano; junta as linhas da aba do ano seguinte
+    if (selectedPeriodKey === 'Retrospecto' && start && end && end.getFullYear() !== Number(year)) {
+        const nextSheet = ss.getSheetByName(`MajorIncidentes${end.getFullYear()}`);
+        const nextRows = nextSheet ? nextSheet.getDataRange().getValues().slice(1) : [];
+        if (nextRows.length) {
+            const nextDur = nextSheet.getRange(2, COL_DURACAO + 1, nextRows.length, 1).getDisplayValues();
+            Array.prototype.push.apply(dataRows, nextRows);
+            Array.prototype.push.apply(durationDisplayValues, nextDur);
+        }
+    }
+
     const changeMap = buildChangeMap(ss);
     const priorityMap = buildPriorityMap(ss);
     const callerMap = buildCallerMap(ss);
@@ -2157,6 +2168,64 @@ function getComparisonData(year, periodKey, startDate, endDate) {
         const kpis = getPeriodKpisOnly(prev.year, prev.start, prev.end);
         if (!kpis) return { available: false };
         return { available: true, label: prev.label, kpis: kpis };
+    } catch (e) {
+        return { error: e.toString() };
+    }
+}
+
+/**
+ * Retrospecto da Semana (agenda executiva às sextas): a semana da agenda vai da sexta anterior até a quinta véspera
+ * da agenda. Devolve essa semana e as RETRO_MAX_WEEKS semanas anteriores no mesmo recorte (sexta a quinta), para o
+ * front comparar com a média das últimas 2, 4, 6 ou 8 semanas sem novas chamadas ao servidor.
+ * agendaIso: 'AAAA-MM-DD' da sexta da agenda.
+ */
+const RETRO_MAX_WEEKS = 8;
+function getRetrospectoSemana(agendaIso) {
+    try {
+        const p = String(agendaIso || '').split('-').map(Number);
+        if (p.length !== 3 || p.some(isNaN)) return { error: 'Data da agenda inválida.' };
+        const weeks = [];
+        for (let i = 0; i <= RETRO_MAX_WEEKS; i++) {
+            weeks.push({
+                start: new Date(p[0], p[1] - 1, p[2] - 7 - 7 * i, 0, 0, 0, 0),
+                end: new Date(p[0], p[1] - 1, p[2] - 1 - 7 * i, 23, 59, 59, 999),
+                total: 0, totalDur: 0, sev0: 0, sev1: 0, sev0Dur: 0, sev1Dur: 0, sev0DentroOLA: 0, sev1DentroOLA: 0,
+                sev0Min: [], sev1Min: []
+            });
+        }
+        const oldest = weeks[weeks.length - 1].start, newest = weeks[0].end;
+
+        const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+        for (let y = oldest.getFullYear(); y <= newest.getFullYear(); y++) {
+            const sheet = ss.getSheetByName(`MajorIncidentes${y}`);
+            if (!sheet) continue;
+            const rows = sheet.getDataRange().getValues().slice(1);
+            if (!rows.length) continue;
+            const durs = sheet.getRange(2, COL_DURACAO + 1, rows.length, 1).getDisplayValues();
+            rows.forEach((row, i) => {
+                if (String(row[COL_TECNOLOGIA]).trim().toUpperCase() !== 'SIM') return;
+                const openDate = row[COL_ABERTURA] instanceof Date ? row[COL_ABERTURA] : null;
+                if (!openDate || openDate < oldest || openDate > newest) return;
+                const w = weeks.find(wk => openDate >= wk.start && openDate <= wk.end);
+                if (!w) return;
+                const sev = String(row[COL_SEVERIDADE]).trim();
+                const durMin = parseDurationString(durs[i] ? durs[i][0] : '00:00');
+                w.total++; w.totalDur += durMin;
+                if (sev.startsWith('0')) {
+                    w.sev0++; w.sev0Dur += durMin; w.sev0Min.push(durMin);
+                    if (durMin <= OLA_TARGET_SEV0_MIN) w.sev0DentroOLA++;
+                } else if (sev.startsWith('1')) {
+                    w.sev1++; w.sev1Dur += durMin; w.sev1Min.push(durMin);
+                    if (durMin <= OLA_TARGET_SEV1_MIN) w.sev1DentroOLA++;
+                }
+            });
+        }
+
+        return {
+            agenda: agendaIso,
+            olaTargets: { sev0: OLA_TARGET_SEV0_MIN, sev1: OLA_TARGET_SEV1_MIN },
+            weeks: weeks.map(w => Object.assign({}, w, { start: w.start.getTime(), end: w.end.getTime() }))
+        };
     } catch (e) {
         return { error: e.toString() };
     }

@@ -230,6 +230,17 @@
     .mttr-sit { display: inline-block; font-size: 10px; font-weight: 700; border-radius: 999px; padding: 2px 8px; }
     .mttr-sep { padding: 6px 12px; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #fff; background: #334155; }
 
+    /* Retrospecto da Semana */
+    .retro-seg { display: inline-flex; border: 1px solid #e2e8f0; border-radius: 999px; overflow: hidden; background: #fff; }
+    .retro-seg button { font-size: 12px; font-weight: 700; color: #475569; padding: 5px 14px; border-left: 1px solid #e2e8f0; }
+    .retro-seg button:first-child { border-left: 0; }
+    .retro-seg button.is-active { background: var(--natura-green-cerrado); color: #fff; }
+    .retro-status { display: inline-block; font-size: 10px; font-weight: 800; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+    .retro-status.is-good { background: rgba(27, 71, 42, 0.1); color: #1B472A; }
+    .retro-status.is-bad { background: rgba(233, 72, 57, 0.1); color: #e94839; }
+    .retro-status.is-flat { background: #f1f5f9; color: #475569; }
+    .retro-status.is-na { background: #f8fafc; color: #94a3b8; }
+
     /* Navegação por Seção (Header): abas de scroll-spy, sem barra de rolagem visível no mobile */
     .no-scrollbar::-webkit-scrollbar {
         display: none;

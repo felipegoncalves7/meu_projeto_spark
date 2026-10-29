@@ -172,6 +172,7 @@
                                 <!-- Botões injetados via JS -->
                             </div>
                         </div>
+                        <span id="retro-filter-hint" class="hidden text-[11px] font-semibold text-natura-green-cerrado bg-natura-green-cerrado/5 border border-natura-green-cerrado/15 rounded-full px-3 py-1"></span>
                     </div>
 
                     <!-- Linha 2: Filtros Específicos de Mês / Trimestre -->
@@ -241,8 +242,9 @@
                             <option value="none">Nenhuma comparação</option>
                             <option value="previous">Período anterior equivalente</option>
                         </select>
-                        <span class="text-[10px] text-slate-400 italic">Mês → mês anterior · Trimestre → trimestre
+                        <span id="comparison-default-note" class="text-[10px] text-slate-400 italic">Mês → mês anterior · Trimestre → trimestre
                             anterior · Demais períodos → mesmo período no ano anterior.</span>
+                        <span id="retro-cmp-note" class="hidden text-[10px] text-natura-green-cerrado font-semibold">No Retrospecto da Semana, os cards comparam com a média das semanas anteriores (escolha 2, 4, 6 ou 8 no painel do Retrospecto).</span>
                     </div>
 
                     <!-- Linha 4: Filtros por Tecnologia Impactada / Ofensor (multi-seleção) -->
@@ -304,6 +306,73 @@
                     <span id="filter-indicator-visao-geral" class="filter-indicator hidden"></span>
                     <span class="text-xs text-slate-400 font-medium">Todos os KPIs de Incidentes, Mudanças e
                         Problemas, consolidados</span>
+                </div>
+
+<!-- Retrospecto da Semana (agenda executiva de sexta): semana sexta→quinta x média das N semanas anteriores; render em dashboard.js -->
+                <div id="retro-panel" class="hidden rounded-3xl border border-natura-green-cerrado/20 bg-white p-4 sm:p-6 space-y-5">
+                    <div class="flex flex-wrap items-start justify-between gap-4">
+                        <div class="min-w-0">
+                            <p class="text-[11px] font-black text-natura-green-cerrado uppercase tracking-[0.15em]">Retrospecto da Semana</p>
+                            <p id="retro-period" class="text-sm font-bold text-slate-800 mt-1">&nbsp;</p>
+                            <p id="retro-period-cmp" class="text-xs text-slate-500 mt-0.5">&nbsp;</p>
+                        </div>
+                        <div class="flex flex-wrap items-end gap-4">
+                            <label class="flex flex-col gap-1">
+                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Agenda (sexta)</span>
+                                <select id="retro-agenda-select"
+                                    class="text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-1 focus:ring-natura-orange focus:border-natura-orange outline-none cursor-pointer"></select>
+                            </label>
+                            <div class="flex flex-col gap-1">
+                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Comparar com as semanas anteriores</span>
+                                <div id="retro-weeks-toggle" class="retro-seg" role="group" aria-label="Quantidade de semanas anteriores na comparação">
+                                    <button type="button" data-retro-weeks="2">2</button><button type="button" data-retro-weeks="4" class="is-active">4</button><button type="button" data-retro-weeks="6">6</button><button type="button" data-retro-weeks="8">8</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <p id="retro-headline" class="text-sm text-slate-700 leading-relaxed rounded-xl bg-natura-green-cerrado/[0.05] border border-natura-green-cerrado/10 px-4 py-3">Carregando&hellip;</p>
+                    <div class="grid grid-cols-1 xl:grid-cols-5 gap-5">
+                        <div class="xl:col-span-3 overflow-x-auto">
+                            <table class="w-full text-xs border-collapse">
+                                <thead>
+                                    <tr class="text-[10px] text-slate-400 uppercase tracking-wider">
+                                        <th class="text-left font-bold px-2 py-2 border-b border-slate-200">Indicador</th>
+                                        <th class="text-right font-bold px-2 py-2 border-b border-slate-200">Semana da agenda</th>
+                                        <th id="retro-th-avg" class="text-right font-bold px-2 py-2 border-b border-slate-200">Média 4 sem. anteriores</th>
+                                        <th class="text-right font-bold px-2 py-2 border-b border-slate-200">Variação</th>
+                                        <th class="text-left font-bold px-2 py-2 border-b border-slate-200">Leitura</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="retro-table-body" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                            <p class="text-[10px] text-slate-400 mt-2 leading-snug">Volume: média semanal das semanas anteriores. % dentro do OLA e MTTR: calculados sobre todos os incidentes dessas semanas.
+                                <b>Estável</b> = variação de até 10% (volume e MTTR, mínimo de 1 incidente) ou de até 5 pp (% dentro do OLA).</p>
+                        </div>
+                        <div class="xl:col-span-2">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Semana a semana (sexta a quinta)</p>
+                            <div class="relative h-64"><canvas id="retro-trend-chart" aria-label="Volume de incidentes Sev 0 e Sev 1 e % dentro do OLA por semana"></canvas></div>
+                        </div>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Incidentes da semana da agenda</p>
+                        <div class="overflow-x-auto rounded-xl border border-slate-200">
+                            <table class="w-full text-xs border-collapse">
+                                <thead>
+                                    <tr class="text-[10px] text-slate-500 uppercase tracking-wider bg-slate-50">
+                                        <th class="text-left font-bold px-3 py-2">Incidente</th>
+                                        <th class="text-left font-bold px-3 py-2">Sev</th>
+                                        <th class="text-left font-bold px-3 py-2">Data de Abertura</th>
+                                        <th class="text-left font-bold px-3 py-2">TTR</th>
+                                        <th class="text-left font-bold px-3 py-2">OLA</th>
+                                        <th class="text-left font-bold px-3 py-2">Tecnologia</th>
+                                        <th class="text-left font-bold px-3 py-2">Descrição do Ofensor</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="retro-incidents-body" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-slate-400">As seções <b>Qualidade de RCA &mdash; Deploy &amp; Tradicional</b> e <b>Problemas &amp; Qualidade</b> não seguem este filtro: continuam mostrando o ano selecionado.</p>
                 </div>
 
                 <!-- Bloco: Incidentes -->
@@ -401,7 +470,7 @@
                                         <span class="tooltip-bubble">Incidentes com Severidade 0 (crítica): maior
                                             impacto ao negócio. MTTR medido pela Definição do Incidente (NCC) até o
                                             Fim do Impacto — não o Open/Resolved time do ServiceNow. Meta de MTTR
-                                            bruto: até 3h.</span>
+                                            bruto: até 2h.</span>
                                     </span>
                                     <div class="p-1.5 rounded-lg" style="background-color: rgba(233,72,57,0.1);"><svg
                                             xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
@@ -424,7 +493,7 @@
                                     <p class="text-xs text-slate-500 mb-1">MTTR Bruto</p>
                                     <p id="val-mttr-sev0" class="text-xl font-bold text-slate-700">00:00</p>
                                     <span id="delta-badge-mttr-sev0" class="hidden inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
-                                    <p class="text-[9px] text-slate-400 mt-0.5">Meta: <span class="font-bold" style="color:#e94839;">&le; 03:00</span></p>
+                                    <p class="text-[9px] text-slate-400 mt-0.5">Meta: <span class="font-bold" style="color:#e94839;">&le; 02:00</span></p>
                                 </div>
                             </div>
                         </div>
@@ -474,7 +543,7 @@
                                         </svg>
                                         <span class="tooltip-bubble">Incidentes com Severidade 1 (alto impacto). MTTR
                                             medido pela Definição do Incidente (NCC) até o Fim do Impacto — não o
-                                            Open/Resolved time do ServiceNow. Meta de MTTR bruto: até 7h.</span>
+                                            Open/Resolved time do ServiceNow. Meta de MTTR bruto: até 6h.</span>
                                     </span>
                                     <div class="p-1.5 rounded-lg bg-natura-orange/10"><svg
                                             xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-natura-orange"
@@ -497,7 +566,7 @@
                                     <p class="text-xs text-slate-500 mb-1">MTTR Bruto</p>
                                     <p id="val-mttr-sev1" class="text-xl font-bold text-slate-700">00:00</p>
                                     <span id="delta-badge-mttr-sev1" class="hidden inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
-                                    <p class="text-[9px] text-slate-400 mt-0.5">Meta: <span class="font-bold text-natura-orange">&le; 07:00</span></p>
+                                    <p class="text-[9px] text-slate-400 mt-0.5">Meta: <span class="font-bold text-natura-orange">&le; 06:00</span></p>
                                 </div>
                             </div>
                         </div>
@@ -1254,6 +1323,7 @@
                     <div class="flex items-center gap-2 mb-3">
                         <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Qualidade de RCA — Deploy &amp; Tradicional</h2>
                     </div>
+                    <p id="retro-note-qm" class="retro-ignore-note hidden text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mb-3">Esta seção não segue o filtro <b>Retrospecto da Semana</b>: mostra o ano <span class="retro-ignore-year"></span> completo.</p>
                     <div id="qm-notice-mudancas" class="hidden bg-natura-yellow-balsamo/10 border border-natura-yellow-balsamo/40 rounded-2xl p-6 text-center">
                         <p class="text-sm font-bold text-slate-600">Dados em apuração para este ano</p>
                         <p class="text-xs text-slate-400 mt-1">A Qualidade de RCA ainda não foi registrada para os Incidentes deste ano na planilha.</p>
@@ -1368,6 +1438,8 @@
                     <h2 class="text-xl font-black text-natura-green-amazonia">Problemas &amp; Qualidade</h2>
                     <span class="text-xs text-slate-400 font-medium">Detalhe de Major Problems e da Qualidade de RCA</span>
                 </div>
+                <p id="retro-note-problemas" class="retro-ignore-note hidden text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mb-3">Esta seção não segue o filtro <b>Retrospecto da Semana</b>: mostra o ano <span class="retro-ignore-year"></span> completo.</p>
+
 
                 <!-- Bloco: Problemas -->
                 <div class="rounded-3xl border border-natura-blue-profundo/15 bg-natura-blue-profundo/[0.03] p-4 sm:p-6 space-y-5">
@@ -1902,7 +1974,7 @@
                                         aba MajorIncidentes{ano}, segmentados por Severidade (coluna I). MTTR = tempo
                                         médio de restauração (coluna E), medido pela Definição do Incidente (NCC) até
                                         o Fim do Impacto — não o Open/Resolved time do ServiceNow —, no formato
-                                        HH:MM. Meta de MTTR bruto: Sev0 ≤ 03:00, Sev1 ≤ 07:00.</dd>
+                                        HH:MM. Meta de MTTR bruto: Sev0 ≤ 02:00, Sev1 ≤ 06:00.</dd>
                                 </div>
                                 <div>
                                     <dt class="font-bold text-slate-700">MTTR s/ Outliers e % de Outliers (Sev0 /

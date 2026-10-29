@@ -295,6 +295,7 @@
         setupSpecificFilters();
         setupCustomRangeFilter();
         setupComparisonFilter();
+        setupRetrospectoControls();
         setupTechOfensorFilterDropdowns();
         setupEvolutionToggle();
         setupEvolutionDimensionSelect();
@@ -310,6 +311,10 @@
     function loadFilteredData() {
         logDebug("Loading Tab 1 Data...");
         showLoader();
+        syncRetroUi();
+        // Retrospecto da Semana: a janela é independente do Ano de Referência (lê a aba do ano em que a semana começa)
+        const dataYear = CURRENT_FILTERS.periodKey === 'Retrospecto' && CURRENT_FILTERS.startDate
+            ? new Date(CURRENT_FILTERS.startDate).getFullYear() : CURRENT_FILTERS.year;
         google.script.run
             .withSuccessHandler(renderTab1Data)
             .withFailureHandler((e) => {
@@ -317,7 +322,7 @@
                 handleError(e);
             })
             .getFilteredData(
-                CURRENT_FILTERS.year,
+                dataYear,
                 CURRENT_FILTERS.periodKey,
                 CURRENT_FILTERS.startDate,
                 CURRENT_FILTERS.endDate,
@@ -858,6 +863,8 @@
         ALL_DATA.rawIncidents = data.rawIncidents || [];
         renderJornadaTechOrigemAnalysis();
         updateMttrOutliersButton();
+        renderRetroIncidents();
+        renderRetroComparison();
         ALL_DATA.evolutionData = {
             monthly: { metrics: data.monthlyMetrics, mttr: data.mttrPorMesEmHoras, title: "Evolução Mensal" },
             weekly: { metrics: data.weeklyMetrics, mttr: data.mttrSemanalEmHoras, title: "Evolução Semanal" },
@@ -966,6 +973,16 @@
             if (isDefault) defaultContainer.appendChild(btn);
             else dropdownContainer.appendChild(btn);
         });
+
+        // Retrospecto da Semana: ao lado do Período Completo (agenda executiva de sexta)
+        const retroBtn = document.createElement('button');
+        retroBtn.type = 'button';
+        retroBtn.dataset.key = 'Retrospecto';
+        retroBtn.textContent = 'Retrospecto da Semana';
+        retroBtn.title = 'Semana da agenda executiva: da sexta anterior até a quinta véspera da agenda, comparada à média das semanas anteriores';
+        retroBtn.className = getBtnClass(CURRENT_FILTERS.periodKey === 'Retrospecto');
+        retroBtn.onclick = () => activateRetrospecto();
+        defaultContainer.appendChild(retroBtn);
 
         setupStrategicDropdownToggle();
         // Init logic for active filters text
@@ -1316,7 +1333,7 @@
         if (!el) return;
         opts = opts || {};
 
-        if (previous === null || previous === undefined || current === null || current === undefined || CURRENT_FILTERS.comparisonMode !== 'previous') {
+        if (previous === null || previous === undefined || current === null || current === undefined || (CURRENT_FILTERS.comparisonMode !== 'previous' && !opts.force)) {
             el.classList.add('hidden');
             return;
         }
@@ -1349,7 +1366,7 @@
             arrow = diff === 0 ? '≈' : (diff > 0 ? '▲' : '▼');
             isGood = diff <= 0;
             const pctChange = previous !== 0 ? (diff / previous) * 100 : (current > 0 ? 100 : 0);
-            valueText = `${diff > 0 ? '+' : ''}${diff} (${pctChange > 0 ? '+' : ''}${pctChange.toFixed(1)}%)`;
+            valueText = `${diff > 0 ? '+' : ''}${Number.isInteger(diff) ? diff : diff.toFixed(1)} (${pctChange > 0 ? '+' : ''}${pctChange.toFixed(1)}%)`;
         }
 
         el.textContent = `${arrow} ${valueText} vs ${COMPARISON_LABEL || 'período anterior'}`;
@@ -1360,11 +1377,313 @@
             : ['bg-natura-red-buriti/10', 'text-natura-red-buriti']));
     }
 
+    // --- Retrospecto da Semana (agenda executiva às sextas) ---
+    // Semana da agenda = sexta anterior até a quinta véspera da agenda. Comparação com a média das N semanas anteriores
+    // (2, 4, 6 ou 8), no mesmo recorte sexta→quinta. Os dados das semanas vêm de getRetrospectoSemana (uma chamada só).
+    const RETRO = { agendaIso: null, weeks: 4, data: null, chart: null };
+    const RETRO_WEEKDAY = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+    const retroPad = n => String(n).padStart(2, '0');
+    const retroIso = d => `${d.getFullYear()}-${retroPad(d.getMonth() + 1)}-${retroPad(d.getDate())}`;
+    const retroDM = d => `${retroPad(d.getDate())}/${retroPad(d.getMonth() + 1)}`;
+    const retroDMY = d => `${retroDM(d)}/${d.getFullYear()}`;
+    const retroFromIso = iso => { const p = iso.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
+    const retroNum = (v, dec) => (v == null ? '—' : (Math.round(v * Math.pow(10, dec)) / Math.pow(10, dec)).toFixed(dec).replace('.', ','));
+
+    // Próxima agenda: a própria sexta, se hoje for sexta; senão, a sexta seguinte
+    function retroUpcomingFriday(today) {
+        const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7));
+        return d;
+    }
+    function retroWindow(agendaIso) {
+        const a = retroFromIso(agendaIso);
+        return {
+            start: new Date(a.getFullYear(), a.getMonth(), a.getDate() - 7, 0, 0, 0),
+            end: new Date(a.getFullYear(), a.getMonth(), a.getDate() - 1, 23, 59, 59)
+        };
+    }
+
+    function setupRetrospectoControls() {
+        const select = document.getElementById('retro-agenda-select');
+        if (select && !select.dataset.wired) {
+            select.dataset.wired = 'true';
+            const upcoming = retroUpcomingFriday(new Date());
+            const isToday = retroIso(upcoming) === retroIso(new Date());
+            const opts = [];
+            for (let i = 0; i <= 12; i++) {
+                const f = new Date(upcoming.getFullYear(), upcoming.getMonth(), upcoming.getDate() - 7 * i);
+                const tag = i === 0 ? (isToday ? ' · hoje' : ' · próxima') : '';
+                opts.push(`<option value="${retroIso(f)}">sex ${retroDMY(f)}${tag}</option>`);
+            }
+            select.innerHTML = opts.join('');
+            select.addEventListener('change', () => activateRetrospecto(select.value));
+        }
+        const toggle = document.getElementById('retro-weeks-toggle');
+        if (toggle && !toggle.dataset.wired) {
+            toggle.dataset.wired = 'true';
+            toggle.addEventListener('click', (ev) => {
+                const btn = ev.target.closest('[data-retro-weeks]');
+                if (!btn) return;
+                RETRO.weeks = parseInt(btn.getAttribute('data-retro-weeks'), 10);
+                toggle.querySelectorAll('[data-retro-weeks]').forEach(b => b.classList.toggle('is-active', b === btn));
+                renderRetroComparison();
+                updateComparisonDisplay();
+            });
+        }
+    }
+
+    function activateRetrospecto(agendaIso) {
+        RETRO.agendaIso = agendaIso || RETRO.agendaIso || retroIso(retroUpcomingFriday(new Date()));
+        const select = document.getElementById('retro-agenda-select');
+        if (select) select.value = RETRO.agendaIso;
+        const w = retroWindow(RETRO.agendaIso);
+        CURRENT_FILTERS.periodKey = 'Retrospecto';
+        CURRENT_FILTERS.startDate = w.start.getTime();
+        CURRENT_FILTERS.endDate = w.end.getTime();
+        LABEL_MAP['Retrospecto'] = `Retrospecto da Semana (sex ${retroDM(w.start)} a qui ${retroDMY(w.end)})`;
+        RETRO.data = null;
+        resetSpecificFilterSelects();
+        updateAllPeriodButtonsUI('Retrospecto');
+        refreshActiveFilterText();
+        closeStrategicDropdown();
+        loadFilteredData();
+        loadRetrospecto();
+    }
+
+    function loadRetrospecto() {
+        const agenda = RETRO.agendaIso;
+        google.script.run
+            .withSuccessHandler((data) => {
+                if (agenda !== RETRO.agendaIso) return; // usuário trocou a agenda antes da resposta
+                if (!data || data.error) { logDebug('getRetrospectoSemana: ' + (data ? data.error : 'sem resposta')); return; }
+                RETRO.data = data;
+                renderRetroComparison();
+                updateComparisonDisplay();
+            })
+            .withFailureHandler((e) => logDebug('getRetrospectoSemana FAILED: ' + e.message))
+            .getRetrospectoSemana(agenda);
+    }
+
+    // Mostra/esconde o painel, o informativo do período no filtro e os avisos das seções que não seguem o Retrospecto
+    function syncRetroUi() {
+        const on = CURRENT_FILTERS.periodKey === 'Retrospecto';
+        const toggle = (id, show) => { const el = document.getElementById(id); if (el) el.classList.toggle('hidden', !show); };
+        toggle('retro-panel', on);
+        toggle('retro-cmp-note', on);
+        toggle('comparison-default-note', !on);
+        const cmpSelect = document.getElementById('comparison-select');
+        if (cmpSelect) cmpSelect.disabled = on;
+        document.querySelectorAll('.retro-ignore-note').forEach(el => el.classList.toggle('hidden', !on));
+        document.querySelectorAll('.retro-ignore-year').forEach(el => { el.textContent = CURRENT_FILTERS.year || ''; });
+        const hint = document.getElementById('retro-filter-hint');
+        if (hint) {
+            hint.classList.toggle('hidden', !on);
+            if (on) {
+                const w = retroWindow(RETRO.agendaIso);
+                hint.textContent = `Agenda de sex ${retroDMY(retroFromIso(RETRO.agendaIso))} · incidentes de sex ${retroDM(w.start)} a qui ${retroDMY(w.end)}`;
+            }
+        }
+        if (!on && RETRO.chart) { RETRO.chart.destroy(); RETRO.chart = null; }
+    }
+
+    // Soma das semanas anteriores escolhidas (N) — volume vira média semanal; % OLA e MTTR, cálculo sobre o conjunto
+    function retroAggregate() {
+        if (!RETRO.data || !RETRO.data.weeks) return null;
+        const weeks = RETRO.data.weeks;
+        const prev = weeks.slice(1, RETRO.weeks + 1);
+        const sum = k => prev.reduce((acc, w) => acc + (w[k] || 0), 0);
+        const n = prev.length || 1;
+        const pct = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : null);
+        const avgMin = (dur, cnt) => (cnt > 0 ? dur / cnt : null);
+        const cur = weeks[0];
+        const build = (w, isAvg) => {
+            const g = k => (isAvg ? sum(k) : (w[k] || 0));
+            const d = isAvg ? n : 1;
+            const sev0 = g('sev0'), sev1 = g('sev1'), in0 = g('sev0DentroOLA'), in1 = g('sev1DentroOLA');
+            return {
+                total: g('total') / d, sev0: sev0 / d, sev1: sev1 / d,
+                foraOla: ((sev0 - in0) + (sev1 - in1)) / d,
+                olaSev0: pct(in0, sev0), olaSev1: pct(in1, sev1), ola: pct(in0 + in1, sev0 + sev1),
+                mttrTotal: avgMin(g('totalDur'), g('total')), mttrSev0: avgMin(g('sev0Dur'), sev0), mttrSev1: avgMin(g('sev1Dur'), sev1),
+                dentroOla: in0 + in1, base: sev0 + sev1
+            };
+        };
+        return { cur: build(cur, false), avg: build(null, true), prev, weeks, n };
+    }
+
+    // Melhor / Estável / Pior com faixa de tolerância (evita discutir ruído de semanas com poucos incidentes)
+    function retroStatus(kind, cur, avg) {
+        if (cur == null || avg == null) return { label: 'Sem base', cls: 'is-na' };
+        const diff = cur - avg;
+        let tol;
+        if (kind === 'pct') tol = 5;
+        else if (kind === 'time') tol = Math.max(5, Math.abs(avg) * 0.10);
+        else tol = Math.max(1, Math.abs(avg) * 0.10);
+        if (Math.abs(diff) <= tol) return { label: '≈ Estável', cls: 'is-flat' };
+        const better = kind === 'pct' ? diff > 0 : diff < 0;
+        return better ? { label: '▼ Melhor', cls: 'is-good' } : { label: '▲ Pior', cls: 'is-bad' };
+    }
+    function retroDiffText(kind, cur, avg) {
+        if (cur == null || avg == null) return '—';
+        const diff = cur - avg;
+        const sign = diff > 0 ? '+' : (diff < 0 ? '−' : '');
+        if (kind === 'pct') return `${sign}${retroNum(Math.abs(diff), 1)} pp`;
+        const rel = avg !== 0 ? ` (${sign}${retroNum(Math.abs(diff / avg) * 100, 0)}%)` : '';
+        if (kind === 'time') return `${sign}${mttrHHMM(Math.abs(diff))}${rel}`;
+        return `${sign}${retroNum(Math.abs(diff), 1)}${rel}`;
+    }
+
+    function renderRetroComparison() {
+        if (CURRENT_FILTERS.periodKey !== 'Retrospecto') return;
+        const w = retroWindow(RETRO.agendaIso);
+        const setHtml = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+        const today = new Date();
+        const partial = today <= w.end;
+        setHtml('retro-period', `Agenda de sexta, ${retroDMY(retroFromIso(RETRO.agendaIso))} &middot; incidentes de <span class="whitespace-nowrap">sex ${retroDM(w.start)}</span> a <span class="whitespace-nowrap">qui ${retroDMY(w.end)}</span>`
+            + (partial ? ` <span class="ml-1 text-[11px] font-bold text-natura-orange">&middot; semana em andamento: dados até hoje (${RETRO_WEEKDAY[today.getDay()]} ${retroDM(today)})</span>` : ''));
+        const th = document.getElementById('retro-th-avg');
+        if (th) th.textContent = `Média ${RETRO.weeks} sem. anteriores`;
+
+        const agg = retroAggregate();
+        if (!agg) {
+            setHtml('retro-period-cmp', 'Carregando as semanas anteriores&hellip;');
+            setHtml('retro-headline', 'Carregando&hellip;');
+            setHtml('retro-table-body', '');
+            return;
+        }
+        const oldest = new Date(agg.prev[agg.prev.length - 1].start), latest = new Date(agg.prev[0].end);
+        setHtml('retro-period-cmp', `Comparação: média das <b>${RETRO.weeks} semanas anteriores</b>, de sex ${retroDMY(oldest)} a qui ${retroDMY(latest)} (sempre de sexta a quinta).`);
+
+        const c = agg.cur, a = agg.avg;
+        const pctTxt = v => (v == null ? '—' : `${retroNum(v, 1)}%`);
+        const rows = [
+            { label: 'Incidentes críticos (Sev 0 + Sev 1)', kind: 'count', cur: c.total, avg: a.total, fmt: v => retroNum(v, Number.isInteger(v) ? 0 : 1) },
+            { label: 'Sev 0', kind: 'count', cur: c.sev0, avg: a.sev0, fmt: v => retroNum(v, Number.isInteger(v) ? 0 : 1), indent: true },
+            { label: 'Sev 1', kind: 'count', cur: c.sev1, avg: a.sev1, fmt: v => retroNum(v, Number.isInteger(v) ? 0 : 1), indent: true },
+            { label: 'Fora do OLA', kind: 'count', cur: c.foraOla, avg: a.foraOla, fmt: v => retroNum(v, Number.isInteger(v) ? 0 : 1) },
+            { label: '% dentro do OLA · Sev 0 (≤ 02:00)', kind: 'pct', cur: c.olaSev0, avg: a.olaSev0, fmt: pctTxt },
+            { label: '% dentro do OLA · Sev 1 (≤ 06:00)', kind: 'pct', cur: c.olaSev1, avg: a.olaSev1, fmt: pctTxt },
+            { label: 'MTTR Bruto · Sev 0 (meta ≤ 02:00)', kind: 'time', cur: c.mttrSev0, avg: a.mttrSev0, fmt: v => (v == null ? '—' : mttrHHMM(v)) },
+            { label: 'MTTR Bruto · Sev 1 (meta ≤ 06:00)', kind: 'time', cur: c.mttrSev1, avg: a.mttrSev1, fmt: v => (v == null ? '—' : mttrHHMM(v)) }
+        ];
+        const tally = { good: 0, flat: 0, bad: 0 };
+        setHtml('retro-table-body', rows.map(r => {
+            const st = retroStatus(r.kind, r.cur, r.avg);
+            if (st.cls === 'is-good') tally.good++; else if (st.cls === 'is-flat') tally.flat++; else if (st.cls === 'is-bad') tally.bad++;
+            return `<tr>
+                    <td class="px-2 py-2 ${r.indent ? 'pl-6 text-slate-500' : 'font-semibold text-slate-700'}">${r.label}</td>
+                    <td class="px-2 py-2 text-right font-bold tabular-nums text-slate-800">${r.fmt(r.cur)}</td>
+                    <td class="px-2 py-2 text-right tabular-nums text-slate-500">${r.fmt(r.avg)}</td>
+                    <td class="px-2 py-2 text-right tabular-nums text-slate-500 whitespace-nowrap">${retroDiffText(r.kind, r.cur, r.avg)}</td>
+                    <td class="px-2 py-2"><span class="retro-status ${st.cls}">${st.label}</span></td>
+                </tr>`;
+        }).join(''));
+
+        const filtersOn = (CURRENT_FILTERS.techFilter || []).length || (CURRENT_FILTERS.ofensorFilter || []).length;
+        setHtml('retro-headline',
+            `<b>Semana da agenda:</b> ${c.total} ${c.total === 1 ? 'incidente crítico' : 'incidentes críticos'} (${c.sev0} Sev 0 e ${c.sev1} Sev 1), `
+            + `${c.dentroOla} de ${c.base} dentro do OLA${c.ola != null ? ` (${pctTxt(c.ola)})` : ''}. `
+            + `<b>Média das ${RETRO.weeks} semanas anteriores:</b> ${retroNum(a.total, 1)} incidentes por semana${a.ola != null ? `, ${pctTxt(a.ola)} dentro do OLA` : ''}. `
+            + `<span><b>Leitura:</b> ${tally.good} ${tally.good === 1 ? 'indicador melhor' : 'indicadores melhores'}, ${tally.flat} ${tally.flat === 1 ? 'estável' : 'estáveis'}, ${tally.bad} ${tally.bad === 1 ? 'pior' : 'piores'}.</span>`
+            + (filtersOn ? '<br><span class="text-[11px] text-slate-500">O comparativo do Retrospecto considera todos os incidentes (não aplica os filtros de Tecnologia/Ofensor).</span>' : ''));
+
+        renderRetroTrendChart(agg);
+    }
+
+    function renderRetroTrendChart(agg) {
+        const canvas = document.getElementById('retro-trend-chart');
+        if (!canvas || typeof Chart === 'undefined') return;
+        const weeks = agg.weeks.slice(0, RETRO.weeks + 1).reverse(); // mais antiga → semana da agenda
+        const last = weeks.length - 1;
+        const labels = weeks.map((w, i) => (i === last ? ['Semana da agenda', `${retroDM(new Date(w.start))}–${retroDM(new Date(w.end))}`] : `${retroDM(new Date(w.start))}–${retroDM(new Date(w.end))}`));
+        const alpha = (hex, i) => (i === last ? hex : hex + '66');
+        const olaPct = weeks.map(w => { const b = w.sev0 + w.sev1; return b > 0 ? Math.round(((w.sev0DentroOLA + w.sev1DentroOLA) / b) * 1000) / 10 : null; });
+        if (RETRO.chart) RETRO.chart.destroy();
+        RETRO.chart = new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    { type: 'bar', label: 'Sev 0', data: weeks.map(w => w.sev0), backgroundColor: weeks.map((w, i) => alpha('#e94839', i)), stack: 'v', yAxisID: 'y', order: 2,
+                        datalabels: { color: '#fff', font: { weight: 'bold', size: 10 }, display: ctx => ctx.dataset.data[ctx.dataIndex] > 0 } },
+                    { type: 'bar', label: 'Sev 1', data: weeks.map(w => w.sev1), backgroundColor: weeks.map((w, i) => alpha('#FF6600', i)), stack: 'v', yAxisID: 'y', order: 2,
+                        datalabels: { color: '#fff', font: { weight: 'bold', size: 10 }, display: ctx => ctx.dataset.data[ctx.dataIndex] > 0 } },
+                    { type: 'line', label: '% dentro do OLA', data: olaPct, borderColor: '#1B472A', backgroundColor: '#1B472A', pointRadius: 3, tension: 0.25, yAxisID: 'y1', order: 1, spanGaps: true,
+                        datalabels: { align: 'top', anchor: 'end', color: '#1B472A', font: { weight: 'bold', size: 9 }, formatter: v => (v == null ? '' : `${Math.round(v)}%`) } }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
+                    tooltip: { callbacks: { label: ctx => (ctx.dataset.yAxisID === 'y1' ? `% dentro do OLA: ${ctx.parsed.y}%` : `${ctx.dataset.label}: ${ctx.parsed.y}`) } }
+                },
+                scales: {
+                    x: { stacked: true, grid: { display: false }, ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: false } },
+                    y: { stacked: true, beginAtZero: true, ticks: { precision: 0, font: { size: 9 } }, title: { display: true, text: 'Incidentes', font: { size: 9 } } },
+                    y1: { position: 'right', min: 0, max: 110, grid: { display: false }, ticks: { font: { size: 9 }, callback: v => (v <= 100 ? `${v}%` : '') } }
+                }
+            }
+        });
+    }
+
+    // Lista nominal dos incidentes da semana da agenda (vem do getFilteredData do mesmo recorte)
+    function renderRetroIncidents() {
+        const body = document.getElementById('retro-incidents-body');
+        if (!body || CURRENT_FILTERS.periodKey !== 'Retrospecto') return;
+        const items = sortByAberturaDesc(ALL_DATA.rawIncidents || []);
+        if (!items.length) {
+            body.innerHTML = '<tr><td colspan="7" class="text-center text-slate-400 italic py-5">Nenhum incidente crítico na semana da agenda.</td></tr>';
+            return;
+        }
+        body.innerHTML = items.map(inc => {
+            const sev = String(inc.severidade || '').trim().charAt(0);
+            const target = sev === '0' ? 120 : (sev === '1' ? 360 : null);
+            const min = parseHHMMToMinutes(inc.ttr);
+            const ok = target != null && min <= target;
+            const ola = target == null ? '—' : (ok
+                ? '<span class="retro-status is-good">Dentro</span>'
+                : `<span class="retro-status is-bad">Fora (+${mttrHHMM(min - target)})</span>`);
+            return `<tr class="hover:bg-slate-50 align-top">
+                    <td class="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">${escapeXml(inc.id)}</td>
+                    <td class="px-3 py-2 whitespace-nowrap font-bold" style="color:${sev === '0' ? '#e94839' : '#FF6600'};">Sev ${escapeXml(sev)}</td>
+                    <td class="px-3 py-2 text-slate-600 whitespace-nowrap">${escapeXml(inc.dataDefinicao || 'N/A')}</td>
+                    <td class="px-3 py-2 font-bold tabular-nums text-slate-700">${escapeXml(inc.ttr || '—')}</td>
+                    <td class="px-3 py-2 whitespace-nowrap">${ola}</td>
+                    <td class="px-3 py-2 text-slate-600 whitespace-nowrap">${escapeXml(inc.tech || 'N/A')}</td>
+                    <td class="px-3 py-2 text-slate-600 min-w-[260px]"><span class="line-clamp-2" title="${escapeXml(inc.descOfensor || '')}">${escapeXml(inc.descOfensor || 'N/A')}</span></td>
+                </tr>`;
+        }).join('');
+    }
+
+    // Badges dos cards no Retrospecto: comparação com a média das N semanas anteriores
+    function applyRetroBadges(badgeIds) {
+        const agg = retroAggregate();
+        const cur = ALL_DATA.currentKpis;
+        if (!agg || !cur) { badgeIds.forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); }); return; }
+        const a = agg.avg;
+        const hhmm = v => (v == null ? null : mttrHHMM(v));
+        const round1 = v => Math.round(v * 10) / 10;
+        COMPARISON_LABEL = `média ${RETRO.weeks} sem. ant.`;
+        const f = { force: true };
+        applyDeltaBadge('delta-badge-total', cur.incidentesTotal, round1(a.total), f);
+        applyDeltaBadge('delta-badge-sev0', cur.incidentesSev0, round1(a.sev0), f);
+        applyDeltaBadge('delta-badge-sev1', cur.incidentesSev1, round1(a.sev1), f);
+        applyDeltaBadge('delta-badge-mttr-total', cur.mttrTotal, hhmm(a.mttrTotal), { force: true, isDuration: true });
+        applyDeltaBadge('delta-badge-mttr-sev0', cur.mttrSev0, hhmm(a.mttrSev0), { force: true, isDuration: true });
+        applyDeltaBadge('delta-badge-mttr-sev1', cur.mttrSev1, hhmm(a.mttrSev1), { force: true, isDuration: true });
+        applyDeltaBadge('delta-badge-ola', cur.aderenciaOLA, a.ola, { force: true, isPercentagePoints: true });
+        applyDeltaBadge('delta-badge-ola-sev0', cur.aderenciaOLASev0, a.olaSev0, { force: true, isPercentagePoints: true });
+        applyDeltaBadge('delta-badge-ola-sev1', cur.aderenciaOLASev1, a.olaSev1, { force: true, isPercentagePoints: true });
+    }
+
     // Busca os KPIs do período anterior equivalente e atualiza os badges de comparação dos cards
     function updateComparisonDisplay() {
         const badgeIds = ['delta-badge-total', 'delta-badge-sev0', 'delta-badge-sev1',
             'delta-badge-mttr-total', 'delta-badge-mttr-sev0', 'delta-badge-mttr-sev1',
             'delta-badge-ola', 'delta-badge-ola-sev0', 'delta-badge-ola-sev1'];
+
+        if (CURRENT_FILTERS.periodKey === 'Retrospecto') { applyRetroBadges(badgeIds); return; }
 
         if (CURRENT_FILTERS.comparisonMode !== 'previous' || !ALL_DATA.currentKpis) {
             badgeIds.forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
@@ -2078,7 +2397,10 @@
                     </div>
                 </div>`;
 
-            el.innerHTML = feat + `<p class="mttr-sub-head">Outras metodologias</p>` + pctRow + corteRow;
+            const smallSample = d.n < 10
+                ? `<p class="text-[11px] text-slate-600 bg-natura-yellow-balsamo/10 border border-natura-yellow-balsamo/40 rounded-lg px-3 py-2 mb-3"><b>Amostra pequena (${d.n} ${d.n === 1 ? 'incidente' : 'incidentes'}):</b> com poucos incidentes, a Média Aparada sempre retira o mais demorado e o percentil fica próximo do maior tempo. Para ver tendência, use um período maior.</p>`
+                : '';
+            el.innerHTML = smallSample + feat + `<p class="mttr-sub-head">Outras metodologias</p>` + pctRow + corteRow;
         });
     }
 
@@ -2102,7 +2424,7 @@
             const raw = byId[it.id] || {};
             return {
                 posicao: i + 1, id: it.id, ttr: mttrHHMM(it.min), min: it.min, dataDefinicao: it.dataDefinicao,
-                dataAberturaTimestamp: it.dataAberturaTimestamp, tech: raw.tech || 'N/A', descImpacto: raw.descImpacto || 'N/A',
+                dataAberturaTimestamp: it.dataAberturaTimestamp, descOfensor: raw.descOfensor || 'N/A', solucao: raw.solucao || 'N/A',
                 dentroOla: it.min <= d.targetMin ? 'Sim' : 'Não', situacao, inBase
             };
         });
@@ -2159,20 +2481,18 @@
         let lastIn = null;
         const tableRows = shown.map(r => {
             const sep = (mttrModalState.filter === 'all' && lastIn === false && r.inBase)
-                ? `<tr><td colspan="8" class="mttr-sep">${sepLabel}</td></tr>` : '';
+                ? `<tr><td colspan="6" class="mttr-sep">${sepLabel}</td></tr>` : '';
             lastIn = r.inBase;
             const tag = r.inBase
                 ? `<span class="mttr-sit" style="background:rgba(27,71,42,0.1);color:#1B472A;">${escapeXml(r.situacao)}</span>`
                 : `<span class="mttr-sit" style="background:${method === 'pct' ? 'rgba(100,116,139,0.12);color:#475569' : 'rgba(233,72,57,0.1);color:#e94839'};">${escapeXml(r.situacao)}</span>`;
-            return `${sep}<tr class="hover:bg-slate-50${r.inBase ? '' : ' bg-slate-50/60'}">
+            return `${sep}<tr class="hover:bg-slate-50 align-top${r.inBase ? '' : ' bg-slate-50/60'}">
                     <td class="px-3 py-2 text-slate-400 tabular-nums">${r.posicao}&ordf;</td>
-                    <td class="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">${escapeXml(r.id)}</td>
-                    <td class="px-3 py-2 font-bold tabular-nums text-slate-700">${r.ttr}</td>
+                    <td class="px-3 py-2 whitespace-nowrap">${tag}</td>
                     <td class="px-3 py-2 whitespace-nowrap font-semibold" style="color:${r.dentroOla === 'Sim' ? '#1B472A' : '#e94839'};">${r.dentroOla}</td>
                     <td class="px-3 py-2 text-slate-600 whitespace-nowrap">${escapeXml(r.dataDefinicao || 'N/A')}</td>
-                    <td class="px-3 py-2 text-slate-600 whitespace-nowrap">${escapeXml(r.tech)}</td>
-                    <td class="px-3 py-2 text-slate-600 max-w-[260px] truncate" title="${escapeXml(r.descImpacto)}">${escapeXml(r.descImpacto)}</td>
-                    <td class="px-3 py-2 whitespace-nowrap">${tag}</td>
+                    <td class="px-3 py-2 text-slate-600 min-w-[200px]"><span class="line-clamp-3" title="${escapeXml(r.descOfensor)}">${escapeXml(r.descOfensor)}</span></td>
+                    <td class="px-3 py-2 text-slate-600 min-w-[200px]"><span class="line-clamp-3" title="${escapeXml(r.solucao)}">${escapeXml(r.solucao)}</span></td>
                 </tr>`;
         }).join('');
 
@@ -2194,16 +2514,16 @@
             </div>
             <div class="overflow-auto rounded-xl border border-slate-200">
                 <table class="w-full text-xs border-collapse">
-                    <thead class="sticky top-0 bg-white"><tr>${['Posição', 'Incidente', 'TTR', `Dentro do OLA (&le; ${target})`, 'Data de Abertura', 'Tecnologia', 'Descrição do Impacto', 'Situação no cálculo']
+                    <thead class="sticky top-0 bg-white"><tr>${['Posição', 'Situação no Cálculo', `Dentro do OLA (&le; ${target})`, 'Data de Abertura', 'Descrição do Ofensor', 'Solução Aplicada']
                         .map(h => `<th class="text-left font-bold text-slate-500 uppercase tracking-wider text-[10px] px-3 py-2 border-b border-slate-200 whitespace-nowrap">${h}</th>`).join('')}</tr></thead>
-                    <tbody class="divide-y divide-slate-100">${tableRows || '<tr><td colspan="8" class="text-center text-slate-300 italic py-6">Nenhum incidente nesta seleção.</td></tr>'}</tbody>
+                    <tbody class="divide-y divide-slate-100">${tableRows || '<tr><td colspan="6" class="text-center text-slate-300 italic py-6">Nenhum incidente nesta seleção.</td></tr>'}</tbody>
                 </table>
             </div>`;
 
         registerExport('mttr-metodo', shown, [
-            { key: 'posicao', label: 'Posição (mais rápido = 1)' }, { key: 'id', label: 'Incidente' }, { key: 'ttr', label: 'TTR' },
-            { key: 'dentroOla', label: `Dentro do OLA (≤ ${target})` }, { key: 'dataDefinicao', label: 'Data de Abertura' }, { key: 'tech', label: 'Tecnologia' },
-            { key: 'descImpacto', label: 'Descrição do Impacto' }, { key: 'situacao', label: 'Situação no cálculo' }
+            { key: 'posicao', label: 'Posição (mais rápido = 1)' }, { key: 'situacao', label: 'Situação no Cálculo' },
+            { key: 'dentroOla', label: `Dentro do OLA (≤ ${target})` }, { key: 'dataDefinicao', label: 'Data de Abertura' },
+            { key: 'descOfensor', label: 'Descrição do Ofensor' }, { key: 'solucao', label: 'Solução Aplicada' }
         ], `${title} - ${sevLabel}`);
         modal.classList.remove('hidden');
     }
