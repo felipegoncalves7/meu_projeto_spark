@@ -31,7 +31,8 @@ const MTTR_TARGET_SEM_OUTLIERS_SEV1_MIN = 360; // 06:00 descontando outliers
 const MTTR_OUTLIER_SEV0_MIN = 360;        // 06:00 — limiar de outlier Sev0
 const MTTR_OUTLIER_SEV1_MIN = 1080;       // 18:00 — limiar de outlier Sev1
 const MTTR_OUTLIER_TARGET_PCT = 5;        // meta: outliers <= 5% dos Incidentes da Severidade
-const MTTR_TRIMMED_KEEP = 0.95;           // Média Aparada: mantém os 95% mais rápidos (k = floor(n × 0,95))
+const MTTR_TRIMMED_KEEP = 0.95;           // Média Aparada P95: mantém os 95% mais rápidos (k = floor(n × 0,95))
+const MTTR_TRIMMED_KEEP_P90 = 0.90;       // Média Aparada P90: mantém os 90% mais rápidos (k = floor(n × 0,90))
 
 // MTTR por metodologia (cards Sev 0/Sev 1 da Visão Geral): Bruto, Corte Fixo, Média Aparada P95 e Percentis P90/P95.
 // Percentil pelo método nearest-rank: posição = teto(n × p) na lista ordenada, ou seja, um tempo real de algum incidente.
@@ -60,13 +61,16 @@ function computeMttrMethodologies(items, cutMin, targetMin) {
         withinTarget: min == null ? null : Math.round(min) <= targetMin
     });
     const kept = sorted.filter(d => d < cutMin);
-    const k = n ? Math.max(1, Math.floor(n * MTTR_TRIMMED_KEEP)) : 0;
+    const keep = frac => (n ? Math.max(1, Math.floor(n * frac)) : 0);
+    const k = keep(MTTR_TRIMMED_KEEP), k90 = keep(MTTR_TRIMMED_KEEP_P90);
     return {
-        n: n, targetMin: targetMin, cutMin: cutMin, k: k, p90Rank: rank(0.90), p95Rank: rank(0.95),
+        n: n, targetMin: targetMin, cutMin: cutMin, k: k, k90: k90, p90Rank: rank(0.90), p95Rank: rank(0.95),
+        withinTarget: sorted.filter(d => d <= targetMin).length,
         incidentes: incidentes,
         bruto: pack(mean(sorted), n),
         corte: pack(mean(kept), kept.length),
         aparada: pack(mean(sorted.slice(0, k)), k),
+        aparada90: pack(mean(sorted.slice(0, k90)), k90),
         p90: pack(percentile(0.90), n),
         p95: pack(percentile(0.95), n)
     };

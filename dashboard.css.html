@@ -204,8 +204,6 @@
 
     /* Metodologias de MTTR (painel abaixo dos cards Sev 0/Sev 1) */
     .mttr-feat { border: 2px solid rgba(27, 71, 42, 0.22); background: rgba(27, 71, 42, 0.035); border-radius: 14px; padding: 14px 16px; }
-    .mttr-feat-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
-        color: #fff; background: var(--natura-green-cerrado); border-radius: 999px; padding: 3px 10px; }
     .mttr-pct-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
     .mttr-pct-opt { text-align: left; border: 1px solid #e2e8f0; background: #fff; border-radius: 10px; padding: 7px 10px; transition: all .15s ease; }
     .mttr-pct-opt:hover { border-color: var(--natura-green-murumuru); }
@@ -216,6 +214,7 @@
     .mttr-sub-head { font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: #94a3b8; margin: 18px 0 2px; }
     .mttr-row { padding: 12px 0 4px; border-top: 1px solid #f1f5f9; }
     .mttr-sub-head + .mttr-row { border-top: 0; }
+    .mttr-row .mttr-pct-toggle { margin-top: 8px; }
     .mttr-bar { position: relative; height: 14px; border-radius: 999px; background: #e2e8f0; margin: 22px 0 6px; }
     .mttr-bar.is-big { height: 20px; }
     .mttr-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; transition: width .4s ease; }

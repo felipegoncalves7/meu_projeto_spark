@@ -1908,17 +1908,24 @@
     }
 
     // --- Metodologias de MTTR (painel abaixo dos cards Sev 0/Sev 1) ---
-    // Percentil é o indicador principal (pedido da Diretoria); Corte Fixo e Média Aparada ficam como comparativo.
+    // Ordem: Média Aparada (P95/P90, em destaque) · Percentil de resolução (P90/P95, sem meta) · Corte Fixo.
     const MTTR_METODO_TIPS = {
         corte: 'Calcula a média aritmética dos incidentes desconsiderando aqueles com tempo de resolução ≥ 06h (Sev 0) ou ≥ 18h (Sev 1). <strong>Fragilidade do modelo:</strong> Utiliza um corte temporal estático e arbitrário. Um incidente resolvido em 05h59m é incluído no cálculo, puxando a média severamente para cima, enquanto um incidente resolvido em 06h01m é totalmente descartado da média. Isso pode mascarar incidentes críticos ou penalizar o indicador de forma desproporcional.',
         aparada: 'Calcula a média aritmética após excluir matematicamente os 5% incidentes mais demorados do período, independentemente da duração em horas. <strong>Diferencial:</strong> Elimina a regra de corte fixo e adapta-se dinamicamente ao volume mensal. Protege o indicador contra distorções causadas por casos anômalos extremos, garantindo que exatamente 95% do volume operacional seja representado na média.',
+        aparada90: 'Calcula a média aritmética após excluir matematicamente os 10% incidentes mais demorados do período, independentemente da duração em horas. <strong>Diferencial:</strong> Elimina a regra de corte fixo e adapta-se dinamicamente ao volume mensal. Protege o indicador contra distorções causadas por casos anômalos extremos, garantindo que exatamente 90% do volume operacional seja representado na média.',
         pct: 'Representa a marca de tempo na qual 90% (ou 95%) de todos os incidentes registrados foram efetivamente resolvidos. <strong>Padrão de Mercado (SRE / ITIL 4):</strong> Não utiliza médias aritméticas, sendo totalmente imune às distorções da cauda longa. Informa a previsibilidade real do serviço com a leitura direta: \'90% dos incidentes foram resolvidos em até [HH:MM]\'. Não descarta nenhum dado da base para gerar o número.'
     };
     const MTTR_PCT_INFO = {
-        p90: { label: 'P90', share: '90%', frac: '9 em cada 10', tail: '10%', p: 0.90, rankKey: 'p90Rank' },
-        p95: { label: 'P95', share: '95%', frac: '19 em cada 20', tail: '5%', p: 0.95, rankKey: 'p95Rank' }
+        p90: { label: 'P90', share: '90%', pctNum: 90, frac: '9 em cada 10', p: 0.90, rankKey: 'p90Rank' },
+        p95: { label: 'P95', share: '95%', pctNum: 95, frac: '19 em cada 20', p: 0.95, rankKey: 'p95Rank' }
+    };
+    // Média Aparada: P95 descarta os 5% mais demorados; P90 descarta os 10% mais demorados
+    const MTTR_TRIM_INFO = {
+        p95: { label: 'P95', keepShare: '95%', cutShare: '5%', keep: 0.95, resKey: 'aparada', kKey: 'k', tipKey: 'aparada' },
+        p90: { label: 'P90', keepShare: '90%', cutShare: '10%', keep: 0.90, resKey: 'aparada90', kKey: 'k90', tipKey: 'aparada90' }
     };
     const mttrPctChoice = { sev0: 'p90', sev1: 'p90' };
+    const mttrTrimChoice = { sev0: 'p95', sev1: 'p95' };
     let lastMttrMetodologias = null;
 
     function mttrHHMM(min) {
@@ -1928,6 +1935,7 @@
     const fmtPctBR = (v) => (v == null ? '—' : String(v).replace('.', ',') + '%');
     const fmtNumBR = (v) => String(Math.round(v * 100) / 100).replace('.', ',');
     const mttrColor = (r) => (!r || r.min == null ? '#94a3b8' : (r.withinTarget ? '#1B472A' : '#e94839'));
+    const MTTR_NEUTRAL = '#334155';
 
     function mttrBadge(r, targetMin) {
         if (!r || r.min == null) return '';
@@ -1936,25 +1944,37 @@
             : `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap" style="background:rgba(233,72,57,0.1);color:#e94839;">&#9650; +${mttrHHMM(r.min - targetMin)} acima</span>`;
     }
 
-    // Faixa com rótulos: valor dentro (ou logo após) o preenchimento e a meta de OLA sobre o marcador
-    function mttrBar(r, targetMin, scaleMax, big) {
-        const has = r && r.min != null;
-        const color = mttrColor(r);
-        const fillPct = has ? Math.min(100, (r.min / scaleMax) * 100) : 0;
-        const metaPct = Math.min(100, (targetMin / scaleMax) * 100);
-        const inside = fillPct >= 22;
-        const metaShift = metaPct > 82 ? '-100%' : (metaPct < 18 ? '0%' : '-50%');
-        const valLabel = !has ? '' : inside
-            ? `<span class="mttr-bar-val" style="left:calc(${fillPct}% - 8px);transform:translate(-100%,-50%);color:#fff;">${r.hhmm}</span>`
-            : `<span class="mttr-bar-val" style="left:calc(${fillPct}% + 6px);color:${color};">${r.hhmm}</span>`;
-        return `<div class="mttr-bar${big ? ' is-big' : ''}" role="img" aria-label="${has ? r.hhmm : 'sem dados'} contra a meta de OLA de ${mttrHHMM(targetMin)}">
-                <span class="mttr-bar-fill" style="width:${fillPct}%;background:${color};"></span>${valLabel}
-                <span class="mttr-bar-meta" style="left:${metaPct}%;"><span class="mttr-bar-meta-lbl" style="transform:translateX(${metaShift});">Meta ${mttrHHMM(targetMin)}</span></span>
+    // Faixa com rótulos: texto dentro (ou logo após) o preenchimento e um marcador de referência com rótulo próprio
+    function mttrBarHtml(o) {
+        const fill = Math.max(0, Math.min(100, o.fillPct || 0));
+        const mark = Math.max(0, Math.min(100, o.markPct));
+        const inside = fill >= (o.insideMin || 22);
+        const markShift = mark > 82 ? '-100%' : (mark < 18 ? '0%' : '-50%');
+        const val = !o.fillLabel ? '' : inside
+            ? `<span class="mttr-bar-val" style="left:calc(${fill}% - 8px);transform:translate(-100%,-50%);color:#fff;">${o.fillLabel}</span>`
+            : `<span class="mttr-bar-val" style="left:calc(${fill}% + 6px);color:${o.color};">${o.fillLabel}</span>`;
+        return `<div class="mttr-bar${o.big ? ' is-big' : ''}" role="img" aria-label="${o.aria}">
+                <span class="mttr-bar-fill" style="width:${fill}%;background:${o.color};"></span>${val}
+                <span class="mttr-bar-meta" style="left:${mark}%;"><span class="mttr-bar-meta-lbl" style="transform:translateX(${markShift});">${o.markLabel}</span></span>
             </div>`;
     }
+    // Faixa de tempo (médias): valor x meta de OLA
+    const mttrTimeBar = (r, targetMin, scaleMax, big) => mttrBarHtml({
+        fillPct: r && r.min != null ? (r.min / scaleMax) * 100 : 0, fillLabel: r && r.min != null ? r.hhmm : '', color: mttrColor(r),
+        markPct: (targetMin / scaleMax) * 100, markLabel: `Meta ${mttrHHMM(targetMin)}`, big,
+        aria: `${r && r.min != null ? r.hhmm : 'sem dados'} contra a meta de OLA de ${mttrHHMM(targetMin)}`
+    });
 
     const mttrDetailBtn = (sev, method) =>
         `<button type="button" class="mttr-detail-btn" data-mttr-detail="${sev}:${method}">Ver cálculo e incidentes <span aria-hidden="true">&rarr;</span></button>`;
+
+    function mttrToggle(attr, sev, current, opts) {
+        return `<div class="mttr-pct-toggle" role="group" aria-label="${opts.aria}">${opts.items.map(it => {
+            const on = it.key === current;
+            return `<button type="button" ${attr}="${sev}:${it.key}" aria-pressed="${on}" class="mttr-pct-opt${on ? ' is-active' : ''}">
+                    <span class="mttr-pct-opt-title">${it.title}</span><span class="mttr-pct-opt-sub">${it.sub}</span></button>`;
+        }).join('')}</div>`;
+    }
 
     function renderMttrMetodologias(data) {
         if (data) lastMttrMetodologias = data;
@@ -1969,71 +1989,96 @@
                 return;
             }
             const sevLabel = sev === 'sev0' ? 'Sev 0' : 'Sev 1';
-            const pk = mttrPctChoice[sev];
-            const info = MTTR_PCT_INFO[pk];
-            const pr = d[pk];
-            const scaleMax = Math.max(d.corte.min || 0, d.aparada.min || 0, d.p90.min || 0, d.p95.min || 0, d.targetMin, 1) * 1.12;
-            const tail = (d.incidentes || []).filter(it => it.min > pr.min).length;
+            const target = mttrHHMM(d.targetMin);
+            const ti = MTTR_TRIM_INFO[mttrTrimChoice[sev]];
+            const ap = d[ti.resKey];
+            const pi = MTTR_PCT_INFO[mttrPctChoice[sev]];
+            const pr = d[mttrPctChoice[sev]];
+            const scaleMax = Math.max(d.corte.min || 0, d.aparada.min || 0, d.aparada90.min || 0, d.targetMin, 1) * 1.12;
+            const withinPct = d.n ? Math.round((d.withinTarget / d.n) * 1000) / 10 : 0;
             const cutLabel = mttrHHMM(d.cutMin).replace(':00', 'h');
             const outOfTarget = d.corte.discardedPct != null && d.corte.discardedPct > 5;
 
-            const toggle = ['p90', 'p95'].map((key) => {
-                const ki = MTTR_PCT_INFO[key], on = key === pk;
-                return `<button type="button" data-mttr-pct="${sev}:${key}" aria-pressed="${on}" class="mttr-pct-opt${on ? ' is-active' : ''}">
-                        <span class="mttr-pct-opt-title">${ki.label} &middot; ${ki.share} dos incidentes</span>
-                        <span class="mttr-pct-opt-sub">${ki.frac} resolvidos em até <b>${d[key].hhmm}</b></span>
-                    </button>`;
-            }).join('');
-
+            // 1. MTTR Líquido (Média Aparada P95/P90) — em destaque
+            const trimToggle = mttrToggle('data-mttr-trim', sev, mttrTrimChoice[sev], {
+                aria: 'Quantos incidentes mais demorados saem da média',
+                items: ['p95', 'p90'].map(key => {
+                    const t = MTTR_TRIM_INFO[key], r = d[t.resKey];
+                    return { key, title: `${t.label} · descarta os ${t.cutShare} mais demorados`, sub: `Média dos ${t.keepShare} mais rápidos: <b>${r.hhmm}</b>` };
+                })
+            });
             const feat = `<div class="mttr-feat">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <span class="mttr-feat-tag">&#9733; Indicador principal &middot; Percentil de resolução</span>
-                    </div>
-                    <div class="mttr-pct-toggle" role="group" aria-label="Escolha o percentil">${toggle}</div>
-                    <div class="flex items-end justify-between gap-3 mt-3">
+                    <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
-                            <p class="text-sm font-bold text-slate-800">Resolução ${info.label}</p>
-                            <p class="text-[11px] text-slate-600 leading-snug mt-0.5"><b>${info.frac}</b> incidentes ${sevLabel} (${info.share}) foram resolvidos em até <b>${pr.hhmm}</b>.</p>
+                            <p class="text-sm font-bold text-slate-800">MTTR Líquido (Média Aparada ${ti.label})</p>
+                            <p class="text-[11px] text-slate-600 leading-snug mt-0.5">Média depois de retirar os <b>${ti.cutShare} incidentes mais demorados</b> do período, qualquer que seja a duração.</p>
                         </div>
                         <div class="text-right shrink-0">
-                            <p class="text-3xl font-extrabold tabular-nums leading-none" style="color:${mttrColor(pr)};">${pr.hhmm}</p>
-                            <div class="mt-1">${mttrBadge(pr, d.targetMin)}</div>
+                            <p class="text-3xl font-extrabold tabular-nums leading-none" style="color:${mttrColor(ap)};">${ap.min != null ? ap.hhmm : '—'}</p>
+                            <div class="mt-1">${mttrBadge(ap, d.targetMin)}</div>
                         </div>
                     </div>
-                    ${mttrBar(pr, d.targetMin, scaleMax, true)}
-                    <p class="text-[11px] text-slate-500 leading-snug">Não é média: é o tempo do incidente que ocupa a posição ${info.share} da fila, do mais rápido ao mais demorado. Nenhum incidente é descartado.</p>
-                    <div class="flex flex-wrap items-center justify-between gap-2 mt-2">
-                        <p class="text-[10px] text-slate-400">Considerados <b class="text-slate-600">${d.n}</b> &middot; Desconsiderados <b class="text-slate-600">0</b> &middot; Acima do ${info.label} <b class="text-slate-600">${tail}</b></p>
+                    ${trimToggle}
+                    ${mttrTimeBar(ap, d.targetMin, scaleMax, true)}
+                    <div class="flex flex-wrap items-center justify-between gap-2 mt-1">
+                        <p class="text-[10px] text-slate-400">Considerados <b class="text-slate-600">${ap.considered}</b> &middot; Desconsiderados (${ti.cutShare} mais demorados) <b class="text-slate-600">${ap.discarded}</b> (${fmtPctBR(ap.discardedPct)})</p>
+                        ${mttrDetailBtn(sev, 'aparada')}
+                    </div>
+                </div>`;
+
+            // 2. Resolução P90/P95 — sem meta; a faixa mostra o % de incidentes dentro do OLA x a marca do percentil
+            const pctToggle = mttrToggle('data-mttr-pct', sev, mttrPctChoice[sev], {
+                aria: 'Escolha o percentil',
+                items: ['p90', 'p95'].map(key => {
+                    const k = MTTR_PCT_INFO[key];
+                    return { key, title: `${k.label} · ${k.share} dos incidentes`, sub: `${k.frac} resolvidos em até <b>${d[key].hhmm}</b>` };
+                })
+            });
+            const pctBar = mttrBarHtml({
+                fillPct: withinPct, fillLabel: `${fmtPctBR(withinPct)} dentro do OLA`, color: '#1B472A', insideMin: 40,
+                markPct: pi.pctNum, markLabel: `${pi.share} (${pi.label})`,
+                aria: `${fmtPctBR(withinPct)} dos incidentes dentro do OLA de ${target}; marca do ${pi.label} em ${pi.share}`
+            });
+            const pctRow = `<div class="mttr-row">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="text-xs font-bold text-slate-700">Resolução ${pi.label} (Percentil)</p>
+                            <p class="text-[11px] text-slate-500 leading-snug mt-0.5"><b class="text-slate-700">${pi.frac}</b> incidentes ${sevLabel} (${pi.share}) foram resolvidos em até <b class="text-slate-700">${pr.hhmm}</b>. Não é média e não descarta nenhum incidente.</p>
+                        </div>
+                        <div class="text-right shrink-0">
+                            <p class="text-xl font-bold tabular-nums leading-none" style="color:${MTTR_NEUTRAL};">${pr.hhmm}</p>
+                            <div class="mt-1"><span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap" style="background:#f1f5f9;color:#64748b;">Sem meta definida</span></div>
+                        </div>
+                    </div>
+                    ${pctToggle}
+                    ${pctBar}
+                    <p class="text-[10px] text-slate-400 leading-snug">A faixa mostra o % de incidentes resolvidos dentro do OLA (&le; ${target}): <b class="text-slate-600">${d.withinTarget} de ${d.n}</b>. O marcador indica os ${pi.share} do ${pi.label}: enquanto a faixa não alcança o marcador, o ${pi.label} fica acima do OLA.</p>
+                    <div class="flex flex-wrap items-center justify-between gap-2 mt-1">
+                        <p class="text-[10px] text-slate-400">Considerados <b class="text-slate-600">${d.n}</b> &middot; Desconsiderados <b class="text-slate-600">0</b></p>
                         ${mttrDetailBtn(sev, 'pct')}
                     </div>
                 </div>`;
 
-            const row = (r, method, title, desc, foot) => `<div class="mttr-row">
+            // 3. MTTR S/ Outliers (Corte Fixo)
+            const corteRow = `<div class="mttr-row">
                     <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
-                            <p class="text-xs font-bold text-slate-700">${title}</p>
-                            <p class="text-[11px] text-slate-500 leading-snug mt-0.5">${desc}</p>
+                            <p class="text-xs font-bold text-slate-700">MTTR S/ Outliers (Corte Fixo)</p>
+                            <p class="text-[11px] text-slate-500 leading-snug mt-0.5">Média dos incidentes resolvidos em menos de ${cutLabel}; os de ${cutLabel} ou mais saem da conta.</p>
                         </div>
                         <div class="text-right shrink-0">
-                            <p class="text-xl font-bold tabular-nums leading-none" style="color:${mttrColor(r)};">${r.min != null ? r.hhmm : '—'}</p>
-                            <div class="mt-1">${mttrBadge(r, d.targetMin)}</div>
+                            <p class="text-xl font-bold tabular-nums leading-none" style="color:${mttrColor(d.corte)};">${d.corte.min != null ? d.corte.hhmm : '—'}</p>
+                            <div class="mt-1">${mttrBadge(d.corte, d.targetMin)}</div>
                         </div>
                     </div>
-                    ${mttrBar(r, d.targetMin, scaleMax, false)}
+                    ${mttrTimeBar(d.corte, d.targetMin, scaleMax, false)}
                     <div class="flex flex-wrap items-center justify-between gap-2">
-                        <p class="text-[10px] text-slate-400">${foot}</p>
-                        ${mttrDetailBtn(sev, method)}
+                        <p class="text-[10px] text-slate-400">Considerados <b class="text-slate-600">${d.corte.considered}</b> &middot; Desconsiderados (&ge; ${cutLabel}) <b class="text-slate-600">${d.corte.discarded}</b> <span style="color:${outOfTarget ? '#e94839' : 'inherit'};font-weight:${outOfTarget ? 700 : 400};">(${fmtPctBR(d.corte.discardedPct)})</span> &middot; meta &le; 5%</p>
+                        ${mttrDetailBtn(sev, 'corte')}
                     </div>
                 </div>`;
 
-            el.innerHTML = feat +
-                `<p class="mttr-sub-head">Comparativo &middot; médias aritméticas</p>` +
-                row(d.corte, 'corte', 'MTTR S/ Outliers (Corte Fixo)',
-                    `Média dos incidentes resolvidos em menos de ${cutLabel}; os de ${cutLabel} ou mais saem da conta.`,
-                    `Considerados <b class="text-slate-600">${d.corte.considered}</b> &middot; Desconsiderados (&ge; ${cutLabel}) <b class="text-slate-600">${d.corte.discarded}</b> <span style="color:${outOfTarget ? '#e94839' : 'inherit'};font-weight:${outOfTarget ? 700 : 400};">(${fmtPctBR(d.corte.discardedPct)})</span> &middot; meta &le; 5%`) +
-                row(d.aparada, 'aparada', 'MTTR Líquido (Média Aparada P95)',
-                    'Média depois de retirar os 5% incidentes mais demorados do período, qualquer que seja a duração.',
-                    `Considerados <b class="text-slate-600">${d.aparada.considered}</b> &middot; Desconsiderados (5% mais demorados) <b class="text-slate-600">${d.aparada.discarded}</b> (${fmtPctBR(d.aparada.discardedPct)})`);
+            el.innerHTML = feat + `<p class="mttr-sub-head">Outras metodologias</p>` + pctRow + corteRow;
         });
     }
 
@@ -2047,16 +2092,18 @@
         (ALL_DATA.rawIncidents || []).forEach(inc => { byId[inc.id] = inc; });
         const pk = mttrPctChoice[sev];
         const pctMin = d[pk].min;
+        const ti = MTTR_TRIM_INFO[mttrTrimChoice[sev]];
+        const kKeep = d[ti.kKey];
         const rows = (d.incidentes || []).map((it, i) => {
             let inBase, situacao;
             if (method === 'corte') { inBase = it.min < d.cutMin; situacao = inBase ? 'Considerado' : 'Desconsiderado (outlier)'; }
-            else if (method === 'aparada') { inBase = i < d.k; situacao = inBase ? 'Considerado' : 'Desconsiderado (5% mais demorados)'; }
+            else if (method === 'aparada') { inBase = i < kKeep; situacao = inBase ? 'Considerado' : `Desconsiderado (${ti.cutShare} mais demorados)`; }
             else { inBase = it.min <= pctMin; situacao = inBase ? `Até o ${MTTR_PCT_INFO[pk].label}` : `Acima do ${MTTR_PCT_INFO[pk].label} (mantido na base)`; }
             const raw = byId[it.id] || {};
             return {
                 posicao: i + 1, id: it.id, ttr: mttrHHMM(it.min), min: it.min, dataDefinicao: it.dataDefinicao,
                 dataAberturaTimestamp: it.dataAberturaTimestamp, tech: raw.tech || 'N/A', descImpacto: raw.descImpacto || 'N/A',
-                situacao, inBase
+                dentroOla: it.min <= d.targetMin ? 'Sim' : 'Não', situacao, inBase
             };
         });
         return { d, rows: rows.reverse() }; // mais demorados primeiro: a fronteira do cálculo fica no topo
@@ -2073,20 +2120,26 @@
         const target = mttrHHMM(d.targetMin);
         const cutLabel = mttrHHMM(d.cutMin).replace(':00', 'h');
         const pi = MTTR_PCT_INFO[mttrPctChoice[sev]];
-        let title, result, steps, inLabel, outLabel;
+        const ti = MTTR_TRIM_INFO[mttrTrimChoice[sev]];
+        const withinPct = d.n ? Math.round((d.withinTarget / d.n) * 1000) / 10 : 0;
+        let title, result, steps, inLabel, outLabel, tipKey = method, sepLabel;
         if (method === 'corte') {
             title = 'MTTR S/ Outliers (Corte Fixo)'; result = d.corte; inLabel = 'Considerados'; outLabel = 'Desconsiderados';
+            sepLabel = `Corte fixo: abaixo de ${cutLabel}`;
             steps = [`Base do período: <b>${d.n}</b> incidentes ${sevLabel}.`,
                 `Saem da conta os incidentes com TTR &ge; ${cutLabel}: <b>${d.corte.discarded}</b> (${fmtPctBR(d.corte.discardedPct)}).`,
                 `Média aritmética dos <b>${d.corte.considered}</b> restantes = <b>${d.corte.hhmm}</b>.`];
         } else if (method === 'aparada') {
-            title = 'MTTR Líquido (Média Aparada P95)'; result = d.aparada; inLabel = 'Considerados'; outLabel = 'Desconsiderados';
+            const k = d[ti.kKey];
+            title = `MTTR Líquido (Média Aparada ${ti.label})`; result = d[ti.resKey]; inLabel = 'Considerados'; outLabel = 'Desconsiderados'; tipKey = ti.tipKey;
+            sepLabel = `Limite da média aparada: ${k} mais rápidos`;
             steps = [`Ordena os <b>${d.n}</b> incidentes ${sevLabel} do mais rápido ao mais demorado.`,
-                `k = piso(n &times; 0,95) = piso(${d.n} &times; 0,95) = piso(${fmtNumBR(d.n * 0.95)}) = <b>${d.k}</b> incidentes mantidos.`,
-                `Saem os <b>${d.n - d.k}</b> mais demorados; média aritmética dos ${d.k} primeiros = <b>${d.aparada.hhmm}</b>.`];
+                `k = piso(n &times; ${fmtNumBR(ti.keep)}) = piso(${d.n} &times; ${fmtNumBR(ti.keep)}) = piso(${fmtNumBR(d.n * ti.keep)}) = <b>${k}</b> incidentes mantidos.`,
+                `Saem os <b>${d.n - k}</b> mais demorados (${ti.cutShare}); média aritmética dos ${k} primeiros = <b>${result.hhmm}</b>.`];
         } else {
             const rank = d[pi.rankKey];
             title = `Resolução ${pi.label} (Percentil)`; result = d[mttrPctChoice[sev]]; inLabel = `Até o ${pi.label}`; outLabel = `Acima do ${pi.label}`;
+            sepLabel = `Marca do ${pi.label}: ${result.hhmm}`;
             steps = [`Ordena os <b>${d.n}</b> incidentes ${sevLabel} do mais rápido ao mais demorado.`,
                 `Posição = teto(n &times; ${fmtNumBR(pi.p)}) = teto(${d.n} &times; ${fmtNumBR(pi.p)}) = teto(${fmtNumBR(d.n * pi.p)}) = <b>${rank}&ordf;</b> posição.`,
                 `O TTR do incidente nessa posição é o ${pi.label}: <b>${result.hhmm}</b>. Ou seja, ${pi.frac} incidentes foram resolvidos em até ${result.hhmm}.`,
@@ -2094,9 +2147,11 @@
         }
         const nIn = rows.filter(r => r.inBase).length, nOut = rows.length - nIn;
         const shown = rows.filter(r => mttrModalState.filter === 'all' || (mttrModalState.filter === 'in' ? r.inBase : !r.inBase));
-        const verdict = result.min == null ? '' : result.withinTarget
-            ? `<span class="font-bold" style="color:#1B472A;">dentro da meta de OLA (&le; ${target})</span>`
-            : `<span class="font-bold" style="color:#e94839;">+${mttrHHMM(result.min - d.targetMin)} acima da meta de OLA (&le; ${target})</span>`;
+        const verdict = method === 'pct'
+            ? `<span class="font-bold text-slate-600">sem meta definida</span>. Referência: <b>${fmtPctBR(withinPct)}</b> dos incidentes (${d.withinTarget} de ${d.n}) foram resolvidos dentro do OLA (&le; ${target}).`
+            : (result.min == null ? '' : result.withinTarget
+                ? `<span class="font-bold" style="color:#1B472A;">dentro da meta de OLA (&le; ${target})</span>`
+                : `<span class="font-bold" style="color:#e94839;">+${mttrHHMM(result.min - d.targetMin)} acima da meta de OLA (&le; ${target})</span>`);
 
         document.getElementById('mttr-metodo-title').textContent = `${title} · ${sevLabel}`;
         document.getElementById('mttr-metodo-subtitle').textContent = `Resultado ${result.min != null ? result.hhmm : '—'} · ${d.n} incidentes no período filtrado`;
@@ -2104,7 +2159,7 @@
         let lastIn = null;
         const tableRows = shown.map(r => {
             const sep = (mttrModalState.filter === 'all' && lastIn === false && r.inBase)
-                ? `<tr><td colspan="7" class="mttr-sep">${method === 'pct' ? `Marca do ${pi.label}: ${result.hhmm}` : (method === 'corte' ? `Corte fixo: abaixo de ${cutLabel}` : `Limite da média aparada: ${d.k} mais rápidos`)}</td></tr>` : '';
+                ? `<tr><td colspan="8" class="mttr-sep">${sepLabel}</td></tr>` : '';
             lastIn = r.inBase;
             const tag = r.inBase
                 ? `<span class="mttr-sit" style="background:rgba(27,71,42,0.1);color:#1B472A;">${escapeXml(r.situacao)}</span>`
@@ -2113,9 +2168,10 @@
                     <td class="px-3 py-2 text-slate-400 tabular-nums">${r.posicao}&ordf;</td>
                     <td class="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">${escapeXml(r.id)}</td>
                     <td class="px-3 py-2 font-bold tabular-nums text-slate-700">${r.ttr}</td>
+                    <td class="px-3 py-2 whitespace-nowrap font-semibold" style="color:${r.dentroOla === 'Sim' ? '#1B472A' : '#e94839'};">${r.dentroOla}</td>
                     <td class="px-3 py-2 text-slate-600 whitespace-nowrap">${escapeXml(r.dataDefinicao || 'N/A')}</td>
                     <td class="px-3 py-2 text-slate-600 whitespace-nowrap">${escapeXml(r.tech)}</td>
-                    <td class="px-3 py-2 text-slate-600 max-w-[280px] truncate" title="${escapeXml(r.descImpacto)}">${escapeXml(r.descImpacto)}</td>
+                    <td class="px-3 py-2 text-slate-600 max-w-[260px] truncate" title="${escapeXml(r.descImpacto)}">${escapeXml(r.descImpacto)}</td>
                     <td class="px-3 py-2 whitespace-nowrap">${tag}</td>
                 </tr>`;
         }).join('');
@@ -2124,7 +2180,7 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="rounded-xl border border-slate-200 p-4">
                     <p class="text-[10px] font-black text-slate-400 uppercase tracking-[0.12em] mb-1.5">O que é</p>
-                    <p class="text-xs text-slate-600 leading-relaxed">${MTTR_METODO_TIPS[method]}</p>
+                    <p class="text-xs text-slate-600 leading-relaxed">${MTTR_METODO_TIPS[tipKey]}</p>
                 </div>
                 <div class="rounded-xl border border-slate-200 p-4 bg-slate-50/60">
                     <p class="text-[10px] font-black text-slate-400 uppercase tracking-[0.12em] mb-1.5">Como foi calculado neste período</p>
@@ -2138,15 +2194,15 @@
             </div>
             <div class="overflow-auto rounded-xl border border-slate-200">
                 <table class="w-full text-xs border-collapse">
-                    <thead class="sticky top-0 bg-white"><tr>${['Posição', 'Incidente', 'TTR', 'Data de Abertura', 'Tecnologia', 'Descrição do Impacto', 'Situação no cálculo']
+                    <thead class="sticky top-0 bg-white"><tr>${['Posição', 'Incidente', 'TTR', `Dentro do OLA (&le; ${target})`, 'Data de Abertura', 'Tecnologia', 'Descrição do Impacto', 'Situação no cálculo']
                         .map(h => `<th class="text-left font-bold text-slate-500 uppercase tracking-wider text-[10px] px-3 py-2 border-b border-slate-200 whitespace-nowrap">${h}</th>`).join('')}</tr></thead>
-                    <tbody class="divide-y divide-slate-100">${tableRows || '<tr><td colspan="7" class="text-center text-slate-300 italic py-6">Nenhum incidente nesta seleção.</td></tr>'}</tbody>
+                    <tbody class="divide-y divide-slate-100">${tableRows || '<tr><td colspan="8" class="text-center text-slate-300 italic py-6">Nenhum incidente nesta seleção.</td></tr>'}</tbody>
                 </table>
             </div>`;
 
         registerExport('mttr-metodo', shown, [
             { key: 'posicao', label: 'Posição (mais rápido = 1)' }, { key: 'id', label: 'Incidente' }, { key: 'ttr', label: 'TTR' },
-            { key: 'dataDefinicao', label: 'Data de Abertura' }, { key: 'tech', label: 'Tecnologia' },
+            { key: 'dentroOla', label: `Dentro do OLA (≤ ${target})` }, { key: 'dataDefinicao', label: 'Data de Abertura' }, { key: 'tech', label: 'Tecnologia' },
             { key: 'descImpacto', label: 'Descrição do Impacto' }, { key: 'situacao', label: 'Situação no cálculo' }
         ], `${title} - ${sevLabel}`);
         modal.classList.remove('hidden');
@@ -2159,6 +2215,12 @@
         if (pctBtn) {
             const [sev, pk] = pctBtn.getAttribute('data-mttr-pct').split(':');
             if (mttrPctChoice[sev] && mttrPctChoice[sev] !== pk) { mttrPctChoice[sev] = pk; renderMttrMetodologias(); }
+            return;
+        }
+        const trimBtn = t.closest('[data-mttr-trim]');
+        if (trimBtn) {
+            const [sev, key] = trimBtn.getAttribute('data-mttr-trim').split(':');
+            if (mttrTrimChoice[sev] && mttrTrimChoice[sev] !== key) { mttrTrimChoice[sev] = key; renderMttrMetodologias(); }
             return;
         }
         const det = t.closest('[data-mttr-detail]');
