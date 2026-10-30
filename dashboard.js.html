@@ -1726,13 +1726,17 @@
         if (ev.target && ev.target.id === 'jp-weekly-item') { JP_WEEKLY.item = ev.target.value; renderJpWeekly(); }
     });
 
-    // Lista nominal dos incidentes da semana selecionada (vem do getFilteredData do mesmo recorte)
+    // Lista nominal dos incidentes da semana selecionada (vem do getFilteredData do mesmo recorte), com a faixa de dias
+    // acima: um card por dia (segunda a domingo) na cor da maior Severidade do dia.
+    const retroDayIso = ts => (ts ? retroIso(new Date(ts)) : null);
+
     function renderRetroIncidents() {
         const body = document.getElementById('retro-incidents-body');
         if (!body || CURRENT_FILTERS.periodKey !== 'Retrospecto') return;
         const items = sortByAberturaDesc(ALL_DATA.rawIncidents || []);
+        renderRetroDayStrip(items);
         if (!items.length) {
-            body.innerHTML = '<tr><td colspan="7" class="text-center text-slate-400 italic py-5">Nenhum incidente crítico na semana selecionada.</td></tr>';
+            body.innerHTML = '<tr><td colspan="9" class="text-center text-slate-400 italic py-5">Nenhum incidente crítico na semana selecionada.</td></tr>';
             return;
         }
         body.innerHTML = items.map(inc => {
@@ -1742,18 +1746,77 @@
             const ok = target != null && min <= target;
             const ola = target == null ? '—' : (ok
                 ? '<span class="retro-status is-good">Dentro</span>'
-                : `<span class="retro-status is-bad">Fora (+${mttrHHMM(min - target)})</span>`);
-            return `<tr class="hover:bg-slate-50 align-top">
+                : `<span class="retro-status is-alert">Fora (+${mttrHHMM(min - target)})</span>`);
+            const paises = Array.from(new Set(String(inc.abrangencia || '').split(',').map(c => c.trim().toUpperCase()).filter(c => c && c !== 'N/A')));
+            const flags = paises.length
+                ? `<span class="inline-flex flex-wrap items-center gap-1">${paises.map(c => `<span title="${escapeXml(c)}" class="inline-flex">${buildFlagSvg(c, 18, 12)}</span>`).join('')}</span>`
+                : '<span class="text-slate-300">—</span>';
+            const clamp = txt => `<span class="line-clamp-2" title="${escapeXml(txt || '')}">${escapeXml(txt || 'N/A')}</span>`;
+            return `<tr class="retro-row align-top" data-day="${retroDayIso(inc.dataAberturaTimestamp) || ''}">
                     <td class="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">${escapeXml(inc.id)}</td>
                     <td class="px-3 py-2 whitespace-nowrap font-bold" style="color:${sev === '0' ? '#e94839' : '#FF6600'};">Sev ${escapeXml(sev)}</td>
+                    <td class="px-3 py-2">${flags}</td>
                     <td class="px-3 py-2 text-slate-600 whitespace-nowrap">${escapeXml(inc.dataDefinicao || 'N/A')}</td>
                     <td class="px-3 py-2 font-bold tabular-nums text-slate-700">${escapeXml(inc.ttr || '—')}</td>
                     <td class="px-3 py-2 whitespace-nowrap">${ola}</td>
                     <td class="px-3 py-2 text-slate-600 whitespace-nowrap">${escapeXml(inc.tech || 'N/A')}</td>
-                    <td class="px-3 py-2 text-slate-600 min-w-[260px]"><span class="line-clamp-2" title="${escapeXml(inc.descOfensor || '')}">${escapeXml(inc.descOfensor || 'N/A')}</span></td>
+                    <td class="px-3 py-2 text-slate-600 min-w-[220px]">${clamp(inc.descOfensor)}</td>
+                    <td class="px-3 py-2 text-slate-600 min-w-[220px]">${clamp(inc.solucao)}</td>
                 </tr>`;
         }).join('');
     }
+
+    // Status strip da semana: Sev 0 no dia = vermelho; só Sev 1 = laranja; sem incidentes = verde claro (dia limpo);
+    // dias ainda não ocorridos (semana atual) = cinza hachurado.
+    function renderRetroDayStrip(items) {
+        const strip = document.getElementById('retro-day-strip');
+        if (!strip || !RETRO.weekIso) return;
+        const monday = retroFromIso(RETRO.weekIso);
+        const todayIso = retroIso(new Date());
+        const byDay = {};
+        items.forEach(inc => {
+            const day = retroDayIso(inc.dataAberturaTimestamp);
+            if (!day) return;
+            const d = byDay[day] || (byDay[day] = { total: 0, sev0: 0, sev1: 0 });
+            const sev = String(inc.severidade || '').trim().charAt(0);
+            d.total++;
+            if (sev === '0') d.sev0++; else if (sev === '1') d.sev1++;
+        });
+        strip.innerHTML = Array.from({ length: 7 }, (_, i) => {
+            const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+            const iso = retroIso(date);
+            const d = byDay[iso] || { total: 0, sev0: 0, sev1: 0 };
+            const future = iso > todayIso;
+            const cls = future ? 'is-future' : (d.sev0 ? 'is-sev0' : (d.sev1 ? 'is-sev1' : 'is-clean'));
+            const detail = future ? 'A ocorrer' : (d.total
+                ? [d.sev0 ? `${d.sev0} Sev 0` : '', d.sev1 ? `${d.sev1} Sev 1` : ''].filter(Boolean).join(' · ')
+                : 'Sem incidentes');
+            const aria = `${RETRO_WEEKDAY[date.getDay()]} ${retroDM(date)}: ${future ? 'dia ainda não ocorrido' : `${d.total} ${d.total === 1 ? 'incidente' : 'incidentes'}${d.total ? ` (${detail})` : ''}`}`;
+            return `<button type="button" class="retro-day ${cls}${iso === todayIso ? ' is-today' : ''}" data-strip-day="${iso}" data-strip-count="${future ? 0 : d.total}" aria-label="${aria}">
+                    <span class="retro-day-wd">${RETRO_WEEKDAY[date.getDay()]}${iso === todayIso ? ' · hoje' : ''}</span>
+                    <span class="retro-day-date">${retroDM(date)}</span>
+                    <span class="retro-day-count">${future ? '—' : d.total}</span>
+                    <span class="retro-day-detail">${detail}</span>
+                </button>`;
+        }).join('');
+    }
+
+    // Hover (ou foco/toque) num dia destaca os incidentes dele na lista e esmaece os demais
+    function highlightRetroDay(dayIso) {
+        const rows = document.querySelectorAll('#retro-incidents-body tr.retro-row');
+        const active = !!dayIso && rows.length > 0;
+        rows.forEach(tr => {
+            const match = active && tr.getAttribute('data-day') === dayIso;
+            tr.classList.toggle('is-day-hl', match);
+            tr.classList.toggle('is-day-dim', active && !match);
+        });
+        document.querySelectorAll('#retro-day-strip .retro-day').forEach(b => b.classList.toggle('is-active', !!dayIso && b.getAttribute('data-strip-day') === dayIso));
+    }
+    const retroStripDay = ev => (ev.target && ev.target.closest ? ev.target.closest('#retro-day-strip [data-strip-day]') : null);
+    document.addEventListener('mouseover', (ev) => { const b = retroStripDay(ev); if (b) highlightRetroDay(b.getAttribute('data-strip-day')); });
+    document.addEventListener('mouseout', (ev) => { const b = retroStripDay(ev); if (b && !b.contains(ev.relatedTarget) && document.activeElement !== b) highlightRetroDay(null); });
+    document.addEventListener('focusin', (ev) => { const b = retroStripDay(ev); if (b) highlightRetroDay(b.getAttribute('data-strip-day')); });
+    document.addEventListener('focusout', (ev) => { const b = retroStripDay(ev); if (b) highlightRetroDay(null); });
 
     // Badges dos cards no Retrospecto: comparação com a média das N semanas anteriores
     function applyRetroBadges(badgeIds) {
@@ -2345,13 +2408,15 @@
     }
     const fmtPctBR = (v) => (v == null ? '—' : String(v).replace('.', ',') + '%');
     const fmtNumBR = (v) => String(Math.round(v * 100) / 100).replace('.', ',');
-    const mttrColor = (r) => (!r || r.min == null ? '#94a3b8' : (r.withinTarget ? '#1B472A' : '#e94839'));
+    // Fora da meta = amarelo de alerta (texto âmbar escuro, faixa amarela), como no selo "Fora da Meta" dos cards
+    const mttrColor = (r) => (!r || r.min == null ? '#94a3b8' : (r.withinTarget ? META_OK_COLOR : META_ALERT_TEXT));
+    const mttrFill = (r) => (!r || r.min == null ? '#94a3b8' : (r.withinTarget ? META_OK_COLOR : META_ALERT_FILL));
 
     function mttrBadge(r, targetMin) {
         if (!r || r.min == null) return '';
         return r.withinTarget
             ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap" style="background:rgba(27,71,42,0.1);color:#1B472A;">&#10003; dentro da meta</span>`
-            : `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap" style="background:rgba(233,72,57,0.1);color:#e94839;">&#9650; +${mttrHHMM(r.min - targetMin)} acima</span>`;
+            : `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap" style="background:rgba(255,190,40,0.25);color:${META_ALERT_TEXT};">&#9888; +${mttrHHMM(r.min - targetMin)} acima da meta</span>`;
     }
 
     // Faixa com rótulos: valor dentro (ou logo após) o preenchimento e a meta do OLA de Resolução sobre o marcador
@@ -2361,11 +2426,12 @@
         const mark = Math.max(0, Math.min(100, (targetMin / scaleMax) * 100));
         const color = mttrColor(r);
         const markShift = mark > 82 ? '-100%' : (mark < 18 ? '0%' : '-50%');
+        const insideColor = r && r.withinTarget ? '#fff' : '#5c3d00';
         const val = !has ? '' : fill >= 22
-            ? `<span class="mttr-bar-val" style="left:calc(${fill}% - 8px);transform:translate(-100%,-50%);color:#fff;">${r.hhmm}</span>`
+            ? `<span class="mttr-bar-val" style="left:calc(${fill}% - 8px);transform:translate(-100%,-50%);color:${insideColor};">${r.hhmm}</span>`
             : `<span class="mttr-bar-val" style="left:calc(${fill}% + 6px);color:${color};">${r.hhmm}</span>`;
         return `<div class="mttr-bar is-big" role="img" aria-label="${has ? r.hhmm : 'sem dados'} contra a meta do OLA de Resolução de ${mttrHHMM(targetMin)}">
-                <span class="mttr-bar-fill" style="width:${fill}%;background:${color};"></span>${val}
+                <span class="mttr-bar-fill" style="width:${fill}%;background:${mttrFill(r)};"></span>${val}
                 <span class="mttr-bar-meta" style="left:${mark}%;"><span class="mttr-bar-meta-lbl" style="transform:translateX(${markShift});">Meta ${mttrHHMM(targetMin)}</span></span>
             </div>`;
     }
@@ -2460,7 +2526,7 @@
         const shown = rows.filter(r => mttrModalState.filter === 'all' || (mttrModalState.filter === 'in' ? r.inBase : !r.inBase));
         const verdict = result.min == null ? '' : result.withinTarget
             ? `<span class="font-bold" style="color:#1B472A;">dentro da meta do OLA de Resolução (&le; ${target})</span>`
-            : `<span class="font-bold" style="color:#e94839;">+${mttrHHMM(result.min - d.targetMin)} acima da meta do OLA de Resolução (&le; ${target})</span>`;
+            : `<span class="font-bold" style="color:${META_ALERT_TEXT};">+${mttrHHMM(result.min - d.targetMin)} acima da meta do OLA de Resolução (&le; ${target})</span>`;
         const scope = lastMttrLiquido.year ? `ano ${lastMttrLiquido.year} completo` : 'período filtrado';
 
         document.getElementById('mttr-metodo-title').textContent = `${title} · ${sevLabel}`;
@@ -2479,7 +2545,7 @@
                     <td class="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">${escapeXml(r.id)}</td>
                     <td class="px-3 py-2 font-bold tabular-nums text-slate-700">${r.ttr}</td>
                     <td class="px-3 py-2 whitespace-nowrap">${tag}</td>
-                    <td class="px-3 py-2 whitespace-nowrap font-semibold" style="color:${r.dentroOla === 'Sim' ? '#1B472A' : '#e94839'};">${r.dentroOla}</td>
+                    <td class="px-3 py-2 whitespace-nowrap font-semibold" style="color:${r.dentroOla === 'Sim' ? META_OK_COLOR : META_ALERT_TEXT};">${r.dentroOla}</td>
                     <td class="px-3 py-2 text-slate-600 whitespace-nowrap">${escapeXml(r.dataDefinicao || 'N/A')}</td>
                     <td class="px-3 py-2 text-slate-600 min-w-[190px]"><span class="line-clamp-3" title="${escapeXml(r.descOfensor)}">${escapeXml(r.descOfensor)}</span></td>
                     <td class="px-3 py-2 text-slate-600 min-w-[190px]"><span class="line-clamp-3" title="${escapeXml(r.solucao)}">${escapeXml(r.solucao)}</span></td>
@@ -2575,6 +2641,9 @@
         const setBadge = (id, ok) => { const el = document.getElementById(id); if (el) el.innerHTML = buildMetaBadge(ok); };
         setBadge('ola-meta-badge-sev0', kpis.aderenciaOLASev0 != null ? kpis.aderenciaOLASev0 >= 70 : null);
         setBadge('ola-meta-badge-sev1', kpis.aderenciaOLASev1 != null ? kpis.aderenciaOLASev1 >= 80 : null);
+        const setBar = (id, pct, meta) => { const el = document.getElementById(id); if (el) el.innerHTML = buildOlaBarHtml(pct, meta, 'lg'); };
+        setBar('ola-bar-sev0', kpis.aderenciaOLASev0, 70);
+        setBar('ola-bar-sev1', kpis.aderenciaOLASev1, 80);
 
         // Item 1/2: Cards de Mudança e matriz de MTTD (dados completos vêm em data.mudancaCards/data.mttdMatrix,
         // renderizados por renderMudancaCards/renderMttdMatrix a partir de renderTab1Data)
@@ -3349,6 +3418,22 @@
     // Badges de Origem da Detecção, reutilizado nos cards estendidos de Jornada/País
     // Badge "semáforo" de cumprimento de Meta (item 1): usa ícone + cor verde/âmbar, nunca
     // vermelho/laranja, para não se confundir visualmente com as cores de Severidade (Sev0/Sev1).
+    // Faixa do OLA de Resolução: preenchimento até o % dentro do OLA e marcador na meta. Dentro da meta = verde; fora =
+    // amarelo de alerta (o mesmo do selo "Fora da Meta"), nunca vermelho. size: 'lg' (cards Sev 0/Sev 1) ou 'sm' (cards compactos).
+    const META_OK_COLOR = '#1B472A';
+    const META_ALERT_FILL = '#FFBE28';
+    const META_ALERT_TEXT = '#8a5a00';
+    function buildOlaBarHtml(pct, metaPct, size) {
+        if (pct == null || isNaN(pct)) return '';
+        const ok = pct >= metaPct;
+        const fill = Math.max(0, Math.min(100, pct));
+        const shift = metaPct > 85 ? '-100%' : (metaPct < 15 ? '0%' : '-50%');
+        return `<div class="ola-bar${size === 'lg' ? ' is-lg' : ''}" role="img" aria-label="${String(pct).replace('.', ',')}% dentro do OLA de Resolução; meta ${metaPct}% (${ok ? 'dentro' : 'fora'} da meta)">
+                <span class="ola-bar-fill" style="width:${fill}%;background:${ok ? META_OK_COLOR : META_ALERT_FILL};"></span>
+                <span class="ola-bar-meta" style="left:${metaPct}%;"><span class="ola-bar-meta-lbl" style="transform:translateX(${shift});">Meta ${metaPct}%</span></span>
+            </div>`;
+    }
+
     function buildMetaBadge(isOk, okLabel, nokLabel) {
         okLabel = okLabel || 'Dentro da Meta';
         nokLabel = nokLabel || 'Fora da Meta';
@@ -3447,8 +3532,15 @@
         const olaGeralDentro = (item.sev0DentroOLA || 0) + (item.sev1DentroOLA || 0);
         const olaGeralPct = olaGeralTotal > 0 ? Math.round((olaGeralDentro / olaGeralTotal) * 1000) / 10 : 0;
 
-        // "Geral" (Sev0+Sev1) não tem meta oficial própria — é informativo. O semáforo de Meta só
+        // "Geral" (Sev0+Sev1) não tem meta oficial própria — é informativo. A faixa com o marcador de Meta só
         // se aplica a Sev0 (>= 70%) e Sev1 (>= 80%) individualmente, abaixo.
+        const olaCell = (count, pct, meta) => {
+            if (!count) return '<span class="text-[9px] text-slate-300">—</span>';
+            const ok = pct >= meta;
+            return `<p class="text-[9px] font-semibold text-slate-400">OLA de Resolução</p>
+                    ${buildOlaBarHtml(pct, meta, 'sm')}
+                    <p class="text-[9px] font-bold leading-tight" style="color:${ok ? META_OK_COLOR : META_ALERT_TEXT};">${ok ? '&#10003;' : '&#9888;'} ${String(pct).replace('.', ',')}% <span class="font-normal text-slate-400">· meta &ge; ${meta}%</span></p>`;
+        };
         return `
             <div class="flex items-center justify-between pt-3 mt-3 border-t border-slate-100">
                 <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">OLA de Resolução Geral (Sev0+Sev1)</span>
@@ -3459,13 +3551,13 @@
                     <p class="text-[9px] font-black text-natura-red-buriti uppercase tracking-wider">Sev0</p>
                     <p class="text-sm font-extrabold text-slate-800 leading-tight">${sev0Count} <span class="text-[9px] font-semibold text-slate-400">(${sev0Pct}%)</span></p>
                     <p class="text-[9px] text-slate-400">MTTR ${formatMinutesToHHMM(sev0MTTR)}</p>
-                    <div class="mt-1">${sev0Count > 0 ? `<span class="text-[9px] font-bold text-slate-600 mr-1">${sev0OLA}% OLA de Resolução</span>${buildMetaBadge(sev0OLA >= 70)}` : '<span class="text-[9px] text-slate-300">—</span>'}</div>
+                    <div class="mt-1.5">${olaCell(sev0Count, sev0OLA, 70)}</div>
                 </div>
                 <div class="bg-natura-orange/5 rounded-lg p-2">
                     <p class="text-[9px] font-black text-natura-orange uppercase tracking-wider">Sev1</p>
                     <p class="text-sm font-extrabold text-slate-800 leading-tight">${sev1Count} <span class="text-[9px] font-semibold text-slate-400">(${sev1Pct}%)</span></p>
                     <p class="text-[9px] text-slate-400">MTTR ${formatMinutesToHHMM(sev1MTTR)}</p>
-                    <div class="mt-1">${sev1Count > 0 ? `<span class="text-[9px] font-bold text-slate-600 mr-1">${sev1OLA}% OLA de Resolução</span>${buildMetaBadge(sev1OLA >= 80)}` : '<span class="text-[9px] text-slate-300">—</span>'}</div>
+                    <div class="mt-1.5">${olaCell(sev1Count, sev1OLA, 80)}</div>
                 </div>
             </div>
         `;

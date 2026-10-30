@@ -355,17 +355,28 @@
                     </div>
                     <div>
                         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Incidentes da semana selecionada</p>
+                        <!-- Status strip: um card por dia (segunda a domingo), na cor da maior Severidade do dia; o hover destaca os incidentes do dia na lista -->
+                        <div id="retro-day-strip" class="retro-day-strip" role="group" aria-label="Incidentes por dia da semana"></div>
+                        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-slate-500 mt-2 mb-3">
+                            <span class="inline-flex items-center gap-1.5"><span class="retro-day-key is-sev0"></span>Sev 0 no dia</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="retro-day-key is-sev1"></span>Só Sev 1 no dia</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="retro-day-key is-clean"></span>Sem incidentes críticos</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="retro-day-key is-future"></span>Dia ainda não ocorrido</span>
+                            <span class="text-slate-400">&middot; Passe o mouse (ou toque) num dia para destacar os incidentes dele na lista.</span>
+                        </div>
                         <div class="overflow-x-auto rounded-xl border border-slate-200">
                             <table class="w-full text-xs border-collapse">
                                 <thead>
                                     <tr class="text-[10px] text-slate-500 uppercase tracking-wider bg-slate-50">
                                         <th class="text-left font-bold px-3 py-2">Incidente</th>
                                         <th class="text-left font-bold px-3 py-2">Sev</th>
+                                        <th class="text-left font-bold px-3 py-2">Abrangência</th>
                                         <th class="text-left font-bold px-3 py-2">Data de Abertura</th>
                                         <th class="text-left font-bold px-3 py-2">TTR</th>
                                         <th class="text-left font-bold px-3 py-2">OLA de Resolução</th>
                                         <th class="text-left font-bold px-3 py-2">Tecnologia</th>
                                         <th class="text-left font-bold px-3 py-2">Descrição do Ofensor</th>
+                                        <th class="text-left font-bold px-3 py-2">Solução Aplicada</th>
                                     </tr>
                                 </thead>
                                 <tbody id="retro-incidents-body" class="divide-y divide-slate-100"></tbody>
@@ -516,6 +527,7 @@
                             </div>
                             <p id="val-aderencia-ola-sev0" class="text-2xl font-extrabold" style="color:#e94839;">0%
                             </p>
+                            <div id="ola-bar-sev0" class="mt-1.5"></div>
                             <p class="text-[9px] text-slate-400 mt-0.5">Meta: <span class="font-bold" style="color:#e94839;">≥ 70%</span></p>
                             <span id="ola-meta-badge-sev0" class="inline-block mt-1.5"></span>
                             <span id="delta-badge-ola-sev0" class="hidden inline-block mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
@@ -588,6 +600,7 @@
                                 </span>
                             </div>
                             <p id="val-aderencia-ola-sev1" class="text-2xl font-extrabold text-natura-orange">0%</p>
+                            <div id="ola-bar-sev1" class="mt-1.5"></div>
                             <p class="text-[9px] text-slate-400 mt-0.5">Meta: <span class="font-bold text-natura-orange">≥ 80%</span></p>
                             <span id="ola-meta-badge-sev1" class="inline-block mt-1.5"></span>
                             <span id="delta-badge-ola-sev1" class="hidden inline-block mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
