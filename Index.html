@@ -617,7 +617,7 @@
                 <div id="mttr-metodologias" class="rounded-2xl border border-slate-200 bg-white">
                     <div class="px-5 py-3 border-b border-slate-100">
                         <p class="text-[11px] font-black text-slate-500 uppercase tracking-[0.15em]">MTTR Líquido</p>
-                        <p class="text-[11px] text-slate-500 mt-0.5">Média do tempo de resolução depois de retirar os incidentes mais demorados do período: <b class="text-slate-700">P95</b> retira os 5% mais demorados e <b class="text-slate-700">P98</b>, os 2%. Em <b class="text-slate-700">Ver cálculo e incidentes</b>, veja a conta do período e quais incidentes entraram ou ficaram de fora.</p>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Média do tempo de resolução depois de retirar os incidentes mais demorados do período: <b class="text-slate-700">P95</b> faz a exclusão de 5% de outliers e <b class="text-slate-700">P98</b>, a exclusão de 2% de outliers. Em <b class="text-slate-700">Ver cálculo e incidentes</b>, veja a conta do período e quais incidentes entraram ou ficaram de fora.</p>
                         <p class="retro-ignore-note hidden text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mt-2">Este painel não segue o filtro <b>Retrospecto da Semana</b>: mostra o ano <span class="retro-ignore-year"></span> completo.</p>
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
@@ -646,103 +646,7 @@
                     </button>
                 </div>
 
-                <!-- Governança de Classificação: Aderência Sev x Prioridade (item 6: oculto por padrão) -->
-                <div class="pt-2">
-                    <div class="flex items-center justify-between gap-2 mb-3">
-                        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest">Governança de
-                            Classificação &mdash; Severidade x Prioridade</h2>
-                        <button type="button" id="btn-toggle-governanca"
-                            class="text-[10px] font-bold text-natura-orange flex items-center gap-1 flex-none">
-                            <span id="btn-toggle-governanca-label">Ver Governança de Classificação</span>
-                            <svg id="btn-toggle-governanca-icon" xmlns="http://www.w3.org/2000/svg" class="h-3 w-3"
-                                fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M19 9l-7 7-7-7" />
-                            </svg>
-                        </button>
-                    </div>
-                    <div id="governanca-sevprio-panel" class="hidden">
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <!-- Aderência Sev x Prioridade Geral -->
-                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
-                            <div class="flex items-center justify-between mb-1">
-                                <p class="text-xs text-slate-500 uppercase tracking-wider font-bold">Geral (Sev0 +
-                                    Sev1)</p>
-                                <span class="info-tooltip" tabindex="0">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <span class="tooltip-bubble">% de Sev0/Sev1 cuja Priority cadastrada no
-                                        ServiceNow (aba Major_ServiceNow) é "1 - Critical" ou "2 - High". Qualquer
-                                        outra Priority é considerada divergente. Considera apenas incidentes com
-                                        Priority encontrada.</span>
-                                </span>
-                            </div>
-                            <p id="val-aderencia-sevprio" class="text-3xl font-extrabold text-natura-blue-profundo">
-                                —</p>
-                            <p class="text-[10px] text-slate-400 mt-2 leading-tight">Meta: <span
-                                    class="font-bold text-natura-green-cerrado">≥ 80%</span></p>
-                            <span id="sevprio-meta-badge-geral" class="inline-block mt-2"></span>
-                        </div>
-                        <!-- Aderência Sev x Prioridade Sev0 -->
-                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
-                            <div class="flex items-center justify-between mb-1">
-                                <p class="text-xs uppercase tracking-wider font-bold" style="color:#e94839;">Sev0
-                                    (P1 ou P2)</p>
-                                <span class="info-tooltip" tabindex="0">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <span class="tooltip-bubble">% de incidentes Sev0 cuja Priority no ServiceNow é
-                                        "1 - Critical" ou "2 - High". Fórmula: (Sev0 com Priority 1 ou 2) / (Total
-                                        Sev0 com Priority encontrada) × 100.</span>
-                                </span>
-                            </div>
-                            <p id="val-aderencia-sevprio-sev0" class="text-3xl font-extrabold" style="color:#e94839;">
-                                —</p>
-                            <p class="text-[10px] text-slate-400 mt-2 leading-tight">Meta: <span class="font-bold" style="color:#e94839;">≥ 80%</span></p>
-                            <span id="sevprio-meta-badge-sev0" class="inline-block mt-2"></span>
-                        </div>
-                        <!-- Aderência Sev x Prioridade Sev1 -->
-                        <div class="kpi-card rounded-2xl p-5 border border-slate-200 bg-white">
-                            <div class="flex items-center justify-between mb-1">
-                                <p class="text-xs uppercase tracking-wider font-bold text-natura-orange">Sev1
-                                    (P1 ou P2)</p>
-                                <span class="info-tooltip" tabindex="0">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    <span class="tooltip-bubble">% de incidentes Sev1 cuja Priority no ServiceNow é
-                                        "1 - Critical" ou "2 - High". Fórmula: (Sev1 com Priority 1 ou 2) / (Total
-                                        Sev1 com Priority encontrada) × 100.</span>
-                                </span>
-                            </div>
-                            <p id="val-aderencia-sevprio-sev1" class="text-3xl font-extrabold text-natura-orange">—
-                            </p>
-                            <p class="text-[10px] text-slate-400 mt-2 leading-tight">Meta: <span class="font-bold text-natura-orange">≥ 80%</span></p>
-                            <span id="sevprio-meta-badge-sev1" class="inline-block mt-2"></span>
-                        </div>
-                    </div>
-                    <div class="mt-3 flex justify-end">
-                        <button type="button" id="btn-open-divergencias"
-                            class="inline-flex items-center gap-2 text-xs font-bold text-natura-red-buriti hover:text-natura-red-boca transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            Ver Divergências Encontradas (<span id="val-divergencias-count">0</span>)
-                        </button>
-                    </div>
-                    </div>
-                </div>
-                </div>
+                                </div>
                 <!-- Fim Bloco: Incidentes -->
 
                 </section>
@@ -2038,10 +1942,10 @@
                                 </div>
                                 <div>
                                     <dt class="font-bold text-slate-700">MTTR Líquido (Sev0 / Sev1)</dt>
-                                    <dd class="text-slate-500">Média Aparada do TTR: ordena os Incidentes da Severidade
+                                    <dd class="text-slate-500">Média aparada do TTR: ordena os Incidentes da Severidade
                                         do mais rápido ao mais demorado e calcula a média dos k primeiros, com
-                                        k = piso(n × 0,95) no P95 (retira os 5% mais demorados) ou k = piso(n × 0,98)
-                                        no P98 (retira os 2%). Metas: as do OLA de Resolução (Sev0 ≤ 02:00,
+                                        k = piso(n × 0,95) no P95 (exclusão de 5% de outliers) ou k = piso(n × 0,98)
+                                        no P98 (exclusão de 2% de outliers). Metas: as do OLA de Resolução (Sev0 ≤ 02:00,
                                         Sev1 ≤ 06:00). Não segue o filtro Retrospecto da Semana.</dd>
                                 </div>
                                 <div>
@@ -2051,12 +1955,7 @@
                                         Definição do Incidente (NCC) até o Fim do Impacto — não o Open/Resolved time
                                         do ServiceNow. Fórmula: (Dentro da meta) / (Total Sev0+Sev1) × 100.</dd>
                                 </div>
-                                <div>
-                                    <dt class="font-bold text-slate-700">Governança Sev x Prioridade</dt>
-                                    <dd class="text-slate-500">% de Sev0/Sev1 cuja Priority no ServiceNow (aba
-                                        Major_ServiceNow) é "1 - Critical" ou "2 - High". Meta: ≥ 80%. Divergências
-                                        listam os tickets fora dessa regra.</dd>
-                                </div>
+                                
                             </dl>
                         </div>
 
