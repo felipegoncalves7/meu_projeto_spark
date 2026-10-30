@@ -2450,7 +2450,7 @@
             el.innerHTML = smallSample + `<div class="mttr-feat">
                     <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
-                            <p class="text-sm font-bold text-slate-800">MTTR Líquido (Média aparada ${ti.label})</p>
+                            <p class="text-sm font-bold text-slate-800">MTTR Líquido</p>
                             <p class="text-[11px] text-slate-600 leading-snug mt-0.5">Média depois de retirar os <b>${ti.cutShare} de incidentes mais demorados (outliers)</b> do período, qualquer que seja a duração.</p>
                         </div>
                         <div class="text-right shrink-0">
@@ -2483,7 +2483,7 @@
         const ti = MTTR_TRIM_INFO[trimKey];
         const result = d[trimKey];
         const k = d[ti.kKey];
-        const title = `MTTR Líquido (Média aparada ${ti.label})`;
+        const title = `MTTR Líquido`;
         // mais demorados primeiro: a fronteira do cálculo fica no topo
         const rows = (d.incidentes || []).map((it, i) => ({
             posicao: i + 1, id: it.id, ttr: mttrHHMM(it.min), dataDefinicao: it.dataDefinicao, dataAberturaTimestamp: it.dataAberturaTimestamp,
