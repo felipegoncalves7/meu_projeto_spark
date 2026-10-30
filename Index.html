@@ -613,11 +613,11 @@
                     </div>
                 </div>
 
-                <!-- MTTR Líquido (Média Aparada P95/P98) contra a meta do OLA de Resolução; não segue o Retrospecto da Semana; render em dashboard.js -->
+                <!-- MTTR Líquido (Média aparada P95) contra a meta do OLA de Resolução; não segue o Retrospecto da Semana; render em dashboard.js -->
                 <div id="mttr-metodologias" class="rounded-2xl border border-slate-200 bg-white">
                     <div class="px-5 py-3 border-b border-slate-100">
                         <p class="text-[11px] font-black text-slate-500 uppercase tracking-[0.15em]">MTTR Líquido</p>
-                        <p class="text-[11px] text-slate-500 mt-0.5">Média do tempo de resolução depois de retirar os incidentes mais demorados do período: <b class="text-slate-700">P95</b> faz a exclusão de 5% de outliers e <b class="text-slate-700">P98</b>, a exclusão de 2% de outliers. Em <b class="text-slate-700">Ver cálculo e incidentes</b>, veja a conta do período e quais incidentes entraram ou ficaram de fora.</p>
+                        <p class="text-[11px] text-slate-500 mt-0.5">Média do tempo de resolução depois de retirar os incidentes mais demorados do período: Percentil adotado: <b class="text-slate-700">P95</b> (exclusão de 5% de outliers). Em <b class="text-slate-700">Ver cálculo e incidentes</b>, veja a conta do período e quais incidentes entraram ou ficaram de fora.</p>
                         <p class="retro-ignore-note hidden text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mt-2">Este painel não segue o filtro <b>Retrospecto da Semana</b>: mostra o ano <span class="retro-ignore-year"></span> completo.</p>
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
@@ -1944,8 +1944,7 @@
                                     <dt class="font-bold text-slate-700">MTTR Líquido (Sev0 / Sev1)</dt>
                                     <dd class="text-slate-500">Média aparada do TTR: ordena os Incidentes da Severidade
                                         do mais rápido ao mais demorado e calcula a média dos k primeiros, com
-                                        k = piso(n × 0,95) no P95 (exclusão de 5% de outliers) ou k = piso(n × 0,98)
-                                        no P98 (exclusão de 2% de outliers). Metas: as do OLA de Resolução (Sev0 ≤ 02:00,
+                                        k = piso(n × 0,95) no P95 (exclusão de 5% de outliers). Metas: as do OLA de Resolução (Sev0 ≤ 02:00,
                                         Sev1 ≤ 06:00). Não segue o filtro Retrospecto da Semana.</dd>
                                 </div>
                                 <div>

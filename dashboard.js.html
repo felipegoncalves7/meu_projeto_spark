@@ -2367,15 +2367,13 @@
     }
 
     // --- MTTR Líquido (painel abaixo dos cards Sev 0/Sev 1) ---
-    // Média Aparada P95 (retira os 5% mais demorados) ou P98 (retira os 2%), contra a meta do OLA de Resolução.
+    // Média aparada P95 (exclusão de 5% de outliers), contra a meta do OLA de Resolução.
     // Com o Retrospecto da Semana ativo, o painel não segue a semana: mostra o ano selecionado completo (getMttrLiquido).
     const MTTR_LIQ_TIPS = {
-        p95: 'Calcula a média aritmética após excluir matematicamente os 5% incidentes mais demorados do período, independentemente da duração em horas. <strong>Diferencial:</strong> Elimina a regra de corte fixo e adapta-se dinamicamente ao volume mensal. Protege o indicador contra distorções causadas por casos anômalos extremos, garantindo que exatamente 95% do volume operacional seja representado na média.',
-        p98: 'Calcula a média aritmética após excluir matematicamente os 2% incidentes mais demorados do período, independentemente da duração em horas. <strong>Diferencial:</strong> Elimina a regra de corte fixo e adapta-se dinamicamente ao volume mensal. Protege o indicador contra distorções causadas por casos anômalos extremos, garantindo que exatamente 98% do volume operacional seja representado na média.'
+        p95: 'Calcula a média aritmética após excluir matematicamente os 5% incidentes mais demorados do período, independentemente da duração em horas. <strong>Diferencial:</strong> Elimina a regra de corte fixo e adapta-se dinamicamente ao volume mensal. Protege o indicador contra distorções causadas por casos anômalos extremos, garantindo que exatamente 95% do volume operacional seja representado na média.'
     };
     const MTTR_TRIM_INFO = {
-        p95: { label: 'P95', keepShare: '95%', cutShare: '5%', keep: 0.95, kKey: 'k95' },
-        p98: { label: 'P98', keepShare: '98%', cutShare: '2%', keep: 0.98, kKey: 'k98' }
+        p95: { label: 'P95', keepShare: '95%', cutShare: '5%', keep: 0.95, kKey: 'k95' }
     };
     const mttrTrimChoice = { sev0: 'p95', sev1: 'p95' };
     let lastMttrLiquido = null;
@@ -2443,13 +2441,8 @@
             }
             const ti = MTTR_TRIM_INFO[mttrTrimChoice[sev]];
             const r = d[mttrTrimChoice[sev]];
-            const scaleMax = Math.max(d.p95.min || 0, d.p98.min || 0, d.targetMin, 1) * 1.12;
-            const toggle = `<div class="mttr-pct-toggle" role="group" aria-label="Quantos incidentes mais demorados saem da média">${['p95', 'p98'].map(key => {
-                const t = MTTR_TRIM_INFO[key], on = key === mttrTrimChoice[sev];
-                return `<button type="button" data-mttr-trim="${sev}:${key}" aria-pressed="${on}" class="mttr-pct-opt${on ? ' is-active' : ''}">
-                        <span class="mttr-pct-opt-title">${t.label} · exclusão de ${t.cutShare} de outliers</span>
-                        <span class="mttr-pct-opt-sub">Média dos ${t.keepShare} mais rápidos: <b>${d[key].hhmm}</b></span></button>`;
-            }).join('')}</div>`;
+            const scaleMax = Math.max(d.p95.min || 0, d.targetMin, 1) * 1.12;
+            const toggle = `<p class="text-[11px] font-semibold text-slate-600 mt-3 mb-1">P95 &middot; exclusão de ${ti.cutShare} de outliers <span class="font-normal text-slate-400">(média dos ${ti.keepShare} mais rápidos)</span></p>`;
             const smallSample = d.n < 10
                 ? `<p class="text-[11px] text-slate-600 bg-natura-yellow-balsamo/10 border border-natura-yellow-balsamo/40 rounded-lg px-3 py-2 mb-3"><b>Amostra pequena (${d.n} ${d.n === 1 ? 'incidente' : 'incidentes'}):</b> com poucos incidentes, a média aparada retira sempre o mais demorado. Para ver tendência, use um período maior.</p>`
                 : '';
@@ -2592,7 +2585,7 @@
         setText('val-sev1-incidents', kpis.incidentesSev1);
         setText('val-mttr-sev1', kpis.mttrSev1);
 
-        // MTTR Líquido (Média Aparada P95/P98), por Severidade
+        // MTTR Líquido (Média aparada P95), por Severidade
         loadMttrLiquido(kpis);
 
         // Percentages calculation
